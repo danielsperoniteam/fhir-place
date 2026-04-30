@@ -191,11 +191,10 @@ describe.skipIf(!reachable)(`integration: FhirClient @ ${FHIR_BASE_URL}`, () => 
 
   test(
     "readReference() throws on malformed reference",
-    async () => {
-      const err = await client
-        .readReference<Patient>({ reference: "not-a-fhir-reference" })
-        .catch((e) => e);
-      expect(err).toBeInstanceOf(Error);
+    () => {
+      expect(() =>
+        client.readReference<Patient>({ reference: "not-a-fhir-reference" }),
+      ).toThrow(/Unsupported reference form/);
     },
     30_000,
   );
