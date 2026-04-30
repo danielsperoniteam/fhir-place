@@ -63,20 +63,29 @@ export function SessionPage() {
         </Link>
       )}
 
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Agent session</h1>
-        {session.data && (
-          <p className="mt-1 text-sm text-slate-600">
-            session{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
-              {session.data.id}
-            </code>{" "}
-            · patient{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
-              {session.data.patientId}
-            </code>
-          </p>
-        )}
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Agent session</h1>
+          {session.data && (
+            <p className="mt-1 text-sm text-slate-600">
+              session{" "}
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
+                {session.data.id}
+              </code>{" "}
+              · patient{" "}
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
+                {session.data.patientId}
+              </code>
+            </p>
+          )}
+        </div>
+        <Link
+          to={`/sessions/${sid}/answer-preview`}
+          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          data-testid="answer-preview-link"
+        >
+          AgentAnswer preview
+        </Link>
       </header>
 
       <p className="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700">
