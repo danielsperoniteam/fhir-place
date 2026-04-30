@@ -14,7 +14,8 @@
     "e2e": "pnpm --filter @fhir-place/demo e2e",
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "release": "pnpm --filter @fhir-place/react-fhir build && changeset publish"
+    "release": "pnpm --filter @fhir-place/react-fhir build && changeset publish",
+    "check:readme-goal-task": "node scripts/check-readme-goal-task.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
