@@ -123,6 +123,27 @@ describe("query hooks", () => {
     expect(result.current.data?.id).toBe("Patient");
   });
 
+
+
+  it("useStructureDefinition accepts canonical profile URLs", async () => {
+    const profile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient";
+    server.use(
+      http.get(`${BASE}/StructureDefinition/us-core-patient`, () => new HttpResponse(null, { status: 404 })),
+      http.get(`${BASE}/StructureDefinition`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get("url")).toBe(profile);
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: [{ resource: { resourceType: "StructureDefinition", id: "us-core-patient", url: profile, name: "USCorePatient", status: "active", kind: "resource", abstract: false, type: "Patient" } }],
+        });
+      }),
+    );
+    const { wrapper } = mkWrapper();
+    const { result } = renderHook(() => useStructureDefinition(profile), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.url).toBe(profile);
+  });
+
   it("useCreateResource POSTs and invalidates caches", async () => {
     const writes = vi.fn();
     server.use(

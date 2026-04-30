@@ -30,6 +30,7 @@ export interface ResourceViewProps {
   /** Called when a Reference is clicked. When omitted, references render as plain text. */
   onReferenceClick?: (ref: Reference) => void;
   className?: string;
+  profile?: string | null;
 }
 
 /**
@@ -38,10 +39,11 @@ export interface ResourceViewProps {
  * types. Zero resource-specific code.
  */
 export function ResourceView(props: ResourceViewProps) {
-  const { resource, structureDefinition, onReferenceClick, hideNarrative, className } =
+  const { resource, structureDefinition, onReferenceClick, hideNarrative, className, profile } =
     props;
+  const detectedProfile = profile === undefined ? resource.meta?.profile?.[0] : profile;
 
-  const sdQuery = useStructureDefinition(resource.resourceType, {
+  const sdQuery = useStructureDefinition({ type: resource.resourceType, profile: detectedProfile }, {
     enabled: !structureDefinition,
   });
   const sd = structureDefinition ?? sdQuery.data;

@@ -4,6 +4,8 @@ import { FhirError } from "../client/types.js";
 import { coreStructureDefinition } from "./core/index.js";
 
 export interface ResolveOptions {
+  /** Optional profile canonical URL to resolve instead of the base type SD. */
+  profile?: string | null;
   signal?: AbortSignal;
   /** Override the canonical URL derivation (defaults to `http://hl7.org/fhir/StructureDefinition/{type}`). */
   canonical?: string;
@@ -31,15 +33,21 @@ export async function resolveStructureDefinition(
   options: ResolveOptions = {},
 ): Promise<StructureDefinition> {
   const signal = options.signal;
-  const canonical = options.canonical ?? canonicalFor(type);
+  const canonical = options.canonical ?? options.profile ?? canonicalFor(type);
+  const canonicalType = canonicalFor(type);
+  const useProfile = Boolean(options.profile);
+  const canUseBundledFallback = canonical === canonicalType;
 
-  // 1. Instance read.
-  try {
-    return await client.read<StructureDefinition>("StructureDefinition", type, {
-      signal,
-    });
-  } catch (err) {
-    if (!shouldFallback(err)) throw err;
+  // 1. Instance read. For profiled canonicals, attempt an ID read only when inferable.
+  const readId = useProfile ? inferIdFromCanonical(canonical) : type;
+  if (readId) {
+    try {
+      return await client.read<StructureDefinition>("StructureDefinition", readId, {
+        signal,
+      });
+    } catch (err) {
+      if (!shouldFallback(err)) throw err;
+    }
   }
 
   // 2. Search by canonical URL.
@@ -58,7 +66,7 @@ export async function resolveStructureDefinition(
   }
 
   // 3. Bundled core fallback.
-  if (options.useBundledFallback !== false) {
+  if (options.useBundledFallback !== false && canUseBundledFallback) {
     const bundled = await coreStructureDefinition(type);
     if (bundled) return bundled;
   }
@@ -83,4 +91,15 @@ function shouldFallback(err: unknown): boolean {
   }
   // Treat non-FhirError exceptions (TypeError, AbortError, etc.) as bubbling.
   return false;
+}
+
+
+function inferIdFromCanonical(canonical: string): string | null {
+  try {
+    const url = new URL(canonical);
+    const parts = url.pathname.split("/").filter(Boolean);
+    return parts.at(-1) ?? null;
+  } catch {
+    return null;
+  }
 }

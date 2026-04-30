@@ -35,6 +35,7 @@ export interface ResourceEditorProps {
   /** When true, the Save button shows a spinner and becomes disabled. */
   saving?: boolean;
   className?: string;
+  profile?: string | null;
 }
 
 const capitalize = (s: string): string => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
@@ -75,10 +76,11 @@ const skipKeys = new Set([
 ]);
 
 export function ResourceEditor(props: ResourceEditorProps) {
-  const { resource, structureDefinition, onChange, onSave, onCancel } = props;
+  const { resource, structureDefinition, onChange, onSave, onCancel, profile } = props;
+  const detectedProfile = profile === undefined ? resource.meta?.profile?.[0] : profile;
   const [draft, setDraft] = useState<Resource>(resource);
 
-  const sdQuery = useStructureDefinition(resource.resourceType, {
+  const sdQuery = useStructureDefinition({ type: resource.resourceType, profile: detectedProfile }, {
     enabled: !structureDefinition,
   });
   const sd = structureDefinition ?? sdQuery.data;

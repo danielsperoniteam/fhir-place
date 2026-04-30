@@ -29,6 +29,7 @@ export interface ResourceSearchProps {
   /** Reorders the searchParams list. Params not listed keep their original order after these. */
   priorityParams?: string[];
   className?: string;
+  profile?: string;
 }
 
 type SpecType = CapabilityStatementRestResourceSearchParam["type"];
@@ -75,6 +76,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
     initialVisible = 6,
     priorityParams = ["_id", "identifier", "name", "family", "given", "status", "code", "subject", "patient", "date"],
     className,
+    profile,
   } = props;
 
   const capQuery = useCapabilities({ enabled: !capabilityStatement });
@@ -138,6 +140,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((p) => (
           <SearchField
+            profile={profile}
             key={p.name}
             base={resourceType}
             param={p}
@@ -188,6 +191,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
 }
 
 interface SearchFieldProps {
+  profile?: string;
   base: string;
   param: CapabilityStatementRestResourceSearchParam;
   value: string;
@@ -243,13 +247,13 @@ function SearchField({ base, param, value, onChange }: SearchFieldProps): ReactN
  * Falls back to a plain text input when the binding can't be resolved or when
  * the ValueSet is too large to enumerate in a dropdown.
  */
-function TokenSearchField({ base, param, value, onChange }: SearchFieldProps): ReactNode {
+function TokenSearchField({ base, param, value, onChange, profile }: SearchFieldProps): ReactNode {
   // Try the canonical SearchParameter first (covers custom IG params and the
   // few core params whose `expression` doesn't match the kebab→camel rule).
   // Falls through silently when the server doesn't expose SearchParameter.
   const { data: spec } = useSearchParameter(base, param.name ?? "");
   const elementPath = elementPathForSearchParam(param, base, spec ?? undefined);
-  const { data: sd } = useStructureDefinition(base, { enabled: Boolean(elementPath) });
+  const { data: sd } = useStructureDefinition({ type: base, profile }, { enabled: Boolean(elementPath) });
   const element = elementPath && sd ? findElement(sd, elementPath) : undefined;
   const { valueSet: valueSetUrl } = bindingFor(element);
   const { data: vs, isLoading } = useValueSet(valueSetUrl);
