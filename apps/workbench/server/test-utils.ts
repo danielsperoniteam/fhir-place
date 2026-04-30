@@ -9,11 +9,14 @@ import { createSessionStore } from "./services/session-store.js";
 import { createApp } from "./app.js";
 import { createPhaseATools } from "./agent/tools/index.js";
 import { inMemoryLogger } from "./agent/tool-log.js";
+import type { ModelConfig } from "./agent/model-config.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(here, "..", "db", "migrations");
 
-export function makeTestApp(options: { fetchFn?: typeof fetch } = {}) {
+export function makeTestApp(
+  options: { fetchFn?: typeof fetch; modelConfig?: ModelConfig | null } = {},
+) {
   const dir = mkdtempSync(join(tmpdir(), "workbench-server-"));
   const url = join(dir, "test.sqlite");
 
@@ -49,6 +52,7 @@ export function makeTestApp(options: { fetchFn?: typeof fetch } = {}) {
     registry,
     fetchFn: options.fetchFn,
     logger,
+    modelConfig: options.modelConfig ?? null,
   });
 
   return {
