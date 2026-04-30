@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { ConnectionStore } from "./services/connection-store.js";
 import type { SessionStore } from "./services/session-store.js";
+import type { AuditStore } from "./services/audit-store.js";
 import type { ToolRegistry } from "./agent/registry.js";
 import type { ToolLogger } from "./agent/tool-log.js";
 import type { ModelConfig } from "./agent/model-config.js";
@@ -12,11 +13,16 @@ import { agentInfoRoutes, answersRoutes } from "./routes/answers.js";
 export interface ServerDeps {
   connections: ConnectionStore;
   sessions: SessionStore;
+  audit: AuditStore;
   registry: ToolRegistry;
   fetchFn?: typeof fetch;
   logger?: ToolLogger;
   /** When null, /api/sessions/:sid/answer returns 503. */
   modelConfig?: ModelConfig | null;
+  /** Injected for deterministic ids in tests. */
+  generateAnswerId?: () => string;
+  /** Injected for deterministic timestamps in tests. */
+  now?: () => string;
 }
 
 export function createApp(deps: ServerDeps) {
@@ -36,6 +42,7 @@ export function createApp(deps: ServerDeps) {
     sessionsRoutes({
       sessions: deps.sessions,
       connections: deps.connections,
+      audit: deps.audit,
       registry: deps.registry,
       fetchFn: deps.fetchFn,
       logger: deps.logger,
@@ -46,10 +53,15 @@ export function createApp(deps: ServerDeps) {
     answersRoutes({
       sessions: deps.sessions,
       connections: deps.connections,
+      audit: deps.audit,
       registry: deps.registry,
       fetchFn: deps.fetchFn,
       logger: deps.logger,
       modelConfig: deps.modelConfig ?? null,
+      ...(deps.generateAnswerId
+        ? { generateAnswerId: deps.generateAnswerId }
+        : {}),
+      ...(deps.now ? { now: deps.now } : {}),
     }),
   );
   app.route(

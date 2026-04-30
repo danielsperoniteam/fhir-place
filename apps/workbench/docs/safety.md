@@ -140,16 +140,39 @@ Auth tokens never reach the model and never reach the browser.
   attach the token to a result).
 - The model's context window only ever sees the redacted envelope.
 
-### 8. Audit log everything (planned, not yet enforced)
+### 8. Audit log everything
 
-PR 7 will persist every run, every tool call, every final answer, and
-make them replay-inspectable. Until PR 7 lands, the in-memory
-`ToolLogger` (`server/agent/tool-log.ts`) is the chokepoint and the
-hook the DB swap will subscribe to. Today, calls are logged for the
-duration of the request and discarded.
+Every agent run, every tool call (agent or debug), every final
+`AgentAnswer`, and every `EvidenceBackedClaim` is persisted and
+replay-inspectable.
 
-This is a **gap**, not a strength. See `docs/limitations.md` and issue
-#76.
+- The audit store (`server/services/audit-store.ts`) is the
+  chokepoint for writes to `agent_answer`, `tool_call`, and
+  `evidence_claim`.
+- The `ToolLogger` interface (`server/agent/tool-log.ts`) is still
+  the sole producer of `ToolCallLogEntry` records; the registry
+  runner is the single hook. The DB-backed path is added via
+  `teeLogger` / `scopeLoggerToAnswer`, not by replacing the
+  interface.
+- HTTP surface: `GET /api/sessions/:sid/answers`,
+  `GET /api/sessions/:sid/answers/:aid`,
+  `GET /api/sessions/:sid/audit` (downloadable export). Wired in
+  `server/routes/answers.ts`.
+- UI surface: `SessionPage`'s "Past runs" panel + tool-call
+  timeline + "Export audit JSON" link
+  (`src/pages/SessionPage.tsx`).
+- Auth tokens never reach the audit log. Tools never receive the
+  connection's `authToken`, so `tool_call.input_json` cannot
+  contain it. Regression: `routes/sessions.test.ts` "never returns
+  the connection's auth token in any envelope".
+- Cascade behaviour: deleting a session cascades to `agent_answer`
+  and `tool_call`; deleting an answer cascades to `evidence_claim`.
+- Regression: `server/services/audit-store.test.ts` (8 tests) and
+  `server/routes/answers.test.ts` (8 tests).
+
+The mapping to FHIR `AuditEvent` / `Provenance` shapes lives in
+`docs/audit-model.md`. Phase A still does **not** write those
+resources back to the FHIR server — write-back is icebox.
 
 ### 9. Evals before "done" (planned, not yet enforced)
 

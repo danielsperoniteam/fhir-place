@@ -8,12 +8,13 @@ FHIR data**. Phase A only.
 > SMART on FHIR auth, does not handle PHI, and is not a clinical decision
 > support tool.
 
-## Status — Phase A (PRs 1–6 shipped)
+## Status — Phase A (PRs 1–7 shipped)
 
 This package currently ships:
 
 - A Vite + React + Tailwind UI shell with a synthetic-only banner on every page.
-- A SQLite + Drizzle local-first database (`data_connection`, `agent_session`).
+- A SQLite + Drizzle local-first database (`data_connection`, `agent_session`,
+  `agent_answer`, `tool_call`, `evidence_claim`).
 - A small Hono API at `apps/workbench/server/` that the frontend talks to over
   `/api`.
 - A connection setup flow: list, create, test (CapabilityStatement probe),
@@ -28,14 +29,18 @@ This package currently ships:
 - A bounded patient-summary agent loop (Anthropic, sonnet-4-6 default) that
   can only call the registered tools plus a terminal `finalize` tool, and
   treats resource text as data, never instruction.
+- A persisted audit log: every agent run, every tool call (agent or debug),
+  every final answer, and every cited claim is replay-inspectable. JSON
+  export is one click; the `SessionPage` "Past runs" panel shows the
+  tool-call timeline and cited evidence inline.
 
-In flight: audit logging (PR 7, [#76]), eval harness (PR 8, [#77]), failure
-gallery (PR 9, [#78]), and the remaining demo write-up bits (PR 10, [#79]).
+In flight: eval harness (PR 8, [#77]), failure gallery (PR 9, [#78]), and the
+remaining demo write-up bits (PR 10, [#79]).
 See [`TASKS.md`](TASKS.md), [`docs/architecture.md`](docs/architecture.md),
 [`docs/safety.md`](docs/safety.md), [`docs/limitations.md`](docs/limitations.md),
-and the copy-pasteable [`docs/demo-script.md`](docs/demo-script.md).
+[`docs/audit-model.md`](docs/audit-model.md), and the copy-pasteable
+[`docs/demo-script.md`](docs/demo-script.md).
 
-[#76]: https://github.com/samsuffolksperoni/fhir-place/issues/76
 [#77]: https://github.com/samsuffolksperoni/fhir-place/issues/77
 [#78]: https://github.com/samsuffolksperoni/fhir-place/issues/78
 [#79]: https://github.com/samsuffolksperoni/fhir-place/issues/79

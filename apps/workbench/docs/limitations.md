@@ -35,27 +35,22 @@ issue under the `fhir-workbench-phase-a` label.
 
 | Slice | Tracking issue | OpenSpec change |
 | --- | --- | --- |
-| PR 7 — Audit logging (DB-backed `tool_call`, `evidence_claim`; session detail view + JSON export) | [#76](https://github.com/samsuffolksperoni/fhir-place/issues/76) | `add-audit-logging` (not yet authored) |
 | PR 8 — Basic eval harness (runner, golden fixtures, schema-validity / unsupported-claim metrics) | [#77](https://github.com/samsuffolksperoni/fhir-place/issues/77) | `add-basic-evals` (not yet authored) |
 | PR 9 — Failure gallery (no-allergy, missing-lab, prompt-injection, unauthorized-patient cases surfaced as a page) | [#78](https://github.com/samsuffolksperoni/fhir-place/issues/78) | `add-failure-gallery` (not yet authored) |
-| PR 10 — Demo write-up: `docs/evals.md`, failure-gallery walkthrough, agent-run screenshots with captured tool timeline | [#79](https://github.com/samsuffolksperoni/fhir-place/issues/79) | `add-demo-writeup` (this change covers the partial slice; remaining items deferred) |
+| PR 10 — Demo write-up follow-up: `docs/evals.md`, failure-gallery walkthrough, agent-run screenshots with captured tool timeline | [#79](https://github.com/samsuffolksperoni/fhir-place/issues/79) | `add-demo-writeup` (partial slice merged; remaining items deferred until PR 8 / 9 land) |
 
-The orchestrator already passes every tool call through a
-`ToolLogger` hook (`server/agent/tool-log.ts`); PR 7 swaps the
-in-memory implementation for a SQLite-backed one without changing the
-call sites. The `AgentAnswer` schema and the registry envelope already
-have the shape PR 7 / 8 / 9 will read against.
+The audit log (PR 7) is the substrate PR 8 will read against. The
+`AgentAnswer` schema, the registry envelope, and the `agent_answer`
+/ `tool_call` / `evidence_claim` rows already have the shapes
+PR 8 / 9 will use.
 
-## Known incompletenesses of what *is* shipped (PRs 1–6)
+## Known incompletenesses of what *is* shipped (PRs 1–7)
 
 - **The agent runs against one provider.** Anthropic only
   (`server/agent/model-config.ts`). No automatic provider failover.
   Switching providers is intentionally a code change, not a runtime
   knob, so the safety properties stay with one well-understood
   surface.
-- **Tool calls are logged in memory only.** They are visible in the
-  `SessionPage` debug runner during a request, then discarded. PR 7
-  fixes this.
 - **No multi-user authentication.** The workbench is a local-first
   single-user research tool. There is no login screen, no
   authorization beyond the agent's patient-scope check, and no
@@ -86,11 +81,12 @@ have the shape PR 7 / 8 / 9 will read against.
 
 If you're evaluating the project today, treat:
 
-- **PRs 1–6 (shipped)** as the credible part. `pnpm test:run` is
-  green; the agent loop runs against the public HAPI sandbox; the
-  safety properties are anchored to file paths in `docs/safety.md`.
-- **PRs 7 / 8 / 9 (in flight)** as planned, not delivered. The Phase
-  A Definition of Done in `apps/workbench/TASKS.md` is not yet met.
+- **PRs 1–7 (shipped)** as the credible part. `pnpm test:run` is
+  green; the agent loop runs against the public HAPI sandbox; every
+  agent run + tool call + final answer is persisted; the safety
+  properties are anchored to file paths in `docs/safety.md`.
+- **PRs 8 / 9 (in flight)** as planned, not delivered. The Phase A
+  Definition of Done in `apps/workbench/TASKS.md` is not yet met.
 - **The icebox** as a hard line. The project is positioned as a
   research artifact, not a product, and the absence of clinical
   features is the point.

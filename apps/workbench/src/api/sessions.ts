@@ -124,6 +124,7 @@ export async function getAgentStatus(): Promise<AgentStatus> {
 }
 
 export interface RunAnswerResponse {
+  answerId: string;
   answer: unknown; // validated by parseAgentAnswer on the client
   turns: number;
   fallback: boolean;
@@ -154,4 +155,76 @@ export async function runPatientSummary(
     throw new Error(`${res.status}: ${detail}`);
   }
   return body as RunAnswerResponse;
+}
+
+/**
+ * Audit-log shapes mirror the server's `services/audit-store.ts` exports.
+ * The client doesn't re-validate; the server only ever inserts validated
+ * AgentAnswer rows.
+ */
+export interface ToolCallSummary {
+  id: string;
+  sessionId: string;
+  answerId: string | null;
+  tool: string;
+  toolVersion: string;
+  ok: boolean;
+  reason: string | null;
+  count: number | null;
+  truncated: boolean | null;
+  durationMs: number;
+  resourceIds: string[];
+  startedAt: string;
+  completedAt: string;
+}
+
+export interface EvidenceClaimSummary {
+  id: string;
+  claimId: string;
+  text: string;
+  evidenceRefs: string[];
+}
+
+export interface AnswerSummary {
+  id: string;
+  sessionId: string;
+  prompt: string;
+  promptVersion: string;
+  provider: string;
+  model: string;
+  fallback: boolean;
+  turns: number;
+  createdAt: string;
+}
+
+export interface AnswerDetail extends AnswerSummary {
+  answer: unknown;
+  finalIssues: unknown | null;
+  toolCalls: ToolCallSummary[];
+  claims: EvidenceClaimSummary[];
+}
+
+export async function listSessionAnswers(
+  sessionId: string,
+): Promise<AnswerSummary[]> {
+  const body = await http<{ answers: AnswerSummary[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/answers`,
+  );
+  return body.answers;
+}
+
+export async function getSessionAnswer(
+  sessionId: string,
+  answerId: string,
+): Promise<AnswerDetail> {
+  return http<AnswerDetail>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/answers/${encodeURIComponent(
+      answerId,
+    )}`,
+  );
+}
+
+/** Returns the URL the browser can navigate to for a JSON download. */
+export function sessionAuditExportUrl(sessionId: string): string {
+  return `/api/sessions/${encodeURIComponent(sessionId)}/audit`;
 }

@@ -1,12 +1,17 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getAgentStatus,
   getSession,
+  getSessionAnswer,
+  listSessionAnswers,
   listTools,
   runPatientSummary,
   runTool,
+  sessionAuditExportUrl,
+  type AnswerDetail,
+  type AnswerSummary,
   type ToolEnvelope,
   type ToolMeta,
 } from "../api/sessions.js";
@@ -42,8 +47,18 @@ export function SessionPage() {
   const summaryPrompt =
     agentStatus.data?.suggestedPrompts[0]?.text ?? "Summarise this patient.";
 
+  const queryClient = useQueryClient();
   const runAgent = useMutation({
     mutationFn: () => runPatientSummary(sid!, { prompt: summaryPrompt }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["session-answers", sid] });
+    },
+  });
+
+  const pastAnswers = useQuery({
+    queryKey: ["session-answers", sid],
+    queryFn: () => listSessionAnswers(sid!),
+    enabled: Boolean(sid),
   });
 
   const run = useMutation({
@@ -96,13 +111,23 @@ export function SessionPage() {
             </p>
           )}
         </div>
-        <Link
-          to={`/sessions/${sid}/answer-preview`}
-          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          data-testid="answer-preview-link"
-        >
-          AgentAnswer preview
-        </Link>
+        <div className="flex items-center gap-2">
+          <a
+            href={sessionAuditExportUrl(sid)}
+            className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            data-testid="export-audit"
+            download
+          >
+            Export audit JSON
+          </a>
+          <Link
+            to={`/sessions/${sid}/answer-preview`}
+            className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            data-testid="answer-preview-link"
+          >
+            AgentAnswer preview
+          </Link>
+        </div>
       </header>
 
       <p className="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700">
@@ -132,6 +157,11 @@ export function SessionPage() {
         error={runAgent.error}
       />
 
+      <PastAnswersPanel
+        sessionId={sid}
+        answers={pastAnswers.data ?? []}
+        isLoading={pastAnswers.isLoading}
+      />
 
       <section className="rounded-md border border-slate-200 bg-white p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
@@ -319,3 +349,133 @@ function AgentPanel(props: AgentPanelProps) {
     </section>
   );
 }
+
+interface PastAnswersPanelProps {
+  sessionId: string;
+  answers: AnswerSummary[];
+  isLoading: boolean;
+}
+
+function PastAnswersPanel(props: PastAnswersPanelProps) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const detail = useQuery({
+    queryKey: ["session-answer-detail", props.sessionId, openId],
+    queryFn: () => getSessionAnswer(props.sessionId, openId!),
+    enabled: Boolean(openId),
+  });
+
+  if (props.isLoading) return null;
+  if (props.answers.length === 0) return null;
+
+  return (
+    <section
+      data-testid="past-answers-panel"
+      className="space-y-2 rounded-md border border-slate-200 bg-white p-4"
+    >
+      <header className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-slate-900">Past runs</h2>
+        <p className="text-xs text-slate-500">
+          {props.answers.length} run{props.answers.length === 1 ? "" : "s"}{" "}
+          persisted in the audit log
+        </p>
+      </header>
+      <ul className="divide-y divide-slate-100">
+        {props.answers.map((a) => (
+          <li key={a.id} className="py-2">
+            <button
+              type="button"
+              onClick={() => setOpenId(openId === a.id ? null : a.id)}
+              data-testid={`past-answer-${a.id}`}
+              className="flex w-full items-start justify-between gap-2 text-left"
+            >
+              <span>
+                <span className="block text-sm font-medium text-slate-900">
+                  {a.prompt}
+                </span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  {a.createdAt} · {a.turns} turn
+                  {a.turns === 1 ? "" : "s"} · {a.provider}/{a.model}
+                </span>
+              </span>
+              <span
+                className={
+                  a.fallback
+                    ? "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
+                    : "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900"
+                }
+              >
+                {a.fallback ? "partial" : "ok"}
+              </span>
+            </button>
+            {openId === a.id && detail.data && (
+              <ToolCallTimeline detail={detail.data} />
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+interface ToolCallTimelineProps {
+  detail: AnswerDetail;
+}
+
+function ToolCallTimeline(props: ToolCallTimelineProps) {
+  return (
+    <div className="mt-3 space-y-2 rounded-md bg-slate-50 p-3 text-xs text-slate-700">
+      <p className="font-medium text-slate-900">
+        Tool-call timeline ({props.detail.toolCalls.length})
+      </p>
+      {props.detail.toolCalls.length === 0 ? (
+        <p className="text-slate-500">
+          No tool calls were captured for this run.
+        </p>
+      ) : (
+        <ol className="space-y-1">
+          {props.detail.toolCalls.map((tc) => (
+            <li
+              key={tc.id}
+              data-testid="timeline-entry"
+              className="flex items-start justify-between gap-3 rounded border border-slate-200 bg-white px-2 py-1"
+            >
+              <span className="font-mono">
+                {tc.tool}@{tc.toolVersion}
+              </span>
+              <span className="text-slate-500">
+                {tc.ok ? (
+                  <>
+                    ok
+                    {typeof tc.count === "number" ? ` · ${tc.count}` : ""}
+                    {tc.truncated ? "+" : ""} · {tc.durationMs}ms
+                  </>
+                ) : (
+                  <span className="text-rose-700">
+                    {tc.reason} · {tc.durationMs}ms
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {props.detail.claims.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer font-medium text-slate-900">
+            Cited evidence ({props.detail.claims.length} claim
+            {props.detail.claims.length === 1 ? "" : "s"})
+          </summary>
+          <ul className="mt-1 space-y-1 text-slate-600">
+            {props.detail.claims.map((c) => (
+              <li key={c.id}>
+                <span className="font-medium text-slate-800">{c.text}</span>{" "}
+                — {c.evidenceRefs.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
