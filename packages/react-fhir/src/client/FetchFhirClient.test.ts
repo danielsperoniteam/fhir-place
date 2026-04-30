@@ -261,6 +261,21 @@ describe("FetchFhirClient", () => {
     expect(cap.fhirVersion).toBe("4.0.1");
   });
 
+
+
+  it("fails stalled requests with a timeout FhirError", async () => {
+    server.use(
+      http.get(`${BASE}/Patient/slow-timeout`, async () => {
+        await new Promise((r) => setTimeout(r, 50));
+        return HttpResponse.json(mkPatient({ id: "slow-timeout" }));
+      }),
+    );
+    const client = new FetchFhirClient({ baseUrl: BASE, requestTimeoutMs: 5 });
+    await expect(client.read("Patient", "slow-timeout")).rejects.toMatchObject({
+      name: "FhirError",
+      status: 408,
+    });
+  });
   it("uses a custom fetch implementation when supplied", async () => {
     const customFetch = vi.fn(async () =>
       new Response(JSON.stringify(mkPatient({ id: "fake" })), {
