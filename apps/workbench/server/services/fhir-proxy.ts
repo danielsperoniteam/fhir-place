@@ -53,11 +53,12 @@ export async function proxySearch(
   resourceType: ResourceType,
   rawParams: URLSearchParams,
   fetchFn: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<ProxyResult> {
   const params = filterSearchParams(resourceType, rawParams);
   const qs = params.toString();
   const url = `${conn.baseUrl.replace(/\/$/, "")}/${resourceType}${qs ? `?${qs}` : ""}`;
-  return executeGet(url, conn, fetchFn);
+  return executeGet(url, conn, fetchFn, signal);
 }
 
 export async function proxyRead(
@@ -65,6 +66,7 @@ export async function proxyRead(
   resourceType: ResourceType,
   resourceId: string,
   fetchFn: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<ProxyResult> {
   if (!isValidFhirId(resourceId)) {
     return {
@@ -74,7 +76,7 @@ export async function proxyRead(
     };
   }
   const url = `${conn.baseUrl.replace(/\/$/, "")}/${resourceType}/${resourceId}`;
-  return executeGet(url, conn, fetchFn);
+  return executeGet(url, conn, fetchFn, signal);
 }
 
 /**
@@ -89,6 +91,7 @@ async function executeGet(
   url: string,
   conn: ProxyTarget,
   fetchFn: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<ProxyResult> {
   let response: Response;
   try {
@@ -98,6 +101,7 @@ async function executeGet(
         Accept: "application/fhir+json",
         ...authHeadersFor(conn),
       },
+      ...(signal ? { signal } : {}),
     });
   } catch (err) {
     return {

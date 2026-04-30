@@ -48,3 +48,33 @@ export const dataConnection = sqliteTable("data_connection", {
 
 export type DataConnection = typeof dataConnection.$inferSelect;
 export type NewDataConnection = typeof dataConnection.$inferInsert;
+
+/**
+ * A patient-scoped agent session.
+ *
+ * Phase A's tool registry is patient-scoped and deny-by-default: a session
+ * carries exactly one authorized `patient_id` and the typed FHIR tools can
+ * only be invoked against that patient. A request whose body specifies a
+ * different `patientId` is rejected at the boundary with
+ * `reason: "unauthorized_patient"`.
+ *
+ * The patient-summary agent in PR 6 will run inside one session and can
+ * never widen its scope. Audit-log mapping (PR 7) treats this row as the
+ * `Provenance.target.subject` for every tool call made under it.
+ */
+export const agentSession = sqliteTable("agent_session", {
+  id: text("id").primaryKey(),
+  connectionId: text("connection_id")
+    .notNull()
+    .references(() => dataConnection.id, { onDelete: "cascade" }),
+  patientId: text("patient_id").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(CURRENT_TIMESTAMP)`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(CURRENT_TIMESTAMP)`),
+});
+
+export type AgentSession = typeof agentSession.$inferSelect;
+export type NewAgentSession = typeof agentSession.$inferInsert;

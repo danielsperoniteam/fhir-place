@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { openDb } from "../db/client.js";
 import { createConnectionStore } from "./services/connection-store.js";
+import { createSessionStore } from "./services/session-store.js";
 import { createApp } from "./app.js";
+import { createPhaseATools } from "./agent/tools/index.js";
+import { inMemoryLogger } from "./agent/tool-log.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(here, "..", "db", "migrations");
@@ -15,7 +18,9 @@ export function makeTestApp(options: { fetchFn?: typeof fetch } = {}) {
   const url = join(dir, "test.sqlite");
 
   const sqlite = new Database(url);
-  for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort()) {
+  for (const file of readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()) {
     sqlite.exec(readFileSync(join(migrationsDir, file), "utf8"));
   }
   sqlite.close();
@@ -28,11 +33,30 @@ export function makeTestApp(options: { fetchFn?: typeof fetch } = {}) {
     now: () => "2026-04-30T00:00:00.000Z",
     fetchFn: options.fetchFn,
   });
-  const app = createApp({ connections, fetchFn: options.fetchFn });
+
+  let sessionCounter = 0;
+  const sessions = createSessionStore(db, {
+    generateId: () => `sess_${String(++sessionCounter).padStart(4, "0")}`,
+    now: () => "2026-04-30T00:00:00.000Z",
+  });
+
+  const registry = createPhaseATools();
+  const logger = inMemoryLogger();
+
+  const app = createApp({
+    connections,
+    sessions,
+    registry,
+    fetchFn: options.fetchFn,
+    logger,
+  });
 
   return {
     app,
     connections,
+    sessions,
+    registry,
+    logger,
     cleanup() {
       rmSync(dir, { recursive: true, force: true });
     },

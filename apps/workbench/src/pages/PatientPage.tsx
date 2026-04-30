@@ -1,5 +1,5 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   bundleEntries,
   getPatient,
@@ -7,6 +7,7 @@ import {
   type AllowedResourceType,
 } from "../api/fhir.js";
 import { getConnection } from "../api/connections.js";
+import { createSession } from "../api/sessions.js";
 import { patientDisplayName } from "../components/PatientName.js";
 import type { Resource } from "fhir/r4";
 
@@ -20,11 +21,17 @@ const COMPARTMENT_TYPES: ReadonlyArray<Exclude<AllowedResourceType, "Patient">> 
 
 export function PatientPage() {
   const { cid, pid } = useParams<{ cid: string; pid: string }>();
+  const navigate = useNavigate();
 
   const conn = useQuery({
     queryKey: ["connections", cid],
     queryFn: () => getConnection(cid!),
     enabled: Boolean(cid),
+  });
+
+  const startSession = useMutation({
+    mutationFn: () => createSession(cid!, pid!),
+    onSuccess: (s) => navigate(`/sessions/${s.id}`),
   });
 
   const patient = useQuery({
@@ -71,7 +78,21 @@ export function PatientPage() {
             >
               raw JSON
             </Link>
+            <button
+              type="button"
+              onClick={() => startSession.mutate()}
+              disabled={startSession.isPending}
+              data-testid="start-session"
+              className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+            >
+              {startSession.isPending ? "Starting…" : "Start agent session"}
+            </button>
           </div>
+          {startSession.isError && (
+            <p className="rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">
+              {(startSession.error as Error).message}
+            </p>
+          )}
           <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-sm">
             <dt className="text-slate-500">Patient id</dt>
             <dd className="font-mono">{patient.data.id}</dd>

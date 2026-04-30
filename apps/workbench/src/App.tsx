@@ -7,6 +7,7 @@ import { NewConnectionPage } from "./pages/NewConnectionPage.js";
 import { PatientsPage } from "./pages/PatientsPage.js";
 import { PatientPage } from "./pages/PatientPage.js";
 import { ResourcePage } from "./pages/ResourcePage.js";
+import { SessionPage } from "./pages/SessionPage.js";
 
 const navItem =
   "rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900";
@@ -57,6 +58,7 @@ export function App() {
             path="/connections/:cid/patients/:pid/:resourceType/:resourceId"
             element={<ResourcePage />}
           />
+          <Route path="/sessions/:sid" element={<SessionPage />} />
         </Routes>
       </main>
     </div>
