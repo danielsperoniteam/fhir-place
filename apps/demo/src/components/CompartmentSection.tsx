@@ -1,6 +1,6 @@
 import { ResourceTable, useSearch } from "@fhir-place/react-fhir";
 import type { Resource } from "fhir/r4";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export interface CompartmentSectionProps {
   /** Patient id scoping the search. */
@@ -34,6 +34,7 @@ export function CompartmentSection({
   patientSearchParam = "patient",
   limit = 5,
 }: CompartmentSectionProps) {
+  const navigate = useNavigate();
   const { data, isLoading } = useSearch<Resource>(resourceType, {
     [patientSearchParam]: patientId,
     _count: limit,
@@ -71,7 +72,7 @@ export function CompartmentSection({
             columns={columns}
             columnLabels={columnLabels}
             onRowClick={(r) => {
-              if (r.id) window.location.assign(`/${r.resourceType}/${r.id}`);
+              if (r.id) navigate(`/${r.resourceType}/${r.id}`);
             }}
           />
           {total > resources.length && (
