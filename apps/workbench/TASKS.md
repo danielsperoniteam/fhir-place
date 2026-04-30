@@ -44,33 +44,6 @@ Phase A is complete only when:
 
 # Backlog
 
-## PR 6 — Patient Summary Agent
-
-**OpenSpec change:** `add-patient-summary-agent`
-
-### Goal
-Add the first LLM workflow: patient summary over synthetic FHIR data.
-
-### Tasks
-- [ ] Add model/provider configuration.
-- [ ] Add prompt versioning.
-- [ ] Add small custom tool-calling loop.
-- [ ] Add max-turn limit.
-- [ ] Add patient-summary prompt.
-- [ ] Add safety checks before final render.
-- [ ] Ensure resource text is treated as data, not instructions.
-- [ ] Validate final answer against `AgentAnswer`.
-- [ ] Add standard suggested prompt in UI.
-
-### Acceptance Criteria
-- [ ] Agent answers a standard patient-summary prompt.
-- [ ] Agent uses only typed, patient-scoped tools.
-- [ ] Answer includes supported claims, missing data, and cannot-determine sections.
-- [ ] Agent refuses or partially answers when evidence is insufficient.
-- [ ] Prompt injection in resource text does not alter system behavior.
-
----
-
 ## PR 7 — Audit Logging
 
 **OpenSpec change:** `add-audit-logging`
@@ -166,22 +139,46 @@ Make correct safety behavior visible in the demo.
 ### Goal
 Package the project as a credible portfolio/demo artifact.
 
-### Tasks
-- [ ] Add demo script.
-- [ ] Add screenshots or GIF.
-- [ ] Complete `docs/architecture.md`.
-- [ ] Complete `docs/safety.md`.
-- [ ] Complete `docs/evals.md`.
-- [ ] Complete `docs/limitations.md`.
-- [ ] Write technical post draft.
-- [ ] Validate README local setup from clean checkout.
+### Shipped now (partial slice — PRs 7 / 8 / 9 not required)
+
+These items are included in the partial PR 10 slice that the
+`add-demo-writeup` OpenSpec change covers:
+
+- [x] Add demo script (`apps/workbench/docs/demo-script.md`).
+- [x] Complete `apps/workbench/docs/architecture.md`.
+- [x] Complete `apps/workbench/docs/safety.md`.
+- [x] Complete `apps/workbench/docs/limitations.md`.
+- [x] Write technical post draft (`apps/workbench/docs/post.md`).
+- [x] Validate README local setup from clean checkout
+      (`pnpm install`, `db:setup`, `typecheck`, `test:run`, `build`
+      all green).
+- [x] Update `apps/workbench/README.md` "Status" section to reflect
+      PRs 1–6 shipped.
+- [x] Update `apps/workbench/src/pages/HomePage.tsx` in-app status
+      blurb to reflect PRs 1–6.
+
+### Deferred to follow-up (blocked on PRs 7 / 8 / 9)
+
+- [ ] Add `apps/workbench/docs/evals.md` — depends on PR 8.
+- [ ] Add screenshots or GIF of an agent run with a captured tool
+      timeline — depends on PR 7's audit log so the same run is
+      reproducible.
+- [ ] Add the failure-gallery walkthrough to the demo script —
+      depends on PR 9.
 
 ### Acceptance Criteria
-- [ ] A reviewer understands the safety model in under five minutes.
-- [ ] A developer can run locally from README.
-- [ ] Write-up emphasizes safety, evals, FHIR grounding, auditability, and
-      limitations.
-- [ ] Project is not positioned as a clinical chatbot.
+
+The partial slice (above) is not enough to fully satisfy these — they
+remain open until the deferred items land:
+
+- [ ] A reviewer understands the safety model in under five minutes
+      (the docs cover safety today; the visible failure gallery from
+      PR 9 is the missing piece).
+- [x] A developer can run locally from README.
+- [ ] Write-up emphasizes safety, evals, FHIR grounding, auditability,
+      and limitations (safety + FHIR grounding + limitations covered;
+      evals + auditability deferred).
+- [x] Project is not positioned as a clinical chatbot.
 
 ---
 
@@ -229,3 +226,8 @@ These are intentionally excluded until after Phase A:
 - **PR 5 — Structured Answer Schema** (#74). `AgentAnswer`,
   `EvidenceBackedClaim`, `ToolCallSummary` Zod schemas; structured renderer;
   validation before render. OpenSpec: `add-evidence-backed-answer-schema`.
+- **PR 6 — Patient Summary Agent** (#75). Bounded custom tool-calling loop
+  against Anthropic; patient-scoped system prompt with frozen authorized
+  patient id; resource-text-as-data wrapping; `finalize` tool whose input
+  mirrors the AgentAnswer schema; schema-retry + partial-answer fallback;
+  `AgentPanel` on `SessionPage`. OpenSpec: `add-patient-summary-agent`.

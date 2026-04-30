@@ -1,29 +1,20 @@
 # Limitations
 
-> Placeholder. Filled out incrementally as Phase A PRs land. Finalised in
-> PR 10 (Demo Hardening and Write-Up).
+Three categories: what is *intentionally* out of scope, what is *not
+yet shipped*, and what is shipped but *known to be incomplete*. Each
+distinction matters — "we won't" and "we haven't yet" mean different
+things to a reviewer.
 
-## What the workbench cannot do
+## Phase A icebox — intentionally out of scope
 
-- **Cannot be used clinically.** Synthetic data only. Not a clinical decision
-  support tool. No PHI path.
-- **Cannot write to the FHIR server.** Read-only by design. Write-back is
-  Phase A icebox.
-- **Cannot generate arbitrary FHIR queries.** The agent can only call the
-  registered, typed, patient-scoped tools.
-- **Cannot answer questions outside the selected patient's scope.** Tools
-  reject missing or unauthorized patient IDs.
-- **Cannot follow instructions embedded in resource text.** Resource content
-  is data, not instruction.
-- **Cannot be relied on for completeness.** When evidence is insufficient,
-  the agent emits a cannot-determine claim, not a guess.
-
-## Phase A icebox (intentionally excluded)
+These are not Phase A goals and will not be added during Phase A. If a
+future requirement seems to require any of them, stop and confirm
+before shipping (`AGENTS.md`).
 
 - SMART on FHIR auth
 - Real PHI handling
 - HIPAA compliance claims
-- Write-back / mutation
+- Write-back / mutation against the FHIR server
 - Draft / queue / approval workflows
 - Prior authorization
 - Care-gap detection
@@ -31,17 +22,75 @@
 - CQL execution, `$evaluate-measure`
 - DocumentReference text extraction
 - MCP server
-- BigQuery / OMOP / claims-style FHIR / wearable connection types
-- Memory, multi-agent planning
+- BigQuery / OMOP / claims / wearable connection types
+- Memory across sessions, multi-agent planning
 - Clinician preview mode
-- Arbitrary FHIR query generation
+- Arbitrary FHIR query generation by the agent
 - Arbitrary code execution by the agent
 
-## Known incompletenesses (Phase A)
+## Not yet shipped — tracked, in flight
 
-- The eval suite is small (PR 8 ships ≥ 2 cases). It is not a benchmark.
-- The audit log mirrors `AuditEvent` / `Provenance` shape but is not written
-  back to the FHIR server.
-- One LLM provider is wired up (PR 6); no automatic provider failover.
-- No multi-user authentication. The workbench is a local-first single-user
-  research tool.
+These are Phase A goals that haven't landed yet. Each has a tracking
+issue under the `fhir-workbench-phase-a` label.
+
+| Slice | Tracking issue | OpenSpec change |
+| --- | --- | --- |
+| PR 7 — Audit logging (DB-backed `tool_call`, `evidence_claim`; session detail view + JSON export) | [#76](https://github.com/samsuffolksperoni/fhir-place/issues/76) | `add-audit-logging` (not yet authored) |
+| PR 8 — Basic eval harness (runner, golden fixtures, schema-validity / unsupported-claim metrics) | [#77](https://github.com/samsuffolksperoni/fhir-place/issues/77) | `add-basic-evals` (not yet authored) |
+| PR 9 — Failure gallery (no-allergy, missing-lab, prompt-injection, unauthorized-patient cases surfaced as a page) | [#78](https://github.com/samsuffolksperoni/fhir-place/issues/78) | `add-failure-gallery` (not yet authored) |
+| PR 10 — Demo write-up: `docs/evals.md`, failure-gallery walkthrough, agent-run screenshots with captured tool timeline | [#79](https://github.com/samsuffolksperoni/fhir-place/issues/79) | `add-demo-writeup` (this change covers the partial slice; remaining items deferred) |
+
+The orchestrator already passes every tool call through a
+`ToolLogger` hook (`server/agent/tool-log.ts`); PR 7 swaps the
+in-memory implementation for a SQLite-backed one without changing the
+call sites. The `AgentAnswer` schema and the registry envelope already
+have the shape PR 7 / 8 / 9 will read against.
+
+## Known incompletenesses of what *is* shipped (PRs 1–6)
+
+- **The agent runs against one provider.** Anthropic only
+  (`server/agent/model-config.ts`). No automatic provider failover.
+  Switching providers is intentionally a code change, not a runtime
+  knob, so the safety properties stay with one well-understood
+  surface.
+- **Tool calls are logged in memory only.** They are visible in the
+  `SessionPage` debug runner during a request, then discarded. PR 7
+  fixes this.
+- **No multi-user authentication.** The workbench is a local-first
+  single-user research tool. There is no login screen, no
+  authorization beyond the agent's patient-scope check, and no
+  audience separation between two browsers pointed at the same
+  `:5174`.
+- **Bearer tokens stored unencrypted in SQLite.** Documented in
+  `docs/data-connections.md` as an explicit non-claim. Phase A is
+  synthetic-only single-user local; we do not pretend to solve
+  encryption-at-rest.
+- **The agent loop is single-shot, not streaming.** The browser waits
+  for the whole answer; partial-token streaming would change the
+  validation contract and is out of scope.
+- **The `summary` field on `AgentAnswer` is allowed but never load-
+  bearing.** The renderer shows it; no eval will read it; no claim
+  derives from it. It is there so a quick scroll yields a readable
+  paragraph.
+- **Search-tool result limits cap at 50.** `Observation` searches in
+  particular can return more than 50 entries on a busy patient on the
+  HAPI sandbox. The agent sees `truncated: true` and can choose to
+  cite what it has or note the gap, but it cannot ask for more pages.
+  Phase A does not add pagination at the tool layer.
+- **Resource viewer renders raw FHIR JSON only.** PR 3 deliberately
+  did not add a structured renderer per resource type; that's
+  `@fhir-place/react-fhir`'s job. The workbench is not a clinical
+  viewer; it's an inspection tool.
+
+## What this means for a reviewer
+
+If you're evaluating the project today, treat:
+
+- **PRs 1–6 (shipped)** as the credible part. `pnpm test:run` is
+  green; the agent loop runs against the public HAPI sandbox; the
+  safety properties are anchored to file paths in `docs/safety.md`.
+- **PRs 7 / 8 / 9 (in flight)** as planned, not delivered. The Phase
+  A Definition of Done in `apps/workbench/TASKS.md` is not yet met.
+- **The icebox** as a hard line. The project is positioned as a
+  research artifact, not a product, and the absence of clinical
+  features is the point.

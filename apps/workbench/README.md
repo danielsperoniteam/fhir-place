@@ -8,20 +8,37 @@ FHIR data**. Phase A only.
 > SMART on FHIR auth, does not handle PHI, and is not a clinical decision
 > support tool.
 
-## Status — Phase A (PR 1 + PR 2 shipped)
+## Status — Phase A (PRs 1–6 shipped)
 
 This package currently ships:
 
 - A Vite + React + Tailwind UI shell with a synthetic-only banner on every page.
-- A SQLite + Drizzle local-first database with a real `data_connection` table.
+- A SQLite + Drizzle local-first database (`data_connection`, `agent_session`).
 - A small Hono API at `apps/workbench/server/` that the frontend talks to over
   `/api`.
 - A connection setup flow: list, create, test (CapabilityStatement probe),
   delete.
+- A read-only FHIR proxy with a per-resource search-param allow-list.
+- Patient search by name / identifier / birthdate / gender, a demographics
+  panel, six compartment cards, and a raw FHIR JSON viewer.
+- A typed, patient-scoped, deny-by-default tool registry (six tools) plus a
+  debug session runner.
+- The structured `AgentAnswer` Zod schema and a renderer that only ever sees
+  validated answers.
+- A bounded patient-summary agent loop (Anthropic, sonnet-4-6 default) that
+  can only call the registered tools plus a terminal `finalize` tool, and
+  treats resource text as data, never instruction.
 
-The patient search, typed FHIR tools, and patient-summary agent land in PRs
-3–6. See [`TASKS.md`](TASKS.md) and
-[`docs/data-connections.md`](docs/data-connections.md) for details.
+In flight: audit logging (PR 7, [#76]), eval harness (PR 8, [#77]), failure
+gallery (PR 9, [#78]), and the remaining demo write-up bits (PR 10, [#79]).
+See [`TASKS.md`](TASKS.md), [`docs/architecture.md`](docs/architecture.md),
+[`docs/safety.md`](docs/safety.md), [`docs/limitations.md`](docs/limitations.md),
+and the copy-pasteable [`docs/demo-script.md`](docs/demo-script.md).
+
+[#76]: https://github.com/samsuffolksperoni/fhir-place/issues/76
+[#77]: https://github.com/samsuffolksperoni/fhir-place/issues/77
+[#78]: https://github.com/samsuffolksperoni/fhir-place/issues/78
+[#79]: https://github.com/samsuffolksperoni/fhir-place/issues/79
 
 ## Local setup
 
