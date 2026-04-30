@@ -1,4 +1,5 @@
 import {
+  FhirError,
   ResourceView,
   useDeleteResource,
   useResource,
@@ -13,7 +14,9 @@ import { PATIENT_COMPARTMENT } from "../compartment.js";
 export function ResourceDetailPage() {
   const { resourceType = "", id = "" } = useParams();
   const navigate = useNavigate();
-  const { data, isLoading, isError, error } = useResource<Resource>(resourceType, id);
+  const { data, isLoading, isError, error, refetch } = useResource<Resource>(resourceType, id);
+  const notFound =
+    error instanceof FhirError && (error.status === 404 || error.status === 410);
   const del = useDeleteResource();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -101,11 +104,43 @@ export function ResourceDetailPage() {
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
-      {isError && (
-        <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {(error as Error)?.message}
+      {isLoading && (
+        <p className="text-sm text-slate-500" data-testid="resource-loading">
+          Loading {resourceType}/{id}…
         </p>
+      )}
+      {isError && notFound && (
+        <div
+          data-testid="resource-not-found"
+          className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-medium">{resourceType} not found</p>
+          <p className="mt-1 text-amber-800">
+            {resourceType}/{id} doesn't exist on this server, or it was deleted. It
+            may also be cached in a stale link.
+          </p>
+          <Link
+            to={`/${resourceType}`}
+            className="mt-2 inline-block text-amber-900 underline"
+          >
+            ← Back to all {resourceType.toLowerCase()}s
+          </Link>
+        </div>
+      )}
+      {isError && !notFound && (
+        <div
+          data-testid="resource-error"
+          className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          <p>{(error as Error)?.message ?? `Failed to load ${resourceType}/${id}.`}</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-2 rounded border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+          >
+            Retry
+          </button>
+        </div>
       )}
       {data && (
         <ResourceView
@@ -113,6 +148,17 @@ export function ResourceDetailPage() {
           onReferenceClick={onReferenceClick}
           className="rounded border border-slate-200 bg-white p-4 shadow-sm"
         />
+      )}
+
+      {data && (
+        <details className="rounded border border-slate-200 bg-white" data-testid="resource-json">
+          <summary className="cursor-pointer px-4 py-2 text-sm font-medium text-slate-700">
+            View full JSON
+          </summary>
+          <pre className="max-h-[32rem] overflow-auto border-t border-slate-200 bg-slate-50 p-4 text-xs text-slate-800">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </details>
       )}
 
       {data && resourceType === "Patient" && (

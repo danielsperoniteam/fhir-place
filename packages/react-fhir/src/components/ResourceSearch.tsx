@@ -218,10 +218,10 @@ const fieldWrapper = (
   );
 };
 
-function SearchField({ base, param, value, onChange }: SearchFieldProps): ReactNode {
+function SearchField({ base, param, value, onChange, profile }: SearchFieldProps): ReactNode {
   if (param.type === "token") {
     return (
-      <TokenSearchField base={base} param={param} value={value} onChange={onChange} />
+      <TokenSearchField base={base} param={param} value={value} onChange={onChange} profile={profile} />
     );
   }
   if (param.type === "date") {

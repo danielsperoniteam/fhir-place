@@ -37,3 +37,6 @@ post-merge via the nightly run, not block unrelated PRs on HAPI downtime.
 - Default per-test timeout is 30 s; give CRUD roundtrips 60 s.
 - Never assert on pre-existing data — HAPI's public instance is reset
   periodically.
+- Stop-the-bleed policy: when fixing a production bug or server-contract
+  regression, add or extend an integration test in the same PR so the failure
+  mode is pinned and cannot silently reappear.

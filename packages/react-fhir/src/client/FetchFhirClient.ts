@@ -26,6 +26,8 @@ export interface FetchFhirClientOptions {
   headers?: Record<string, string>;
   /** Async header producer, called per request. Overrides `headers` on collision. */
   getHeaders?: () => Promise<Record<string, string>> | Record<string, string>;
+  /** Fails requests that stall beyond this duration (ms). Defaults to 15s. */
+  requestTimeoutMs?: number;
 }
 
 const trimSlash = (s: string): string => s.replace(/\/+$/, "");
@@ -37,6 +39,7 @@ export class FetchFhirClient implements FhirClient {
   private readonly fetchImpl: typeof fetch;
   private readonly staticHeaders: Record<string, string>;
   private readonly getHeaders: FetchFhirClientOptions["getHeaders"];
+  private readonly requestTimeoutMs: number;
 
   constructor(opts: FetchFhirClientOptions) {
     this.baseUrl = trimSlash(opts.baseUrl);
@@ -44,6 +47,7 @@ export class FetchFhirClient implements FhirClient {
     this.fetchImpl = opts.fetch ?? globalThis.fetch.bind(globalThis);
     this.staticHeaders = opts.headers ?? {};
     this.getHeaders = opts.getHeaders;
+    this.requestTimeoutMs = Math.max(1, opts.requestTimeoutMs ?? 15_000);
   }
 
   capabilities(options?: RequestOptions): Promise<CapabilityStatement> {
@@ -207,13 +211,33 @@ export class FetchFhirClient implements FhirClient {
       body = JSON.stringify(init.body);
     }
 
-    const response = await this.fetchImpl(url, {
-      method: init.method ?? "GET",
-      headers,
-      body,
-      signal: init.signal,
-      cache: init.cache,
-    });
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), this.requestTimeoutMs);
+    const signal = init.signal
+      ? AbortSignal.any([init.signal, timeoutController.signal])
+      : timeoutController.signal;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: init.method ?? "GET",
+        headers,
+        body,
+        signal,
+        cache: init.cache,
+      });
+    } catch (err) {
+      const timedOut = timeoutController.signal.aborted && !init.signal?.aborted;
+      if (timedOut) {
+        throw new FhirError(
+          `FHIR ${init.method ?? "GET"} ${url} timed out after ${this.requestTimeoutMs}ms`,
+          { status: 408, url },
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       let outcome: OperationOutcome | undefined;

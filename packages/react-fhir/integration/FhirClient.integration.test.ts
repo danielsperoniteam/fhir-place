@@ -170,6 +170,36 @@ describe.skipIf(!reachable)(`integration: FhirClient @ ${FHIR_BASE_URL}`, () => 
   );
 
   test(
+    "readReference() resolves an absolute reference URL",
+    async () => {
+      const unique = (globalThis.crypto ?? require("crypto")).randomUUID();
+      const patient = await client.create<Patient>({
+        resourceType: "Patient",
+        identifier: [{ system: TEST_IDENTIFIER_SYSTEM, value: unique }],
+        name: [{ given: ["Absolute"], family: "Reference" }],
+      });
+      cleanup.push({ type: "Patient", id: patient.id! });
+
+      const resolved = await client.readReference<Patient>({
+        reference: `${FHIR_BASE_URL}/Patient/${patient.id}`,
+      });
+      expect(resolved.resourceType).toBe("Patient");
+      expect(resolved.id).toBe(patient.id);
+    },
+    60_000,
+  );
+
+  test(
+    "readReference() throws on malformed reference",
+    () => {
+      expect(() =>
+        client.readReference<Patient>({ reference: "not-a-fhir-reference" }),
+      ).toThrow(/Unsupported reference form/);
+    },
+    30_000,
+  );
+
+  test(
     "walkResource() produces sensible output for a real fetched Patient",
     async () => {
       const unique = (globalThis.crypto ?? require("crypto")).randomUUID();
@@ -208,6 +238,21 @@ describe.skipIf(!reachable)(`integration: FhirClient @ ${FHIR_BASE_URL}`, () => 
         .catch((e) => e);
       expect(isFhirError(err)).toBe(true);
       expect([404, 410, 400]).toContain(err.status);
+    },
+    30_000,
+  );
+
+  test(
+    "search on a guaranteed-missing identifier returns an empty searchset",
+    async () => {
+      const unique = (globalThis.crypto ?? require("crypto")).randomUUID();
+      const bundle: Bundle<Patient> = await client.search<Patient>("Patient", {
+        identifier: `${TEST_IDENTIFIER_SYSTEM}|missing-${unique}`,
+      });
+      expect(bundle.resourceType).toBe("Bundle");
+      expect(bundle.type).toBe("searchset");
+      expect(bundle.total ?? 0).toBe(0);
+      expect((bundle.entry ?? []).length).toBe(0);
     },
     30_000,
   );

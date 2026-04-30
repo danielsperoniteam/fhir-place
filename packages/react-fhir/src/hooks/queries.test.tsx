@@ -125,6 +125,26 @@ describe("query hooks", () => {
 
 
 
+  it("useStructureDefinition treats a core canonical the same as a bare type (bundled fallback applies)", async () => {
+    // Both server endpoints miss; success here means the bundled core Patient SD
+    // was returned, which only happens when the resolver recognises the canonical
+    // as the base Patient type.
+    server.use(
+      http.get(`${BASE}/StructureDefinition/Patient`, () => new HttpResponse(null, { status: 404 })),
+      http.get(`${BASE}/StructureDefinition`, () =>
+        HttpResponse.json({ resourceType: "Bundle", type: "searchset", entry: [] }),
+      ),
+    );
+    const { wrapper } = mkWrapper();
+    const { result } = renderHook(
+      () => useStructureDefinition("http://hl7.org/fhir/StructureDefinition/Patient"),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.type).toBe("Patient");
+    expect(result.current.data?.snapshot?.element.some((e) => e.path === "Patient.name")).toBe(true);
+  });
+
   it("useStructureDefinition accepts canonical profile URLs", async () => {
     const profile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient";
     server.use(

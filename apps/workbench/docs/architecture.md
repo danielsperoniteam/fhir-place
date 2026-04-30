@@ -1,9 +1,9 @@
 # Architecture
 
-Component-level description of the workbench as it stands after PR 6.
-PRs 7 / 8 / 9 are tracked but not yet implemented; their planned
-contracts are noted under [Planned](#planned) so the existing code
-makes sense in context.
+Component-level description of the workbench as it stands after PR 7.
+PRs 8 / 9 are tracked but not yet implemented; their planned contracts
+are noted under [Planned](#planned) so the existing code makes sense
+in context.
 
 ## One-line summary
 
@@ -26,12 +26,12 @@ Two processes:
 Vite proxies `/api` to the Hono server. Override the API port with
 `WORKBENCH_PORT`.
 
-## Components shipped through PR 6
+## Components shipped through PR 7
 
 | Component | Where it lives | Shipped in |
 | --- | --- | --- |
 | UI shell + synthetic-only banner | `src/components/SyntheticOnlyBanner.tsx`, `src/App.tsx` | PR 1 |
-| SQLite + Drizzle | `db/schema.ts`, `db/migrations/`, `db/client.ts`, `scripts/db-setup.ts` | PR 1 (skeleton), PR 2 (`data_connection`), PR 4 (`agent_session`) |
+| SQLite + Drizzle | `db/schema.ts`, `db/migrations/`, `db/client.ts`, `scripts/db-setup.ts` | PR 1 (skeleton), PR 2 (`data_connection`), PR 4 (`agent_session`), PR 7 (`agent_answer`, `tool_call`, `evidence_claim`) |
 | FHIR DataConnection | `server/services/connection-store.ts`, `server/services/fhir-connection.ts`, `server/routes/connections.ts`, `src/pages/Connections*Page.tsx` | PR 2 |
 | Read-only FHIR proxy | `server/services/fhir-proxy.ts`, `server/routes/fhir.ts` | PR 3 |
 | Patient search + viewer | `src/pages/PatientsPage.tsx`, `src/pages/PatientPage.tsx`, `src/pages/ResourcePage.tsx` | PR 3 |
@@ -39,6 +39,7 @@ Vite proxies `/api` to the Hono server. Override the API port with
 | Agent sessions | `server/services/session-store.ts`, `server/routes/sessions.ts` | PR 4 |
 | `AgentAnswer` schema + renderer | `src/agent/answer-schema.ts`, `src/agent/AgentAnswerRenderer.tsx`, `src/agent/EvidenceChip.tsx`, `src/agent/answer-extractors.ts`, `src/agent/fixtures.ts` | PR 5 |
 | Patient-summary agent loop | `server/agent/orchestrator.ts`, `server/agent/prompts.ts`, `server/agent/anthropic-tools.ts`, `server/agent/model-config.ts`, `server/routes/answers.ts` | PR 6 |
+| Audit log + replay | `server/services/audit-store.ts`, `db/migrations/0003_audit.sql`, `src/pages/SessionPage.tsx` (Past runs panel + Export) | PR 7 |
 
 ## Data flow
 
@@ -187,6 +188,7 @@ SQLite via `better-sqlite3` with Drizzle migrations under
 | `0000_initial.sql` | `schema_version` placeholder |
 | `0001_data_connection.sql` | `data_connection` (PR 2) |
 | `0002_agent_session.sql` | `agent_session` (PR 4) |
+| `0003_audit.sql` | `agent_answer`, `tool_call`, `evidence_claim` (PR 7) |
 
 Path defaults to `apps/workbench/workbench.sqlite`; override with
 `WORKBENCH_DB_URL`. Auth tokens are stored unencrypted — Phase A is
@@ -207,15 +209,48 @@ the explicit non-claim.
   on success and surface upstream `OperationOutcome` bodies on error,
   not a parallel error shape.
 
+## The audit log (PR 7)
+
+Three SQLite tables persist every agent run:
+
+- **`agent_answer`** — one row per `runPatientSummary` invocation.
+  Stores the validated `AgentAnswer` body verbatim, plus prompt,
+  prompt version, provider, model, fallback, turns, and any
+  validation issues from a partial-answer fallback.
+- **`tool_call`** — one row per tool execution. Both agent runs
+  (`answer_id` set) and standalone debug-runner calls (`answer_id
+  IS NULL`) are recorded. The full envelope is preserved alongside
+  denormalised columns for cheap audit queries.
+- **`evidence_claim`** — one row per `EvidenceBackedClaim` in a
+  persisted answer. Source of truth is still
+  `agent_answer.answer_json`; this row exists so the audit query
+  "which claims cite resource X?" doesn't have to JSON-parse the
+  answer.
+
+The audit store (`server/services/audit-store.ts`) is the chokepoint;
+the existing `ToolLogger` hook (PR 4) routes to it via
+`teeLogger`/`scopeLoggerToAnswer` (`server/agent/tool-log.ts`) without
+changing the registry's call sites.
+
+Surface: `GET /api/sessions/:sid/answers`,
+`GET /api/sessions/:sid/answers/:aid`,
+`GET /api/sessions/:sid/audit` (downloadable JSON export). The
+`SessionPage` "Past runs" panel + tool-call timeline read these
+endpoints.
+
+See [`docs/audit-model.md`](./audit-model.md) for the schema, the
+FHIR-adjacent `AuditEvent` / `Provenance` mapping, and the export
+format.
+
 ## Planned
 
 What the code anticipates but does not yet implement:
 
 | PR | Adds | Where it will land |
 | --- | --- | --- |
-| 7 | `tool_call`, `evidence_claim` tables; DB-backed `ToolLogger`; session detail view + tool-call timeline; JSON export | `db/migrations/000{3,4}_*.sql`, `server/services/audit-store.ts`, `src/pages/SessionDetailPage.tsx` (provisional names) |
 | 8 | Eval runner, golden fixtures, schema-validity / unsupported-claim metrics | `apps/workbench/scripts/evals.ts` (provisional) |
 | 9 | Failure gallery page surfacing the eval cases | `src/pages/FailureGalleryPage.tsx` (provisional) |
 
-The current shapes (envelope + answer schema + logger hook) were chosen
-so PR 7's swap from in-memory log to SQLite is additive, not invasive.
+PR 7's audit log is the substrate PR 8 will read against. The current
+shapes (envelope + answer schema + audit store) are stable; PR 8 reads,
+PR 9 surfaces.

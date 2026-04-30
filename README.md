@@ -196,6 +196,19 @@ The components are a toolbox, not a framework. Typical pattern for a new app:
 5. **Override per-type UX** where needed — pass `renderers` or `inputs` to swap in app-specific widgets (e.g. a signature pad for `Signature`, a chart for repeated `Observation.valueQuantity`).
 6. **Resource-specific workflow** — put business logic (e.g. Task state transitions, Goal progress calculations) in your own hooks alongside the library's generic hooks.
 
+
+### Goal/Task deployable starter
+
+If you are shipping a `Goal` + `Task` workflow, this library is already deployable for a read/write baseline:
+
+- Search and list synthetic patients with `useSearch` + `<ResourceSearch>`.
+- Render goal details with `<ResourceView>` (including narrative + coded fields).
+- Create/update goals and tasks with `<ResourceEditor>` plus `useCreateResource` / `useUpdateResource`.
+- Persist state transitions through your FHIR server (`Task.status`, `Task.intent`, `Goal.lifecycleStatus`) using the generic mutation hooks.
+- Keep your app-specific business rules in local hooks/components while the library handles spec-driven rendering and form plumbing.
+
+For production deployment, pair this with your own auth/session layer, environment-specific FHIR base URL configuration, and server-side policy checks.
+
 ## Roadmap
 
 Honest list of what's missing if you're building a real app today.

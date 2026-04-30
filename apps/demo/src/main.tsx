@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { FetchFhirClient, FhirClientProvider } from "@fhir-place/react-fhir";
+import { FetchFhirClient, FhirClientProvider, FhirError } from "@fhir-place/react-fhir";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, HashRouter } from "react-router-dom";
@@ -7,9 +7,25 @@ import { App } from "./App.js";
 import { FHIR_BASE_URL, ROUTER_BASENAME, USE_HASH_ROUTER, USE_MOCK } from "./config.js";
 import "./index.css";
 
+// 4xx responses (404, 410, 422…) aren't transient — retrying them just pads
+// perceived load time before the user sees the real error. Keep a single
+// retry for 408 (timeout) and 5xx so flaky network/HAPI hiccups self-heal.
+const shouldRetry = (failureCount: number, error: unknown): boolean => {
+  if (failureCount >= 1) return false;
+  if (
+    error instanceof FhirError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408
+  ) {
+    return false;
+  }
+  return true;
+};
+
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, retry: 1 },
+    queries: { staleTime: 30_000, retry: shouldRetry },
   },
 });
 

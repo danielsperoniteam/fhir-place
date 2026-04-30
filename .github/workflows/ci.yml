@@ -17,6 +17,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check:readme-goal-task
       # Build the library first so the demo app can resolve its .d.ts files
       # during typecheck (demo depends on @fhir-place/react-fhir via workspace).
       - run: pnpm --filter @fhir-place/react-fhir build
@@ -38,3 +39,30 @@ jobs:
       - run: pnpm --filter @fhir-place/workbench typecheck
       - run: pnpm --filter @fhir-place/workbench test:run
       - run: pnpm --filter @fhir-place/workbench build
+
+  e2e:
+    runs-on: ubuntu-latest
+    # PR-time end-to-end coverage against the demo (MSW-backed). Catches UI
+    # regressions like the patient-detail page stalling on Loading… that
+    # the unit suites can't see. Live HAPI is monitored separately by
+    # `live-site-monitor.yml` once a deploy is out.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fhir-place/react-fhir build
+      - name: Install Playwright browsers
+        run: pnpm --filter @fhir-place/demo exec playwright install --with-deps chromium
+      - name: Run Playwright (chromium project)
+        run: pnpm --filter @fhir-place/demo exec playwright test --project=chromium
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/demo/playwright-report
+          if-no-files-found: ignore

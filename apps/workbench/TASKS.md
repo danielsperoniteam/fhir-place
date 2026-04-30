@@ -46,35 +46,6 @@ Phase A is complete only when:
 
 # Backlog
 
-## PR 7 — Audit Logging
-
-**OpenSpec change:** `add-audit-logging`
-
-### Goal
-Persist every run, tool call, evidence claim, and final answer.
-
-### Tasks
-- [ ] Add `agent_session` table/model.
-- [ ] Add `tool_call` table/model.
-- [ ] Add `evidence_claim` table/model.
-- [ ] Persist prompt, prompt version, model, provider, patient, and connection.
-- [ ] Persist tool input/output/status/timing.
-- [ ] Persist FHIR request metadata and returned resource IDs.
-- [ ] Persist final structured `AgentAnswer`.
-- [ ] Add session detail view.
-- [ ] Add tool-call timeline.
-- [ ] Add JSON export.
-- [ ] Add `docs/audit-model.md` showing mapping to `AuditEvent` /
-      `Provenance` concepts.
-
-### Acceptance Criteria
-- [ ] Every agent run is persisted.
-- [ ] Every tool call is inspectable.
-- [ ] Every final answer can be replay-inspected from stored data.
-- [ ] Audit model docs explain FHIR-adjacent mapping.
-
----
-
 ## PR 8 — Basic Eval Harness
 
 **OpenSpec change:** `add-basic-evals`
@@ -233,3 +204,10 @@ These are intentionally excluded until after Phase A:
   patient id; resource-text-as-data wrapping; `finalize` tool whose input
   mirrors the AgentAnswer schema; schema-retry + partial-answer fallback;
   `AgentPanel` on `SessionPage`. OpenSpec: `add-patient-summary-agent`.
+- **PR 7 — Audit Logging** (#76). `agent_answer`, `tool_call`,
+  `evidence_claim` tables; DB-backed audit store; per-run scoped logger;
+  `GET /api/sessions/:sid/answers`, `/answers/:aid`, `/audit`
+  (downloadable JSON export); `SessionPage` "Past runs" panel + tool-call
+  timeline + "Export audit JSON" link; debug-runner persistence with
+  `answer_id IS NULL`; `docs/audit-model.md` mapping to `AuditEvent` /
+  `Provenance`. OpenSpec: `add-audit-logging`.

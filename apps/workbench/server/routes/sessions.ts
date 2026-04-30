@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { ConnectionStore } from "../services/connection-store.js";
 import type { SessionStore } from "../services/session-store.js";
+import type { AuditStore } from "../services/audit-store.js";
 import type { ToolRegistry } from "../agent/registry.js";
-import type { ToolLogger } from "../agent/tool-log.js";
+import { teeLogger, type ToolLogger } from "../agent/tool-log.js";
 import { ConnectionId } from "../schemas.js";
 
 const CreateSessionInput = z.object({
@@ -18,6 +19,7 @@ const CreateSessionInput = z.object({
 interface Deps {
   sessions: SessionStore;
   connections: ConnectionStore;
+  audit: AuditStore;
   registry: ToolRegistry;
   fetchFn?: typeof fetch;
   logger?: ToolLogger;
@@ -76,13 +78,24 @@ export function sessionsRoutes(deps: Deps) {
 
     const rawInput = (await safeJson(c)) ?? {};
 
+    // The debug runner persists its calls to the audit log too, with
+    // `answer_id = NULL` so they're identifiable as non-agent traffic.
+    const dbLogger: ToolLogger = {
+      record(entry) {
+        deps.audit.recordToolCall(entry);
+      },
+    };
+    const logger: ToolLogger = deps.logger
+      ? teeLogger(deps.logger, dbLogger)
+      : dbLogger;
+
     const envelope = await deps.registry.run({
       toolName,
       rawInput,
       session,
       connection: conn,
       fetchFn: deps.fetchFn,
-      logger: deps.logger,
+      logger,
     });
 
     // The envelope is itself the body; HTTP status mirrors error reason so

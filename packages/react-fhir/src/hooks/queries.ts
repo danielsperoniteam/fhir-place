@@ -116,17 +116,37 @@ export function useInfiniteSearch<T extends Resource = Resource>(
 
 export type StructureDefinitionInput = string | { type: string; profile?: string | null };
 
+const FHIR_CORE_SD_BASE = "http://hl7.org/fhir/StructureDefinition/";
+
+function parseStructureDefinitionInput(
+  input: StructureDefinitionInput,
+): { type: string; profile: string | null | undefined } {
+  if (typeof input !== "string") {
+    return { type: input.type || "Resource", profile: input.profile };
+  }
+  if (!input.includes("://")) {
+    return { type: input, profile: undefined };
+  }
+  // Canonical URL. If it points at a core R4 StructureDefinition, treat it as
+  // a base type so the resolver's bundled-core fallback stays reachable.
+  if (input.startsWith(FHIR_CORE_SD_BASE)) {
+    const tail = input.slice(FHIR_CORE_SD_BASE.length);
+    if (tail && !tail.includes("/")) {
+      return { type: tail, profile: undefined };
+    }
+  }
+  return { type: "Resource", profile: input };
+}
+
 export function useStructureDefinition(
   input: StructureDefinitionInput,
   options?: ReadQueryOpts<StructureDefinition>,
 ) {
   const client = useFhirClient();
-  const type = typeof input === "string" && input.includes("http") ? "" : (typeof input === "string" ? input : input.type);
-  const profile = typeof input === "string" && input.includes("http") ? input : (typeof input === "string" ? undefined : input.profile);
-  const normalizedType = type || "Resource";
+  const { type, profile } = parseStructureDefinitionInput(input);
   return useQuery({
-    queryKey: fhirQueryKeys.structure(client.baseUrl, normalizedType, profile),
-    queryFn: ({ signal }) => resolveStructureDefinition(client, normalizedType, { signal, profile }),
+    queryKey: fhirQueryKeys.structure(client.baseUrl, type, profile),
+    queryFn: ({ signal }) => resolveStructureDefinition(client, type, { signal, profile }),
     staleTime: 60 * 60_000,
     ...options,
   });
