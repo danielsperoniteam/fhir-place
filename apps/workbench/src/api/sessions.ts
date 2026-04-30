@@ -105,3 +105,53 @@ export async function runTool(
   );
   return (await res.json()) as ToolEnvelope;
 }
+
+export interface AgentStatus {
+  ready: boolean;
+  provider: string | null;
+  model: string | null;
+  promptVersion: string;
+  suggestedPrompts: ReadonlyArray<{ id: string; text: string }>;
+  hint: string | null;
+}
+
+export async function getAgentStatus(): Promise<AgentStatus> {
+  const res = await fetch("/api/agent/status");
+  if (!res.ok) {
+    throw new Error(`agent status: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as AgentStatus;
+}
+
+export interface RunAnswerResponse {
+  answer: unknown; // validated by parseAgentAnswer on the client
+  turns: number;
+  fallback: boolean;
+  finalIssues?: unknown;
+}
+
+export async function runPatientSummary(
+  sessionId: string,
+  options: { prompt?: string } = {},
+): Promise<RunAnswerResponse> {
+  const res = await fetch(
+    `/api/sessions/${encodeURIComponent(sessionId)}/answer`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options),
+    },
+  );
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // ignore
+  }
+  if (!res.ok) {
+    const detail =
+      body && typeof body === "object" ? JSON.stringify(body) : res.statusText;
+    throw new Error(`${res.status}: ${detail}`);
+  }
+  return body as RunAnswerResponse;
+}

@@ -2,12 +2,16 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  getAgentStatus,
   getSession,
   listTools,
+  runPatientSummary,
   runTool,
   type ToolEnvelope,
   type ToolMeta,
 } from "../api/sessions.js";
+import { AgentAnswerRenderer } from "../agent/AgentAnswerRenderer.js";
+import { parseAgentAnswer } from "../agent/answer-schema.js";
 
 export function SessionPage() {
   const { sid } = useParams<{ sid: string }>();
@@ -28,6 +32,19 @@ export function SessionPage() {
     () => tools.data?.find((t) => t.name === selected),
     [tools.data, selected],
   );
+
+  const agentStatus = useQuery({
+    queryKey: ["agent-status"],
+    queryFn: getAgentStatus,
+    staleTime: 30_000,
+  });
+
+  const summaryPrompt =
+    agentStatus.data?.suggestedPrompts[0]?.text ?? "Summarise this patient.";
+
+  const runAgent = useMutation({
+    mutationFn: () => runPatientSummary(sid!, { prompt: summaryPrompt }),
+  });
 
   const run = useMutation({
     mutationFn: async () => {
@@ -98,9 +115,23 @@ export function SessionPage() {
         <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
           unauthorized_patient
         </code>
-        . PR 6 will run an LLM against this same surface; this page is a
-        humans-only debug runner.
+        . The patient-summary agent (below) runs an LLM against this same
+        surface — never against the FHIR server directly.
       </p>
+
+      <AgentPanel
+        ready={agentStatus.data?.ready ?? false}
+        provider={agentStatus.data?.provider ?? null}
+        model={agentStatus.data?.model ?? null}
+        promptVersion={agentStatus.data?.promptVersion ?? null}
+        suggestedPrompt={summaryPrompt}
+        hint={agentStatus.data?.hint ?? null}
+        isRunning={runAgent.isPending}
+        onRun={() => runAgent.mutate()}
+        result={runAgent.data}
+        error={runAgent.error}
+      />
+
 
       <section className="rounded-md border border-slate-200 bg-white p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
@@ -185,6 +216,105 @@ export function SessionPage() {
             </article>
           ))}
         </section>
+      )}
+    </section>
+  );
+}
+
+interface AgentPanelProps {
+  ready: boolean;
+  provider: string | null;
+  model: string | null;
+  promptVersion: string | null;
+  suggestedPrompt: string;
+  hint: string | null;
+  isRunning: boolean;
+  onRun: () => void;
+  result?: { answer: unknown; turns: number; fallback: boolean; finalIssues?: unknown };
+  error: unknown;
+}
+
+function AgentPanel(props: AgentPanelProps) {
+  const validation = props.result
+    ? parseAgentAnswer(props.result.answer)
+    : null;
+
+  return (
+    <section
+      data-testid="agent-panel"
+      className="space-y-3 rounded-md border border-slate-200 bg-white p-4"
+    >
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">
+            Patient-summary agent
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {props.ready ? (
+              <>
+                Ready · provider <code>{props.provider}</code> · model{" "}
+                <code>{props.model}</code> · prompt{" "}
+                <code>{props.promptVersion}</code>
+              </>
+            ) : (
+              "Unavailable — set ANTHROPIC_API_KEY on the server."
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={props.onRun}
+          disabled={!props.ready || props.isRunning}
+          data-testid="run-agent"
+          className="shrink-0 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+        >
+          {props.isRunning ? "Running…" : `Run "${props.suggestedPrompt}"`}
+        </button>
+      </header>
+
+      {props.hint && !props.ready && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+          {props.hint}
+        </p>
+      )}
+
+      {props.error != null && (
+        <p className="rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">
+          {(props.error as Error).message}
+        </p>
+      )}
+
+      {props.result && (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">
+            Run completed in {props.result.turns} turn
+            {props.result.turns === 1 ? "" : "s"}
+            {props.result.fallback ? (
+              <>
+                ·{" "}
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-900">
+                  partial answer
+                </span>
+              </>
+            ) : (
+              <>
+                ·{" "}
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900">
+                  ok
+                </span>
+              </>
+            )}
+          </p>
+          {validation?.ok ? (
+            <AgentAnswerRenderer answer={validation.answer} />
+          ) : (
+            <p className="rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">
+              The server returned an answer the schema rejected. This should
+              not happen at the route layer; report the request id from the
+              server log.
+            </p>
+          )}
+        </div>
       )}
     </section>
   );

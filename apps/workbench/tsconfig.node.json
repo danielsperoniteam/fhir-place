@@ -7,5 +7,15 @@
     "module": "ESNext",
     "moduleResolution": "Bundler"
   },
-  "include": ["db", "scripts", "server", "drizzle.config.ts", "vite.config.ts", "vitest.config.ts"]
+  "include": [
+    "db",
+    "scripts",
+    "server",
+    "drizzle.config.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "src/agent/answer-schema.ts",
+    "src/agent/answer-extractors.ts",
+    "src/agent/fixtures.ts"
+  ]
 }
