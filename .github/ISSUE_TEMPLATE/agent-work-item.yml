@@ -1,0 +1,65 @@
+name: Agent work item
+description: Scoped implementation packet for Codex/Claude
+title: "[work] "
+labels:
+  - fhir-workbench-phase-a
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is broken or missing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: user_impact
+    attributes:
+      label: User impact
+      description: Why this matters to users/reviewers.
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired_behavior
+    attributes:
+      label: Desired behavior
+      description: What should happen after this change?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Use checkboxes.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant_files
+    attributes:
+      label: Relevant files
+      description: List likely files/areas.
+      value: |
+        - `apps/workbench/...`
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Explicit non-goals and boundaries.
+
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      value: |
+        - [ ] Run:
+        - [ ] Manual verification:
+    validations:
+      required: true
