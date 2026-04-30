@@ -115,6 +115,17 @@ export function ResourceDetailPage() {
         />
       )}
 
+      {data && (
+        <details className="rounded border border-slate-200 bg-white" data-testid="resource-json">
+          <summary className="cursor-pointer px-4 py-2 text-sm font-medium text-slate-700">
+            View full JSON
+          </summary>
+          <pre className="max-h-[32rem] overflow-auto border-t border-slate-200 bg-slate-50 p-4 text-xs text-slate-800">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </details>
+      )}
+
       {data && resourceType === "Patient" && (
         <section
           className="space-y-6 pt-2"
