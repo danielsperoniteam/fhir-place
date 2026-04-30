@@ -80,10 +80,16 @@ export function ResourceIndexPage() {
     isFetchingNextPage,
   } = useInfiniteSearch<Resource>(resourceType, params);
 
-  const resources =
-    data?.pages.flatMap(
-      (b) => b.entry?.flatMap((e) => (e.resource ? [e.resource] : [])) ?? [],
-    ) ?? [];
+  // Memoised so it has a stable reference between renders — downstream
+  // useMemos/useEffects key off `resources` and a fresh array each render
+  // would feed a re-render loop through the column-picker effect.
+  const resources = useMemo(
+    () =>
+      data?.pages.flatMap(
+        (b) => b.entry?.flatMap((e) => (e.resource ? [e.resource] : [])) ?? [],
+      ) ?? [],
+    [data?.pages],
+  );
   const totalAdvertised = data?.pages[0]?.total;
 
   const columnConfig = PATIENT_COMPARTMENT.find(
@@ -120,8 +126,19 @@ export function ResourceIndexPage() {
     setColumns((current) => {
       const available = new Set(allColumnOptions.map((option) => option.path));
       const kept = current.filter((path) => available.has(path));
-      if (kept.length > 0) return kept;
-      return defaultColumns.filter((path) => available.has(path));
+      const next = kept.length > 0
+        ? kept
+        : defaultColumns.filter((path) => available.has(path));
+      // Bail out when nothing changed — otherwise React schedules a re-render
+      // every effect tick and we feed the next allColumnOptions memo into the
+      // same effect again.
+      if (
+        next.length === current.length &&
+        next.every((path, i) => path === current[i])
+      ) {
+        return current;
+      }
+      return next;
     });
   }, [allColumnOptions, defaultColumns]);
 
