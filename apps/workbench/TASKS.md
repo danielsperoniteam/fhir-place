@@ -44,147 +44,6 @@ Phase A is complete only when:
 
 # Backlog
 
-## PR 1 — App Skeleton
-
-**OpenSpec change:** `add-workbench-app`
-
-### Goal
-Create the repository foundation and local development path.
-
-### Tasks
-- [ ] Create base repository structure (workbench app under `apps/workbench`).
-- [ ] Add `README.md` with project positioning, synthetic-only warning, local
-      setup, and non-clinical disclaimer.
-- [ ] Add `AGENTS.md` with coding-agent rules.
-- [ ] Add `docs/architecture.md`, `docs/safety.md`, `docs/limitations.md`
-      placeholders.
-- [ ] Add `openspec/changes/add-workbench-app/` with proposal, requirements,
-      tasks, and acceptance criteria.
-- [ ] Add app skeleton for chosen stack (reuse pnpm monorepo + Vite + React).
-- [ ] Add database setup (SQLite via Prisma/Drizzle for local-first).
-- [ ] Add basic CI checks (lint, typecheck, test).
-- [ ] Add placeholder synthetic-only banner in UI shell.
-
-### Acceptance Criteria
-- [ ] App boots locally.
-- [ ] README clearly says synthetic-only and not clinical.
-- [ ] CI runs basic checks.
-- [ ] OpenSpec change exists and matches implementation.
-
----
-
-## PR 2 — FHIR DataConnection
-
-**OpenSpec change:** `add-fhir-data-connection`
-
-### Goal
-Add the FHIR connection abstraction and CapabilityStatement support.
-
-### Tasks
-- [ ] Add `data_connection` model/table.
-- [ ] Support Phase A connection type: `fhir_clinical` only.
-- [ ] Support Phase A auth types: `none` and `bearer` only.
-- [ ] Add backend FHIR client wrapper (reuse `@fhir-place/react-fhir`
-      `FetchFhirClient` where possible).
-- [ ] Add CapabilityStatement fetch and persistence.
-- [ ] Add connection-test endpoint/service.
-- [ ] Add simple connection setup UI.
-- [ ] Add docs in `docs/data-connections.md`.
-
-### Acceptance Criteria
-- [ ] User can configure a local/demo FHIR server.
-- [ ] System can fetch and store CapabilityStatement.
-- [ ] Connection status is visible in UI.
-- [ ] Unsupported connection/auth types are rejected or hidden.
-
----
-
-## PR 3 — Patient Search and Resource Viewer
-
-**OpenSpec change:** `add-patient-search-and-viewer`
-
-### Goal
-Let a user search, select, and inspect a synthetic patient.
-
-### Tasks
-- [ ] Add patient search by name.
-- [ ] Add patient search by identifier.
-- [ ] Add patient search by birthdate.
-- [ ] Add patient search by gender.
-- [ ] Add selected-patient context.
-- [ ] Add demographics panel.
-- [ ] Add core resource list for selected patient.
-- [ ] Add raw JSON resource viewer.
-- [ ] Preserve synthetic-only banner across screens.
-
-### Acceptance Criteria
-- [ ] User can select a synthetic patient.
-- [ ] User can view demographics.
-- [ ] User can inspect core resources as JSON.
-- [ ] UI does not imply clinical use.
-
----
-
-## PR 4 — Typed FHIR Tool Registry
-
-**OpenSpec change:** `add-agent-tool-registry`
-
-### Goal
-Create typed, patient-scoped, deny-by-default FHIR tools callable without the LLM.
-
-### Phase A Tools
-- `getPatient({ patientId })`
-- `searchConditionsForPatient({ patientId, clinicalStatus?, limit })`
-- `searchMedicationRequestsForPatient({ patientId, status?, limit })`
-- `searchAllergyIntolerancesForPatient({ patientId, limit })`
-- `searchEncountersForPatient({ patientId, dateRange?, limit })`
-- `searchObservationsForPatient({ patientId, category?, dateRange?, limit })`
-
-### Tasks
-- [ ] Add tool registry.
-- [ ] Add tool metadata: name, version, schema, scope, resource allowlist,
-      result limits, timeout.
-- [ ] Add normalized tool execution envelope.
-- [ ] Add server-enforced patient scope validation.
-- [ ] Add deny-by-default behavior for missing/unauthorized patient IDs.
-- [ ] Add backend tests for each tool.
-- [ ] Add first tool-call logging hook, even if persistence arrives later.
-- [ ] Document tools in `docs/fhir-tools.md`.
-
-### Acceptance Criteria
-- [ ] Tools are callable from backend tests without an LLM.
-- [ ] Tools reject missing patient IDs.
-- [ ] Tools reject unauthorized patient IDs.
-- [ ] Tools return normalized envelopes.
-- [ ] No arbitrary FHIR query generation exists.
-
----
-
-## PR 5 — Structured Answer Schema
-
-**OpenSpec change:** `add-evidence-backed-answer-schema`
-
-### Goal
-Make `AgentAnswer` the source of truth for agent outputs.
-
-### Tasks
-- [ ] Define `AgentAnswer` schema (Zod).
-- [ ] Define `EvidenceBackedClaim` schema.
-- [ ] Define `ToolCallSummary` schema.
-- [ ] Add schema validation before render.
-- [ ] Add answer renderer from structured schema.
-- [ ] Add evidence extraction helpers.
-- [ ] Enforce that supported claims require evidence references.
-- [ ] Add tests for valid and invalid answers.
-
-### Acceptance Criteria
-- [ ] Invalid answers fail validation.
-- [ ] UI renders from structured answer, not raw Markdown.
-- [ ] Supported claims require resource references.
-- [ ] Missing-data and cannot-determine sections are first-class fields.
-
----
-
 ## PR 6 — Patient Summary Agent
 
 **OpenSpec change:** `add-patient-summary-agent`
@@ -355,4 +214,18 @@ These are intentionally excluded until after Phase A:
 
 # Done
 
-Move completed cards here with a short implementation summary and links to PRs.
+- **PR 1 — App Skeleton** (#70). Workbench app under `apps/workbench/`,
+  Vite + React + Tailwind UI shell with synthetic-only banner, SQLite +
+  Drizzle scaffold, CI checks. OpenSpec: `add-workbench-app`.
+- **PR 2 — FHIR DataConnection** (#71). `data_connection` table, Hono API
+  for connection CRUD + CapabilityStatement probe, connection setup UI.
+  OpenSpec: `add-fhir-data-connection`.
+- **PR 3 — Patient Search and Resource Viewer** (#72). Patient search by
+  name/identifier/birthdate/gender, selected-patient context, demographics
+  panel, raw resource viewer. OpenSpec: `add-patient-search-and-viewer`.
+- **PR 4 — Typed FHIR Tool Registry** (#73). Six typed patient-scoped tools
+  with deny-by-default scope validation, normalized envelope, tool-call
+  logging hook, debug session runner UI. OpenSpec: `add-agent-tool-registry`.
+- **PR 5 — Structured Answer Schema** (#74). `AgentAnswer`,
+  `EvidenceBackedClaim`, `ToolCallSummary` Zod schemas; structured renderer;
+  validation before render. OpenSpec: `add-evidence-backed-answer-schema`.

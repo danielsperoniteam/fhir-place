@@ -33,7 +33,7 @@ If a task seems to require one of these, stop and ask before writing code.
 
 ## How to pick up work
 
-1. The Phase A backlog is in [`TASKS.md`](TASKS.md). PR cards land in order.
+1. The Phase A backlog is in [`apps/workbench/TASKS.md`](apps/workbench/TASKS.md). PR cards land in order.
 2. Each PR card has a tracking issue on GitHub under the
    `fhir-workbench-phase-a` label.
 3. Implement only the first card in the `Backlog` section unless explicitly

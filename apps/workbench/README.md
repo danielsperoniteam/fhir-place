@@ -20,8 +20,8 @@ This package currently ships:
   delete.
 
 The patient search, typed FHIR tools, and patient-summary agent land in PRs
-3–6. See the root [`TASKS.md`](../../TASKS.md) and
-[`docs/data-connections.md`](../../docs/data-connections.md) for details.
+3–6. See [`TASKS.md`](TASKS.md) and
+[`docs/data-connections.md`](docs/data-connections.md) for details.
 
 ## Local setup
 
@@ -102,4 +102,4 @@ This project does **not** implement, and will not implement during Phase A:
 - Arbitrary FHIR query generation by the agent
 - Arbitrary code execution by the agent
 
-See [`docs/limitations.md`](../../docs/limitations.md).
+See [`docs/limitations.md`](docs/limitations.md).

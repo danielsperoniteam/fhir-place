@@ -1,5 +1,19 @@
 # fhir-place
 
+This repo holds two related projects:
+
+- **`@fhir-place/react-fhir`** (this README) — a spec-driven React component
+  library for FHIR. Published on npm; consumed by the demo and the workbench.
+- **`@fhir-place/workbench`** — a research workbench for evidence-backed agent
+  answers over **synthetic** FHIR data. Phase A only, not for clinical use.
+  See [`apps/workbench/README.md`](apps/workbench/README.md) and the Phase A
+  board in [`apps/workbench/TASKS.md`](apps/workbench/TASKS.md). Coding-agent
+  rules: [`AGENTS.md`](AGENTS.md).
+
+The rest of this README is about the library.
+
+---
+
 A React component library for building FHIR resource viewers and editors driven by the FHIR specification itself (`StructureDefinition`, `SearchParameter`, `CapabilityStatement`). Minimal resource-specific code — everything derives from the spec's own metadata, so the library works natively against any FHIR REST API.
 
 **Live demo:** <https://samsuffolksperoni.github.io/fhir-place/> — hits the **public HAPI R4 server**. Patient data there is shared and reset periodically; creates / edits you make are visible to everyone (and won't last forever). Local `pnpm dev` uses an in-browser MSW mock by default so you can work offline.
@@ -17,7 +31,8 @@ Early alpha. R4 first. MIT licensed. Safe to depend on for prototypes and side p
 | Path | What it is |
 | --- | --- |
 | `packages/react-fhir` | the component library (client, hooks, generic renderers, spec-driven view/edit/search) |
-| `apps/demo` | a development/demo app — ships with MSW in-browser mock FHIR so it runs offline |
+| `apps/demo` | a development/demo app for the library — ships with MSW in-browser mock FHIR so it runs offline |
+| `apps/workbench` | research workbench for evidence-backed agent answers over synthetic FHIR data (separate project — see [`apps/workbench/README.md`](apps/workbench/README.md)) |
 
 ## Install (in your app)
 
