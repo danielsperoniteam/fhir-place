@@ -121,6 +121,25 @@ describe("resolveStructureDefinition", () => {
     expect(result.snapshot?.element.some((e) => e.path === "Observation.status")).toBe(true);
   });
 
+
+
+  it("resolves profiled canonicals via url search", async () => {
+    const profile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient";
+    server.use(
+      http.get(`${BASE}/StructureDefinition/us-core-patient`, () => new HttpResponse(null, { status: 404 })),
+      http.get(`${BASE}/StructureDefinition`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get("url")).toBe(profile);
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: [{ resource: { ...sd("Patient", "us-core-patient"), url: profile } }],
+        });
+      }),
+    );
+    const result = await resolveStructureDefinition(mkClient(), "Patient", { profile });
+    expect(result.url).toBe(profile);
+  });
+
   it("throws a friendly error when every fallback fails", async () => {
     server.use(
       http.get(`${BASE}/StructureDefinition/ServiceRequest`, () =>

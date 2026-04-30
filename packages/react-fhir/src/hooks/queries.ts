@@ -28,8 +28,8 @@ export const fhirQueryKeys = {
     [...fhirQueryKeys.all(baseUrl), type, id] as const,
   search: (baseUrl: string, type: string, params?: SearchParams) =>
     [...fhirQueryKeys.all(baseUrl), type, "search", params ?? {}] as const,
-  structure: (baseUrl: string, type: string) =>
-    [...fhirQueryKeys.all(baseUrl), "StructureDefinition", type] as const,
+  structure: (baseUrl: string, type: string, profile?: string | null) =>
+    [...fhirQueryKeys.all(baseUrl), "StructureDefinition", type, profile ?? ""] as const,
   valueSet: (baseUrl: string, canonical: string) =>
     [...fhirQueryKeys.all(baseUrl), "ValueSet", canonical] as const,
   reference: (baseUrl: string, ref: string) =>
@@ -114,14 +114,19 @@ export function useInfiniteSearch<T extends Resource = Resource>(
   });
 }
 
+export type StructureDefinitionInput = string | { type: string; profile?: string | null };
+
 export function useStructureDefinition(
-  type: string,
+  input: StructureDefinitionInput,
   options?: ReadQueryOpts<StructureDefinition>,
 ) {
   const client = useFhirClient();
+  const type = typeof input === "string" && input.includes("http") ? "" : (typeof input === "string" ? input : input.type);
+  const profile = typeof input === "string" && input.includes("http") ? input : (typeof input === "string" ? undefined : input.profile);
+  const normalizedType = type || "Resource";
   return useQuery({
-    queryKey: fhirQueryKeys.structure(client.baseUrl, type),
-    queryFn: ({ signal }) => resolveStructureDefinition(client, type, { signal }),
+    queryKey: fhirQueryKeys.structure(client.baseUrl, normalizedType, profile),
+    queryFn: ({ signal }) => resolveStructureDefinition(client, normalizedType, { signal, profile }),
     staleTime: 60 * 60_000,
     ...options,
   });
