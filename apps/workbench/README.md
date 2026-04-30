@@ -76,6 +76,38 @@ The SQLite file defaults to `apps/workbench/workbench.sqlite`; override with
 | `db:setup` | Open `workbench.sqlite` and apply migrations under `db/migrations/` |
 | `db:generate` | Re-generate Drizzle migrations from `db/schema.ts` |
 
+## Iterating quickly
+
+Most iteration should stay off CI. The local loop is already fast:
+
+- **Two terminals.** `server` (tsx watches and restarts on save) plus `dev`
+  (Vite HMR). Vite proxies `/api` so edits on either side land sub-second.
+- **Vitest in watch mode.** `pnpm --filter @fhir-place/workbench test` (no
+  `:run`) re-runs on save.
+- **Throwaway DB per experiment.** Point `WORKBENCH_DB_URL` at a tmp file,
+  then `db:setup`, so you can blow away state without fighting migrations:
+  ```bash
+  WORKBENCH_DB_URL=/tmp/wb-$(date +%s).sqlite pnpm --filter @fhir-place/workbench db:setup
+  ```
+- **Don't burn Anthropic calls while iterating UI.** Drive
+  `AgentAnswerRenderer` from `src/agent/fixtures.ts` on
+  `AnswerPreviewPage`. Only hit the live agent when validating the loop
+  itself.
+- **For agent-loop tweaks**, write a vitest with the Anthropic SDK stubbed
+  to return canned `tool_use` blocks ending in `finalize`. Faster than
+  clicking through the UI.
+- **Iterating the preview workflow.** Don't push-and-wait. Trigger
+  `workbench-preview.yml` manually via `workflow_dispatch` (Actions tab →
+  "Run workflow" on the branch), or run it locally with
+  [`act`](https://github.com/nektos/act):
+  ```bash
+  act -W .github/workflows/workbench-preview.yml workflow_dispatch
+  ```
+- **Pre-push gate.** `pnpm --filter @fhir-place/workbench typecheck &&
+  pnpm --filter @fhir-place/workbench test:run && pnpm --filter
+  @fhir-place/workbench build` mirrors `ci.yml` and catches the 95% case
+  before the round-trip.
+
 ## Layout
 
 ```
