@@ -119,7 +119,26 @@ export async function runCase(
   let model = "scripted";
   if (options.mode === "live") {
     if (!options.liveClient) {
-      throw new Error("live mode requires options.liveClient");
+      // `runCase` is contractually never-throws (see `runEvalSuite`'s
+      // sequential per-case loop). A misconfigured live invocation
+      // surfaces as a structured failure on this case rather than
+      // aborting the whole suite.
+      return {
+        id: c.id,
+        description: c.description,
+        passed: false,
+        durationMs: Date.now() - t0,
+        metrics: emptyMetrics(),
+        assertions: [
+          {
+            kind: "schemaValid",
+            passed: false,
+            message:
+              "live mode requires options.liveClient — pass a configured Anthropic client",
+          },
+        ],
+        error: "live mode requires options.liveClient",
+      };
     }
     messagesCreate = options.liveClient.messagesCreate;
     provider = options.liveClient.provider;

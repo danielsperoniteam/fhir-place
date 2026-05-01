@@ -206,6 +206,28 @@ describe("eval harness — assertion scoring", () => {
   });
 });
 
+describe("eval harness — never-throws contract", () => {
+  it("runCase returns a structured CaseResult when mode=live but liveClient is missing (does not throw)", async () => {
+    const result = await runCase(KNOWN_CONDITION, { mode: "live" });
+    expect(result.passed).toBe(false);
+    expect(result.error).toMatch(/liveClient/);
+    expect(result.metrics.schemaValid).toBe(false);
+    expect(result.assertions[0]?.message).toMatch(/liveClient/);
+  });
+
+  it("runEvalSuite continues across cases when a live invocation is misconfigured", async () => {
+    const out = await runEvalSuite([KNOWN_CONDITION, NO_ALLERGY_DATA], {
+      mode: "live",
+    });
+    expect(out.cases).toHaveLength(2);
+    expect(out.passed).toBe(0);
+    expect(out.failed).toBe(2);
+    for (const c of out.cases) {
+      expect(c.error).toMatch(/liveClient/);
+    }
+  });
+});
+
 describe("eval harness — suite-level output", () => {
   it("runEvalSuite returns the right schemaVersion + counts", async () => {
     const out = await runEvalSuite(PHASE_A_CASES);
