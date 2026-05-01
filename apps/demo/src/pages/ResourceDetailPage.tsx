@@ -1,15 +1,20 @@
 import {
+  ColumnPicker,
   FhirError,
   ResourceView,
   useDeleteResource,
   useResource,
+  useStructureDefinition,
 } from "@fhir-place/react-fhir";
 import type { Reference, Resource } from "fhir/r4";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CompartmentSection } from "../components/CompartmentSection.js";
 import { PatientCompartmentLinks } from "../components/PatientCompartmentLinks.js";
 import { PATIENT_COMPARTMENT } from "../compartment.js";
+import { patientFieldOptions } from "../patientFields.js";
+
+const PATIENT_FIELDS_KEY = "fhir-place-demo-patient-detail-fields";
 
 export function ResourceDetailPage() {
   const { resourceType = "", id = "" } = useParams();
@@ -19,6 +24,14 @@ export function ResourceDetailPage() {
     error instanceof FhirError && (error.status === 404 || error.status === 410);
   const del = useDeleteResource();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const isPatient = resourceType === "Patient";
+  const patientSdQuery = useStructureDefinition("Patient", { enabled: isPatient });
+  const patientFields = useMemo(
+    () => (patientSdQuery.data ? patientFieldOptions(patientSdQuery.data) : []),
+    [patientSdQuery.data],
+  );
+  const [visibleFields, setVisibleFields] = useState<string[] | null>(null);
 
   const onReferenceClick = (ref: Reference) => {
     const r = ref.reference;
@@ -48,6 +61,14 @@ export function ResourceDetailPage() {
           ← All {resourceType.toLowerCase()}s
         </Link>
         <div className="flex gap-2">
+          {isPatient && patientFields.length > 0 && (
+            <ColumnPicker
+              options={patientFields}
+              onChange={setVisibleFields}
+              storageKey={PATIENT_FIELDS_KEY}
+              buttonLabel="Fields"
+            />
+          )}
           <Link
             to={`/${resourceType}/${id}/edit`}
             className="rounded border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
@@ -146,6 +167,7 @@ export function ResourceDetailPage() {
         <ResourceView
           resource={data}
           onReferenceClick={onReferenceClick}
+          visibleFields={isPatient && visibleFields ? visibleFields : undefined}
           className="rounded border border-slate-200 bg-white p-4 shadow-sm"
         />
       )}

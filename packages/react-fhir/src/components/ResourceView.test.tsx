@@ -78,6 +78,32 @@ describe("ResourceView", () => {
     expect(screen.getByText(/Ada Lovelace, born 1815/)).toBeInTheDocument();
   });
 
+  it("filters top-level elements when visibleFields is provided", () => {
+    wrap(
+      <ResourceView
+        resource={patient}
+        structureDefinition={PatientStructureDefinition}
+        visibleFields={["gender", "birthDate"]}
+      />,
+    );
+    expect(screen.getByText("female")).toBeInTheDocument();
+    expect(screen.getByText("1815-12-10")).toBeInTheDocument();
+    // `name` is not in visibleFields, so the rendered HumanName should be hidden.
+    expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
+  });
+
+  it("matches choice variants by their materialised JSON key", () => {
+    wrap(
+      <ResourceView
+        resource={patient}
+        structureDefinition={PatientStructureDefinition}
+        visibleFields={["deceasedDateTime"]}
+      />,
+    );
+    expect(screen.getByText(/1852/)).toBeInTheDocument();
+    expect(screen.queryByText("female")).not.toBeInTheDocument();
+  });
+
   it("hides narrative when hideNarrative is true", () => {
     wrap(
       <ResourceView

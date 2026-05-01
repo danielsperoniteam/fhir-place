@@ -29,6 +29,12 @@ export interface ResourceViewProps {
   hideNarrative?: boolean;
   /** Called when a Reference is clicked. When omitted, references render as plain text. */
   onReferenceClick?: (ref: Reference) => void;
+  /**
+   * When provided, only top-level elements whose JSON key (e.g. `name`,
+   * `birthDate`, `deceasedDateTime`) is in this list are rendered. Omit to
+   * render every present element (default).
+   */
+  visibleFields?: string[];
   className?: string;
   profile?: string | null;
 }
@@ -39,8 +45,15 @@ export interface ResourceViewProps {
  * types. Zero resource-specific code.
  */
 export function ResourceView(props: ResourceViewProps) {
-  const { resource, structureDefinition, onReferenceClick, hideNarrative, className, profile } =
-    props;
+  const {
+    resource,
+    structureDefinition,
+    onReferenceClick,
+    hideNarrative,
+    className,
+    profile,
+    visibleFields,
+  } = props;
   const detectedProfile = profile === undefined ? resource.meta?.profile?.[0] : profile;
 
   const sdQuery = useStructureDefinition({ type: resource.resourceType, profile: detectedProfile }, {
@@ -69,7 +82,10 @@ export function ResourceView(props: ResourceViewProps) {
   }
 
   const renderers = { ...defaultTypeRenderers, ...props.renderers };
-  const walked = walkResource(sd, resource);
+  const walkedAll = walkResource(sd, resource);
+  const walked = visibleFields
+    ? walkedAll.filter((w) => visibleFields.includes(w.key))
+    : walkedAll;
   const narrative = (resource as DomainResource).text;
 
   return (

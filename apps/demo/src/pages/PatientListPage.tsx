@@ -29,6 +29,33 @@ const TABLE_COLUMNS: Array<{ path: string; label: string }> = [
   { path: "address.city", label: "City" },
   { path: "id", label: "ID" },
   { path: "__counts", label: "Resources" },
+  { path: "active", label: "Active" },
+  { path: "identifier", label: "Identifier" },
+  { path: "telecom", label: "Telecom" },
+  { path: "address", label: "Address" },
+  { path: "address.line", label: "Street" },
+  { path: "address.state", label: "State" },
+  { path: "address.postalCode", label: "Postal code" },
+  { path: "address.country", label: "Country" },
+  { path: "maritalStatus", label: "Marital status" },
+  { path: "deceasedBoolean", label: "Deceased" },
+  { path: "deceasedDateTime", label: "Deceased on" },
+  { path: "multipleBirthBoolean", label: "Multiple birth" },
+  { path: "multipleBirthInteger", label: "Birth order" },
+  { path: "communication", label: "Communication" },
+  { path: "generalPractitioner", label: "General practitioner" },
+  { path: "managingOrganization", label: "Managing organization" },
+  { path: "contact", label: "Contact" },
+  { path: "language", label: "Language" },
+];
+
+const DEFAULT_VISIBLE_COLUMNS = [
+  "name",
+  "gender",
+  "birthDate",
+  "address.city",
+  "id",
+  "__counts",
 ];
 
 const readLayout = (): Layout => {
@@ -51,8 +78,8 @@ const formInitialFromUrl = (urlParams: URLSearchParams): Record<string, string> 
 export function PatientListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [layout, setLayout] = useState<Layout>(readLayout);
-  const [columns, setColumns] = useState<string[]>(() =>
-    TABLE_COLUMNS.map((c) => c.path),
+  const [columns, setColumns] = useState<string[]>(
+    () => DEFAULT_VISIBLE_COLUMNS,
   );
   const navigate = useNavigate();
 
@@ -165,6 +192,7 @@ export function PatientListPage() {
         {layout === "table" && (
           <ColumnPicker
             options={TABLE_COLUMNS}
+            defaultSelected={DEFAULT_VISIBLE_COLUMNS}
             onChange={setColumns}
             storageKey={COLUMN_KEY}
           />
