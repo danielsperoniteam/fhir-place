@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { parseAgentAnswer, type AgentAnswer } from "../src/agent/answer-schema.js";
 import { unsupportedClaimCount } from "../src/agent/answer-extractors.js";
 
@@ -22,6 +23,21 @@ interface EvalResult {
   errors: string[];
 }
 
+interface EvalSummary {
+  ranAt: string;
+  total: number;
+  passed: number;
+  failed: number;
+  schemaFailures: number;
+  unsupportedClaims: number;
+  toolCalls: number;
+}
+
+interface EvalRun {
+  summary: EvalSummary;
+  results: EvalResult[];
+}
+
 const KNOWN_CONDITION_ANSWER: AgentAnswer = {
   schemaVersion: "1",
   sessionId: "sess-eval-known-condition",
@@ -39,7 +55,15 @@ const KNOWN_CONDITION_ANSWER: AgentAnswer = {
   ],
   missingData: [],
   cannotDetermine: [],
-  toolCalls: [{ tool: "searchConditionsForPatient", toolVersion: "1", ok: true, count: 1, durationMs: 10 }],
+  toolCalls: [
+    {
+      tool: "searchConditionsForPatient",
+      toolVersion: "1",
+      ok: true,
+      count: 1,
+      durationMs: 10,
+    },
+  ],
   createdAt: "2026-05-01T00:00:00.000Z",
 };
 
@@ -64,7 +88,15 @@ const NO_ALLERGY_DATA_ANSWER: AgentAnswer = {
     },
   ],
   cannotDetermine: [],
-  toolCalls: [{ tool: "searchAllergyIntolerancesForPatient", toolVersion: "1", ok: true, count: 0, durationMs: 9 }],
+  toolCalls: [
+    {
+      tool: "searchAllergyIntolerancesForPatient",
+      toolVersion: "1",
+      ok: true,
+      count: 0,
+      durationMs: 9,
+    },
+  ],
   createdAt: "2026-05-01T00:00:00.000Z",
 };
 
@@ -139,25 +171,35 @@ function evaluateCase(evalCase: EvalCase): EvalResult {
     pass,
     schemaValid: true,
     unsupportedClaims: unsupportedClaimCount(answer.claims),
-    toolCallCount: answer.toolCalls.reduce((total, item) => total + (item.count ?? 0), 0),
+    toolCallCount: answer.toolCalls.length,
     checks,
     errors: pass ? [] : ["One or more eval checks failed"],
   };
 }
 
-const results = CASES.map(evaluateCase);
-const summary = {
-  ranAt: new Date().toISOString(),
-  total: results.length,
-  passed: results.filter((result) => result.pass).length,
-  failed: results.filter((result) => !result.pass).length,
-  schemaFailures: results.filter((result) => !result.schemaValid).length,
-  unsupportedClaims: results.reduce((sum, result) => sum + result.unsupportedClaims, 0),
-  toolCalls: results.reduce((sum, result) => sum + result.toolCallCount, 0),
-};
+function runEvals(): EvalRun {
+  const results = CASES.map(evaluateCase);
+  return {
+    summary: {
+      ranAt: new Date().toISOString(),
+      total: results.length,
+      passed: results.filter((result) => result.pass).length,
+      failed: results.filter((result) => !result.pass).length,
+      schemaFailures: results.filter((result) => !result.schemaValid).length,
+      unsupportedClaims: results.reduce(
+        (sum, result) => sum + result.unsupportedClaims,
+        0,
+      ),
+      toolCalls: results.reduce((sum, result) => sum + result.toolCallCount, 0),
+    },
+    results,
+  };
+}
 
-console.log(JSON.stringify({ summary, results }, null, 2));
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const run = runEvals();
+  console.log(JSON.stringify(run, null, 2));
+  if (run.summary.failed > 0) process.exitCode = 1;
+}
 
-if (summary.failed > 0) process.exitCode = 1;
-
-export { evaluateCase, type EvalCase };
+export { evaluateCase, runEvals, type EvalCase, type EvalRun };
