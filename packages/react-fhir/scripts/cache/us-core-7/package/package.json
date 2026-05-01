@@ -1,0 +1,9 @@
+{
+  "name": "hl7.fhir.us.core",
+  "version": "7.0.0",
+  "canonical": "http://hl7.org/fhir/us/core",
+  "fhir-version-list": ["4.0.1"],
+  "type": "IG",
+  "title": "US Core Implementation Guide (cached subset for spike)",
+  "description": "Hand-trimmed cache of US Core 7.0.0 StructureDefinitions used by the profile-aware codegen spike. Covers Patient + Laboratory Result Observation only."
+}
