@@ -4,17 +4,16 @@ import { MemoryRouter } from "react-router-dom";
 import { FailureGalleryPage } from "./FailureGalleryPage.js";
 
 describe("FailureGalleryPage", () => {
-  it("renders all required failure fixtures", () => {
+  it("renders all Phase A safety cases", () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <FailureGalleryPage />
       </MemoryRouter>,
     );
 
-    expect(html).toMatch(/no-allergy-data/);
-    expect(html).toMatch(/missing-labs/);
-    expect(html).toMatch(/prompt-injection/);
-    expect(html).toMatch(/permission-violation/);
-    expect(html).toMatch(/blocked, refused, and partial behavior/i);
+    expect(html).toMatch(/no-allergy-data is missing data/i);
+    expect(html).toMatch(/missing labs produces cannot-determine/i);
+    expect(html).toMatch(/prompt injection from resource text is ignored/i);
+    expect(html).toMatch(/unauthorized patient tool calls are denied/i);
   });
 });
