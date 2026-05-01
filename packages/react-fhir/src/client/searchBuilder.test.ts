@@ -121,4 +121,27 @@ describe("searchBuilder types", () => {
 
     expect(true).toBe(true);
   });
+
+  it("scopes include/revInclude allow-lists to the searched resource", () => {
+    const obs = searchBuilder("Observation");
+
+    // include must match the searched resource as the path SOURCE.
+    obs.include("Observation:subject");
+    // @ts-expect-error 'Patient:general-practitioner' source is Patient, not Observation.
+    obs.include("Patient:general-practitioner");
+
+    // revInclude must match the searched resource as the path TARGET.
+    // Observation has no v0 revInclude entries, so any spec is rejected.
+    // @ts-expect-error Observation has no revInclude allow-list entries.
+    obs.revInclude("Observation:subject");
+    // @ts-expect-error same: cross-resource revInclude is rejected.
+    obs.revInclude("Patient:general-practitioner");
+
+    const pat = searchBuilder("Patient");
+    pat.revInclude("Observation:subject");
+    // @ts-expect-error Patient.general-practitioner targets Practitioner, not Patient.
+    pat.revInclude("Patient:general-practitioner");
+
+    expect(true).toBe(true);
+  });
 });
