@@ -16,7 +16,7 @@ export function App() {
               fhir-place
             </Link>
             <span className="ml-2 text-sm text-slate-500">
-              spec-driven FHIR viewer
+              backend-agnostic, spec-driven React for any FHIR REST API
             </span>
           </div>
           <div className="text-xs text-slate-500" data-testid="base-url">
