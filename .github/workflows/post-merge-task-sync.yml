@@ -1,7 +1,7 @@
 name: Post-merge TASKS sync
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
 
 permissions:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   update-tasks:
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'fhir-workbench-phase-a')
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' && contains(github.event.pull_request.labels.*.name, 'fhir-workbench-phase-a')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

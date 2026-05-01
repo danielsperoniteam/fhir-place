@@ -17,7 +17,8 @@ jobs:
         run: |
           base="${{ github.event.pull_request.base.sha }}"
           head="${{ github.event.pull_request.head.sha }}"
-          files=$(git diff --name-only "$base" "$head" -- 'openspec/changes/**/acceptance.md')
+          merge_base=$(git merge-base "$base" "$head")
+          files=$(git diff --name-only "$merge_base" "$head" -- 'openspec/changes/**/acceptance.md')
           if [ -n "$files" ]; then
             echo "acceptance_changed=true" >> "$GITHUB_OUTPUT"
           else
@@ -32,11 +33,13 @@ jobs:
             const labels = context.payload.pull_request.labels.map((l) => l.name)
             const body = context.payload.pull_request.body || ''
             const hasManualQa = labels.includes('manual-qa')
-            const screenshotSection = /##\s*Screenshots\s*\/\s*recordings[\s\S]*(https?:\/\/|apps\/workbench\/docs\/screenshots\/|\[[^\]]+\]\([^\)]+\))/i.test(body)
+            const sectionMatch = body.match(/##\s*Screenshots\s*\/\s*recordings([\s\S]*?)(?=\n##\s|$)/i)
+            const sectionBody = sectionMatch ? sectionMatch[1] : ''
+            const hasEvidence = /(https?:\/\/|apps\/workbench\/docs\/screenshots\/|\[[^\]]+\]\([^\)]+\))/i.test(sectionBody)
 
             const errors = []
             if (!hasManualQa) errors.push('Add the `manual-qa` label when acceptance criteria are changed.')
-            if (!screenshotSection) errors.push('Add at least one screenshot/recording link under `## Screenshots / recordings`.')
+            if (!hasEvidence) errors.push('Add at least one screenshot/recording link under `## Screenshots / recordings`.')
 
             if (errors.length) {
               core.setFailed(errors.join('\n'))
