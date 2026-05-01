@@ -157,6 +157,22 @@ function Patients() {
 - **Escape hatches everywhere.** Pass `renderers` / `inputs` to override any datatype. Use `client.request()` for custom operations. Subclass `FetchFhirClient` for custom auth.
 - **Tree-shakeable, typed.** ESM + `.d.ts`; subpath exports `@fhir-place/react-fhir/client`, `/hooks`, `/structure`, `/components`.
 
+See [`docs/decisions/0004-positioning.md`](docs/decisions/0004-positioning.md) for the wedge and the rationale behind it.
+
+## Comparison with other React-FHIR libraries
+
+Honest, narrow snapshot of where this library sits today. Each row is a real package on npm.
+
+| Library | Backend | UI lock-in | Spec-driven | LLM/MCP story |
+| --- | --- | --- | --- | --- |
+| **`@fhir-place/react-fhir`** | Any FHIR REST | None — Tailwind + unstyled | Yes (StructureDefinition + SearchParameter + CapabilityStatement) | Roadmap (Zod-from-SD, optional MCP package) |
+| `@medplum/react` | Best with Medplum server (some components require Medplum-specific extensions) | Mantine v7 required | Partial | Server-side only |
+| `@bonfhir/react` (+ `@bonfhir/mantine`) | Any | Mantine renderers ship in `@bonfhir/mantine` | Yes (codegen for R4B / R5) | None |
+| `@beda.software/fhir-react` | Any (Aidbox-leaning) | None — hooks only | Hook-level | None |
+| `1uphealth/fhir-react` (unscoped `fhir-react` on npm) | Display-only, no client | Bootstrap | No | None |
+
+Where we lose today: fewer batteries-included components than `@medplum/react`, no Mantine renderer parity with `@bonfhir/mantine`, no SMART App Launch adapter shipped (use `fhirclient` + `FhirClient.getHeaders` for now), and no profile-aware codegen yet. Tracked items below.
+
 ## Dev
 
 ```bash
@@ -231,9 +247,15 @@ These will become issues once a concrete use case surfaces — premature issues 
 
 - **Extensions.** `<ResourceEditor>` skips `extension` / `modifierExtension` by default. Many real profiles lean on them.
 - **Profile support.** `useStructureDefinition` fetches base types; taking a profile canonical URL is a small change we haven't made.
-- **SMART on FHIR v2 auth.** Deferred. Bearer-token auth works via `FhirClient.getHeaders`; launch flows need a dedicated adapter.
+- **SMART on FHIR v2 auth.** Deferred. Bearer-token auth works via `FhirClient.getHeaders`; launch flows need a dedicated adapter (peer-dep on [`fhirclient`](https://github.com/smart-on-fhir/client-js) rather than reimplementing the OAuth dance).
 - **R4B / R5.** R4 only for v1. The `FhirClient` interface will grow a `fhirVersion` discriminator for version-specific code.
 - **Subscriptions / realtime.** Out of scope; poll with TanStack Query's `refetchInterval` for now.
+- **Typed search builder.** `useSearch('Patient').where(...).include(...)` with chained-search and `_revinclude` narrowing. Covered by ADR [0004](docs/decisions/0004-positioning.md).
+- **Profile-aware codegen.** `npx fhir-place gen --ig hl7.fhir.us.core@7.0.0` produces typed components + Zod schemas. Lead-in is the "Profile support" item above.
+- **Zod schemas from `StructureDefinition`.** Feeds both client-side validation and `tool_use` / structured-output surfaces for LLM consumers.
+- **Optional `@fhir-place/mcp` package.** Wraps an arbitrary FHIR base URL + token as MCP tools. Library-side only; the workbench's Phase A constraint against an MCP server still holds.
+- **Inferno (g)(10) CI badge.** Run the [Inferno ONC](https://inferno.healthit.gov/) test kit nightly against Medplum + HAPI public sandboxes; publish badge. Fits the existing `integration.yml` pattern.
+- **Interop demo matrix.** `apps/demo` runnable against Medplum + Aidbox + HAPI with documented per-backend caveats. Epic / Cerner registration friction means those stay out of the matrix.
 
 PRs welcome on any tracked item. For a deferred item: open an issue describing your use case and we can prioritise.
 
