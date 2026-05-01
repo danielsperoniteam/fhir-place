@@ -54,10 +54,10 @@ export function answersRoutes(deps: Deps) {
       return jsonBody(503, {
         error: "agent_unavailable",
         hint:
-          "ANTHROPIC_API_KEY is not configured. Set it in the workbench " +
-          "server's environment to enable the patient-summary agent. The " +
-          "rest of the workbench (patient search, FHIR proxy, tool runner) " +
-          "remains usable without it.",
+          "Set ANTHROPIC_API_KEY (or WORKBENCH_AGENT_API_KEY) in the " +
+          "workbench server environment to enable the patient-summary " +
+          "agent. The rest of the workbench (patient search, FHIR proxy, " +
+          "tool runner) remains usable without it.",
       });
     }
 
@@ -215,7 +215,7 @@ export function agentInfoRoutes(deps: Pick<Deps, "modelConfig">) {
       suggestedPrompts: SUGGESTED_PROMPTS,
       hint:
         deps.modelConfig === null
-          ? "Set ANTHROPIC_API_KEY in the server's environment to enable the agent."
+          ? "Set ANTHROPIC_API_KEY (or WORKBENCH_AGENT_API_KEY) in the server environment to enable the agent."
           : null,
     }),
   );

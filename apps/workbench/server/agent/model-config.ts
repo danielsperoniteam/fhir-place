@@ -36,10 +36,12 @@ export interface ModelConfig {
  * stays usable without an API key (patient search, FHIR proxy, etc.).
  */
 export function modelConfigFromEnv(): ModelConfig | null {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey =
+    process.env.WORKBENCH_AGENT_API_KEY ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
   const model = process.env.WORKBENCH_AGENT_MODEL ?? DEFAULT_MODEL;
-  const client = new Anthropic({ apiKey });
+  const baseURL = process.env.WORKBENCH_AGENT_BASE_URL;
+  const client = new Anthropic({ apiKey, baseURL });
   return {
     provider: PHASE_A_PROVIDER,
     model,

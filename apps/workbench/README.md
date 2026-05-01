@@ -72,6 +72,67 @@ WORKBENCH_PORT=6000 pnpm --filter @fhir-place/workbench dev
 The SQLite file defaults to `apps/workbench/workbench.sqlite`; override with
 `WORKBENCH_DB_URL=/some/path.sqlite`.
 
+### Agent provider configuration
+
+By default, the patient-summary agent reads `ANTHROPIC_API_KEY`.
+
+- `WORKBENCH_AGENT_API_KEY` overrides `ANTHROPIC_API_KEY`.
+- `WORKBENCH_AGENT_MODEL` overrides the default `claude-sonnet-4-6`.
+- `WORKBENCH_AGENT_BASE_URL` lets you point the Anthropic SDK at a compatible
+  gateway endpoint.
+
+If you want to run via AWS Bedrock, run the workbench against a Bedrock-aware
+gateway that exposes the Anthropic Messages API shape, then set
+`WORKBENCH_AGENT_BASE_URL` + `WORKBENCH_AGENT_API_KEY` for that gateway.
+
+#### Does Bedrock make sense for this workbench?
+
+It can, depending on your deployment constraints.
+
+Use Bedrock when you need one or more of:
+
+- AWS-native networking and identity boundaries (for example, private VPC
+  routing and IAM-based access to your gateway).
+- Centralized model routing/governance shared with other internal AWS workloads.
+- A single provider control plane for demos that must stay inside an AWS
+  account boundary.
+
+Keep Anthropic direct when you want the simplest local setup with the fewest
+moving parts.
+
+#### How this works in practice
+
+The workbench server still calls the Anthropic Messages API contract expected
+by the current Phase A orchestrator. In a Bedrock deployment, you place a small
+gateway in front of Bedrock that:
+
+1. Accepts Anthropic-compatible requests from the workbench.
+2. Authenticates and signs outbound Bedrock calls with AWS credentials.
+3. Maps Bedrock responses back into Anthropic-compatible response shapes.
+
+Because this translation happens at the gateway edge, the workbench app and
+agent loop do not need Bedrock-specific code paths.
+
+#### Example use case
+
+Your team runs internal synthetic-data demos in an AWS sandbox account and
+already has a platform gateway that standardizes model access. The workbench
+uses that gateway endpoint so demo traffic follows existing AWS guardrails and
+logging pipelines.
+
+#### Example `.env` values (gateway pattern)
+
+```bash
+# Anthropic-compatible gateway endpoint (backed by Bedrock internally)
+WORKBENCH_AGENT_BASE_URL=https://llm-gateway.internal.example.com/anthropic
+
+# Gateway-issued key/token (not an Anthropic key in this pattern)
+WORKBENCH_AGENT_API_KEY=demo_gateway_token
+
+# Optional model override used by the workbench agent
+WORKBENCH_AGENT_MODEL=claude-sonnet-4-6
+```
+
 ## Scripts
 
 | Script | What it does |

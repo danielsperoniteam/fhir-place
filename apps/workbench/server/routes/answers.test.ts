@@ -130,7 +130,7 @@ const HAPPY_PATH_SCRIPT: ReadonlyArray<Anthropic.Message> = [
   ),
 ];
 
-describe("POST /api/sessions/:sid/answer — without ANTHROPIC_API_KEY", () => {
+describe("POST /api/sessions/:sid/answer — without agent api key", () => {
   it("returns 503 with hint when no model is configured", async () => {
     const { app } = newApp({ modelConfig: null });
     const cid = await createConn(app);
@@ -144,7 +144,7 @@ describe("POST /api/sessions/:sid/answer — without ANTHROPIC_API_KEY", () => {
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.error).toBe("agent_unavailable");
-    expect(body.hint).toMatch(/ANTHROPIC_API_KEY/);
+    expect(body.hint).toMatch(/ANTHROPIC_API_KEY|WORKBENCH_AGENT_API_KEY/);
   });
 });
 
