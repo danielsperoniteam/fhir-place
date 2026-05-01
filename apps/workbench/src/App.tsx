@@ -37,16 +37,16 @@ export function App() {
               Home
             </NavLink>
             <NavLink
-              to="/failure-gallery"
-              className={({ isActive }) => (isActive ? navItemActive : navItem)}
-            >
-              Failure gallery
-            </NavLink>
-            <NavLink
               to="/connections"
               className={({ isActive }) => (isActive ? navItemActive : navItem)}
             >
               Connections
+            </NavLink>
+            <NavLink
+              to="/failure-gallery"
+              className={({ isActive }) => (isActive ? navItemActive : navItem)}
+            >
+              Failure gallery
             </NavLink>
           </nav>
         </div>

@@ -50,14 +50,21 @@ export function HomePage() {
         </div>
       </div>
 
-      <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-700">
-        <p>
-          Review the safety failure cases in the {" "}
-          <Link to="/failure-gallery" className="font-medium text-slate-900 underline">
-            Failure Gallery
+      <div className="rounded-md border border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Failure gallery</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Review safety-first eval fixtures for missing data, prompt injection, and patient-scope denial behavior.
+            </p>
+          </div>
+          <Link
+            to="/failure-gallery"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Open
           </Link>
-          .
-        </p>
+        </div>
       </div>
 
       <ul
