@@ -4,46 +4,192 @@ export const USE_MOCK =
 /** Vite's BASE_URL — "/" locally, "/fhir-place/" on GitHub Pages. */
 const BASE = import.meta.env.BASE_URL;
 
+export type AuthMode = "none" | "bearer";
+
+export type CustomHeader = { key: string; value: string };
+
+export interface ServerConfig {
+  id: string;
+  label: string;
+  baseUrl: string;
+  authMode: AuthMode;
+  bearerToken?: string;
+  headers?: CustomHeader[];
+  /** Built-in servers can't be deleted, but their auth/headers can still be edited. */
+  builtin?: boolean;
+}
+
 /**
- * Public FHIR R4 test servers offered in the demo's server picker. The first
- * entry is the default. All listed servers must support open (no-auth) access
- * and CORS so the browser can reach them directly. Demonstrates that
- * `@fhir-place/react-fhir` is server-agnostic — drop in any FHIR REST API.
+ * Built-in public FHIR R4 servers. Both support open access and CORS so the
+ * browser can reach them directly. Users can layer auth/custom headers on top
+ * via the Settings page (e.g. a personal access token for HAPI).
  */
-export const FHIR_SERVERS = [
-  { label: "HAPI Public Test Server", url: "https://hapi.fhir.org/baseR4" },
-  { label: "SMART Health IT (R4)", url: "https://r4.smarthealthit.org" },
-] as const satisfies ReadonlyArray<{ label: string; url: string }>;
+export const BUILTIN_SERVERS: ReadonlyArray<ServerConfig> = [
+  {
+    id: "builtin-hapi",
+    label: "HAPI Public Test Server",
+    baseUrl: "https://hapi.fhir.org/baseR4",
+    authMode: "none",
+    builtin: true,
+  },
+  {
+    id: "builtin-smart",
+    label: "SMART Health IT (R4)",
+    baseUrl: "https://r4.smarthealthit.org",
+    authMode: "none",
+    builtin: true,
+  },
+];
 
-const DEFAULT_LIVE_URL: string = FHIR_SERVERS[0].url;
+const SERVERS_STORAGE_KEY = "fhir-place:servers";
+const ACTIVE_SERVER_STORAGE_KEY = "fhir-place:active-server";
 
-const SERVER_STORAGE_KEY = "fhir-place:base-url";
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
 
-const isKnownServer = (url: string): boolean =>
-  FHIR_SERVERS.some((s) => s.url === url);
+const parseServer = (v: unknown): ServerConfig | null => {
+  if (!isPlainObject(v)) return null;
+  const { id, label, baseUrl, authMode, bearerToken, headers, builtin } = v;
+  if (typeof id !== "string" || typeof label !== "string" || typeof baseUrl !== "string") {
+    return null;
+  }
+  if (authMode !== "none" && authMode !== "bearer") return null;
+  const parsedHeaders = Array.isArray(headers)
+    ? headers
+        .filter(isPlainObject)
+        .filter((h) => typeof h.key === "string" && typeof h.value === "string")
+        .map((h) => ({ key: h.key as string, value: h.value as string }))
+    : undefined;
+  return {
+    id,
+    label,
+    baseUrl,
+    authMode,
+    ...(typeof bearerToken === "string" && bearerToken ? { bearerToken } : {}),
+    ...(parsedHeaders && parsedHeaders.length > 0 ? { headers: parsedHeaders } : {}),
+    ...(builtin === true ? { builtin: true } : {}),
+  };
+};
 
-const getStoredBaseUrl = (): string | null => {
+const readStoredServers = (): ServerConfig[] | null => {
   if (typeof window === "undefined") return null;
   try {
-    const stored = window.localStorage.getItem(SERVER_STORAGE_KEY);
-    return stored && isKnownServer(stored) ? stored : null;
+    const raw = window.localStorage.getItem(SERVERS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const servers = parsed.map(parseServer).filter((s): s is ServerConfig => s !== null);
+    return servers.length > 0 ? servers : null;
   } catch {
     return null;
   }
 };
 
-export const setStoredFhirBaseUrl = (url: string): void => {
+/**
+ * Merge built-ins with stored config so:
+ * - Built-ins always exist (even if storage is empty/corrupt).
+ * - Stored edits to built-ins (auth, headers, label) survive.
+ * - Custom user-added servers come through unchanged.
+ */
+const mergeWithBuiltins = (stored: ServerConfig[] | null): ServerConfig[] => {
+  if (!stored) return BUILTIN_SERVERS.map((s) => ({ ...s }));
+  const byId = new Map(stored.map((s) => [s.id, s]));
+  const merged: ServerConfig[] = [];
+  for (const builtin of BUILTIN_SERVERS) {
+    const override = byId.get(builtin.id);
+    merged.push(override ? { ...override, builtin: true } : { ...builtin });
+    byId.delete(builtin.id);
+  }
+  for (const remaining of byId.values()) {
+    merged.push({ ...remaining, builtin: false });
+  }
+  return merged;
+};
+
+export const loadServers = (): ServerConfig[] => mergeWithBuiltins(readStoredServers());
+
+export const saveServers = (servers: ReadonlyArray<ServerConfig>): void => {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(SERVER_STORAGE_KEY, url);
+    window.localStorage.setItem(SERVERS_STORAGE_KEY, JSON.stringify(servers));
   } catch {
-    // localStorage may be unavailable (private mode); the picker just won't persist.
+    // localStorage unavailable (private mode, quota); changes simply don't persist.
   }
 };
 
-export const FHIR_BASE_URL: string =
-  import.meta.env.VITE_FHIR_BASE_URL ??
-  (USE_MOCK ? `${BASE}fhir` : (getStoredBaseUrl() ?? DEFAULT_LIVE_URL));
+export const loadActiveServerId = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(ACTIVE_SERVER_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const saveActiveServerId = (id: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ACTIVE_SERVER_STORAGE_KEY, id);
+  } catch {
+    // see saveServers
+  }
+};
+
+const FALLBACK_SERVER: ServerConfig = {
+  id: "builtin-hapi",
+  label: "HAPI Public Test Server",
+  baseUrl: "https://hapi.fhir.org/baseR4",
+  authMode: "none",
+  builtin: true,
+};
+
+export const resolveActiveServer = (): ServerConfig => {
+  const servers = loadServers();
+  const activeId = loadActiveServerId();
+  if (activeId) {
+    const match = servers.find((s) => s.id === activeId);
+    if (match) return match;
+  }
+  return servers[0] ?? { ...FALLBACK_SERVER };
+};
+
+const ACTIVE_SERVER: ServerConfig = (() => {
+  if (USE_MOCK) {
+    return {
+      id: "mock",
+      label: "Mock (MSW)",
+      baseUrl: `${BASE}fhir`,
+      authMode: "none",
+      builtin: true,
+    };
+  }
+  if (import.meta.env.VITE_FHIR_BASE_URL) {
+    return {
+      id: "env-override",
+      label: "Env override",
+      baseUrl: import.meta.env.VITE_FHIR_BASE_URL,
+      authMode: "none",
+      builtin: true,
+    };
+  }
+  return resolveActiveServer();
+})();
+
+export const ACTIVE_SERVER_CONFIG: ServerConfig = ACTIVE_SERVER;
+
+export const FHIR_BASE_URL: string = ACTIVE_SERVER.baseUrl;
+
+/** Static headers derived from the active server's auth + custom headers. */
+export const buildRequestHeaders = (server: ServerConfig): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  if (server.authMode === "bearer" && server.bearerToken) {
+    headers.Authorization = `Bearer ${server.bearerToken}`;
+  }
+  for (const h of server.headers ?? []) {
+    if (h.key.trim()) headers[h.key] = h.value;
+  }
+  return headers;
+};
 
 export const ROUTER_BASENAME: string = BASE.replace(/\/$/, "") || "/";
 
@@ -57,3 +203,10 @@ export const ROUTER_BASENAME: string = BASE.replace(/\/$/, "") || "/";
 export const USE_HASH_ROUTER: boolean =
   import.meta.env.VITE_USE_HASH_ROUTER === "true" ||
   (BASE !== "/" && !import.meta.env.DEV);
+
+/**
+ * Whether the in-app server picker / settings UI should be shown. Hidden in
+ * mock mode and when an env override pins the base URL.
+ */
+export const SETTINGS_ENABLED: boolean =
+  !USE_MOCK && !import.meta.env.VITE_FHIR_BASE_URL;

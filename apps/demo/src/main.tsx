@@ -4,7 +4,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, HashRouter } from "react-router-dom";
 import { App } from "./App.js";
-import { FHIR_BASE_URL, ROUTER_BASENAME, USE_HASH_ROUTER, USE_MOCK } from "./config.js";
+import {
+  ACTIVE_SERVER_CONFIG,
+  FHIR_BASE_URL,
+  ROUTER_BASENAME,
+  USE_HASH_ROUTER,
+  USE_MOCK,
+  buildRequestHeaders,
+} from "./config.js";
 import "./index.css";
 
 // 4xx responses (404, 410, 422…) aren't transient — retrying them just pads
@@ -29,7 +36,10 @@ const queryClient = new QueryClient({
   },
 });
 
-const fhirClient = new FetchFhirClient({ baseUrl: FHIR_BASE_URL });
+const fhirClient = new FetchFhirClient({
+  baseUrl: FHIR_BASE_URL,
+  headers: buildRequestHeaders(ACTIVE_SERVER_CONFIG),
+});
 
 async function bootstrap() {
   if (USE_MOCK) {

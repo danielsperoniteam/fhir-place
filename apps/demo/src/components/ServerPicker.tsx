@@ -1,39 +1,55 @@
 import type { ChangeEvent } from "react";
-import { FHIR_BASE_URL, FHIR_SERVERS, setStoredFhirBaseUrl } from "../config.js";
+import { Link } from "react-router-dom";
+import {
+  ACTIVE_SERVER_CONFIG,
+  loadServers,
+  saveActiveServerId,
+} from "../config.js";
 
 /**
- * Header dropdown that lets visitors point the demo at any FHIR R4 server in
- * `FHIR_SERVERS`. Persisted to localStorage and applied via a full reload so
- * the singleton `FetchFhirClient` in `main.tsx` rebuilds with the new base URL
- * (and TanStack Query's cache is dropped along with it).
+ * Header dropdown that lets visitors switch between configured FHIR servers.
+ * The list is loaded from `loadServers()` (built-ins + custom from
+ * localStorage). Switching saves the active id and reloads the page so the
+ * singleton `FetchFhirClient` in `main.tsx` rebuilds with the new base URL
+ * and headers.
  */
 export function ServerPicker() {
+  const servers = loadServers();
+  const activeId = ACTIVE_SERVER_CONFIG.id;
+
   const onChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value;
-    if (next === FHIR_BASE_URL) return;
-    setStoredFhirBaseUrl(next);
+    if (next === activeId) return;
+    saveActiveServerId(next);
     window.location.reload();
   };
 
   return (
-    <label
+    <div
       className="flex items-center gap-2 text-xs text-slate-500"
       data-testid="base-url"
     >
       <span>live ·</span>
       <select
-        value={FHIR_BASE_URL}
+        value={activeId}
         onChange={onChange}
         className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
         data-testid="server-picker"
         aria-label="FHIR server"
       >
-        {FHIR_SERVERS.map((server) => (
-          <option key={server.url} value={server.url}>
-            {server.label} — {server.url}
+        {servers.map((server) => (
+          <option key={server.id} value={server.id}>
+            {server.label} — {server.baseUrl}
           </option>
         ))}
       </select>
-    </label>
+      <Link
+        to="/settings"
+        className="text-slate-600 underline hover:text-slate-900"
+        data-testid="settings-link"
+      >
+        Settings
+      </Link>
+    </div>
   );
 }

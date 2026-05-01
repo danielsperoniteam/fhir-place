@@ -4,11 +4,9 @@ import { PatientListPage } from "./pages/PatientListPage.js";
 import { ResourceDetailPage } from "./pages/ResourceDetailPage.js";
 import { ResourceEditPage } from "./pages/ResourceEditPage.js";
 import { ResourceIndexPage } from "./pages/ResourceIndexPage.js";
+import { SettingsPage } from "./pages/SettingsPage.js";
 import { ServerPicker } from "./components/ServerPicker.js";
-import { FHIR_BASE_URL, FHIR_SERVERS, USE_MOCK } from "./config.js";
-
-const showServerPicker =
-  !USE_MOCK && FHIR_SERVERS.some((s) => s.url === FHIR_BASE_URL);
+import { FHIR_BASE_URL, SETTINGS_ENABLED, USE_MOCK } from "./config.js";
 
 export function App() {
   return (
@@ -23,7 +21,7 @@ export function App() {
               spec-driven FHIR viewer
             </span>
           </div>
-          {showServerPicker ? (
+          {SETTINGS_ENABLED ? (
             <ServerPicker />
           ) : (
             <div className="text-xs text-slate-500" data-testid="base-url">
@@ -37,6 +35,7 @@ export function App() {
           <Route path="/" element={<Navigate to="/Patient" replace />} />
           <Route path="/Patient" element={<PatientListPage />} />
           <Route path="/Patient/new" element={<PatientCreatePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/:resourceType/:id/edit" element={<ResourceEditPage />} />
           <Route path="/:resourceType/:id" element={<ResourceDetailPage />} />
           <Route path="/:resourceType" element={<ResourceIndexPage />} />
