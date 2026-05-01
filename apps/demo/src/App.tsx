@@ -4,7 +4,9 @@ import { PatientListPage } from "./pages/PatientListPage.js";
 import { ResourceDetailPage } from "./pages/ResourceDetailPage.js";
 import { ResourceEditPage } from "./pages/ResourceEditPage.js";
 import { ResourceIndexPage } from "./pages/ResourceIndexPage.js";
-import { FHIR_BASE_URL, USE_MOCK } from "./config.js";
+import { SettingsPage } from "./pages/SettingsPage.js";
+import { ServerPicker } from "./components/ServerPicker.js";
+import { FHIR_BASE_URL, SETTINGS_ENABLED, USE_MOCK } from "./config.js";
 
 export function App() {
   return (
@@ -19,9 +21,13 @@ export function App() {
               backend-agnostic, spec-driven React for any FHIR REST API
             </span>
           </div>
-          <div className="text-xs text-slate-500" data-testid="base-url">
-            {USE_MOCK ? "mock" : "live"} · {FHIR_BASE_URL}
-          </div>
+          {SETTINGS_ENABLED ? (
+            <ServerPicker />
+          ) : (
+            <div className="text-xs text-slate-500" data-testid="base-url">
+              {USE_MOCK ? "mock" : "live"} · {FHIR_BASE_URL}
+            </div>
+          )}
         </div>
       </header>
       <main className="mx-auto max-w-5xl p-6">
@@ -29,6 +35,7 @@ export function App() {
           <Route path="/" element={<Navigate to="/Patient" replace />} />
           <Route path="/Patient" element={<PatientListPage />} />
           <Route path="/Patient/new" element={<PatientCreatePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/:resourceType/:id/edit" element={<ResourceEditPage />} />
           <Route path="/:resourceType/:id" element={<ResourceDetailPage />} />
           <Route path="/:resourceType" element={<ResourceIndexPage />} />
