@@ -487,16 +487,28 @@ describe("query hooks", () => {
     });
 
     it("hydrates the per-resource cache so useResource hits without a second request", async () => {
-      let calls = 0;
+      let searchCalls = 0;
+      let readCalls = 0;
       server.use(
         http.get(`${BASE}/Patient`, () => {
-          calls += 1;
+          searchCalls += 1;
           return HttpResponse.json({
             resourceType: "Bundle",
             type: "searchset",
             entry: [
               { resource: { resourceType: "Patient", id: "a", gender: "male" } },
             ],
+          });
+        }),
+        // Per-id read handler counts hits instead of relying on MSW's
+        // unhandled-request error — keeps stderr clean while still proving
+        // the cached read path is taken.
+        http.get(`${BASE}/Patient/:id`, ({ params }) => {
+          readCalls += 1;
+          return HttpResponse.json({
+            resourceType: "Patient",
+            id: params.id,
+            gender: "male",
           });
         }),
       );
@@ -506,23 +518,24 @@ describe("query hooks", () => {
         { wrapper },
       );
       await waitFor(() => expect(r1.current.isSuccess).toBe(true));
-      expect(calls).toBe(1);
+      expect(searchCalls).toBe(1);
 
       const cached = qc.getQueryData(
         fhirQueryKeys.resource(client.baseUrl, "Patient", "a"),
       ) as Patient | undefined;
       expect(cached?.gender).toBe("male");
 
-      // No /Patient/a handler is registered — if useResource doesn't hit
-      // cache, MSW's onUnhandledRequest:"error" makes the test fail.
       const { result: r2 } = renderHook(
-        () => useResource<Patient>("Patient", "a"),
+        // staleTime keeps the cached entry fresh so the read isn't refetched
+        // in the background — without it TanStack still serves cache on the
+        // first render but fires a background refresh.
+        () => useResource<Patient>("Patient", "a", { staleTime: 60_000 }),
         { wrapper },
       );
       await waitFor(() => expect(r2.current.isSuccess).toBe(true));
       expect(r2.current.data?.gender).toBe("male");
-      // Single network call; the second hook resolved from cache.
-      expect(calls).toBe(1);
+      expect(searchCalls).toBe(1);
+      expect(readCalls).toBe(0);
     });
 
     it("short-circuits with no network when ids is empty or undefined", () => {
@@ -705,8 +718,15 @@ describe("query hooks", () => {
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     );
-    expect(() =>
-      rh(() => useResource("Patient", "1"), { wrapper }),
-    ).toThrow(/FhirClientProvider/);
+    // React/jsdom log the thrown render error to console.error; silence it
+    // here so the expected-failure path doesn't pollute CI logs.
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(() =>
+        rh(() => useResource("Patient", "1"), { wrapper }),
+      ).toThrow(/FhirClientProvider/);
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });

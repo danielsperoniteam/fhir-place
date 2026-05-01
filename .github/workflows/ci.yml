@@ -23,6 +23,9 @@ jobs:
       - run: pnpm --filter @fhir-place/react-fhir build
       - run: pnpm -r typecheck
       - run: pnpm -r test:run
+      # Coverage + threshold gate for the published library — keeps quality
+      # signal visible in CI logs and fails the build on regression.
+      - run: pnpm --filter @fhir-place/react-fhir test:ci
       - run: pnpm --filter @fhir-place/demo build
       - run: pnpm --filter @fhir-place/workbench build
 

@@ -9,6 +9,7 @@
     "dev": "pnpm --filter @fhir-place/demo dev",
     "test": "pnpm -r test",
     "test:run": "pnpm -r test:run",
+    "test:ci": "pnpm -r --if-present test:ci",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "e2e": "pnpm --filter @fhir-place/demo e2e",
