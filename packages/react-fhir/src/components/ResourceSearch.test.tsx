@@ -8,6 +8,7 @@ import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import {
   findSearchParamsForResource,
   ResourceSearch,
+  tokenPlaceholder,
 } from "./ResourceSearch.js";
 
 const cap: CapabilityStatement = {
@@ -163,5 +164,33 @@ describe("ResourceSearch", () => {
   it("shows a friendly message when no params are advertised", () => {
     wrap(<ResourceSearch resourceType="UnknownType" capabilityStatement={cap} />);
     expect(screen.getByText(/no searchable parameters/i)).toBeInTheDocument();
+  });
+});
+
+describe("tokenPlaceholder", () => {
+  const el = (typeCode: string) => ({ path: "X.y", type: [{ code: typeCode }] });
+
+  it("falls back to `code or system|code` when the element is unknown", () => {
+    expect(tokenPlaceholder(undefined)).toBe("code or system|code");
+  });
+
+  it("returns `code or system|code` for CodeableConcept / Coding / Identifier", () => {
+    expect(tokenPlaceholder(el("CodeableConcept"))).toBe("code or system|code");
+    expect(tokenPlaceholder(el("Coding"))).toBe("code or system|code");
+    expect(tokenPlaceholder(el("Identifier"))).toBe("code or system|code");
+  });
+
+  it("drops the system half for primitive `code` elements", () => {
+    expect(tokenPlaceholder(el("code"))).toBe("code");
+  });
+
+  it("hints true/false for `boolean` elements", () => {
+    expect(tokenPlaceholder(el("boolean"))).toBe("true | false");
+  });
+
+  it("hints a URL for uri-family elements", () => {
+    expect(tokenPlaceholder(el("uri"))).toBe("https://…");
+    expect(tokenPlaceholder(el("url"))).toBe("https://…");
+    expect(tokenPlaceholder(el("canonical"))).toBe("https://…");
   });
 });

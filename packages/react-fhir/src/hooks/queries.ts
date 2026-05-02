@@ -133,20 +133,27 @@ export function useStructureDefinition(
  *   3. Library-bundled core R4 ValueSet (administrative-gender,
  *      observation-status, task-status, etc.) — keeps dropdowns populated
  *      even when the server serves nothing terminology-related
+ *
+ * A trailing `|version` suffix on the canonical is stripped before each
+ * lookup. StructureDefinitions in the wild often pin a binding to a
+ * versioned canonical (e.g. `…/allergy-intolerance-category|4.0.1`); the
+ * bundled fallback and most servers key by the unversioned URL, so without
+ * this every versioned binding would silently fall through to a free-text
+ * input.
  */
 export function useValueSet(
   canonical: string | undefined,
   options?: ReadQueryOpts<ValueSet>,
 ) {
   const client = useFhirClient();
+  const url = canonical ? canonical.split("|")[0]! : undefined;
   return useQuery({
-    queryKey: fhirQueryKeys.valueSet(client.baseUrl, canonical ?? ""),
+    queryKey: fhirQueryKeys.valueSet(client.baseUrl, url ?? ""),
     queryFn: async ({ signal }) => {
-      const url = canonical!;
       // 1. $expand
       try {
         return await client.request<ValueSet>({
-          path: `/ValueSet/$expand?url=${encodeURIComponent(url)}`,
+          path: `/ValueSet/$expand?url=${encodeURIComponent(url!)}`,
           signal,
         });
       } catch {
@@ -156,7 +163,7 @@ export function useValueSet(
       try {
         const bundle = await client.search<ValueSet>(
           "ValueSet",
-          { url },
+          { url: url! },
           { signal },
         );
         const hit = bundle.entry?.[0]?.resource;
@@ -171,7 +178,7 @@ export function useValueSet(
         `ValueSet ${url} could not be resolved from this server and is not bundled in the library`,
       );
     },
-    enabled: Boolean(canonical),
+    enabled: Boolean(url),
     staleTime: 24 * 60 * 60_000,
     ...options,
   });
