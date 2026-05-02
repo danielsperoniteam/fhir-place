@@ -18,7 +18,7 @@ import type {
 import type { FhirClient, SearchParams } from "../client/types.js";
 import { coreValueSet } from "../structure/core/valuesets.js";
 import { resolveStructureDefinition } from "../structure/resolve.js";
-import { useFhirClient, useTerminologyClient } from "./FhirClientProvider.js";
+import { useFhirClient, useOptionalTerminologyClient, useTerminologyClient } from "./FhirClientProvider.js";
 
 /** Stable query keys so callers can target them with invalidate/refetch. */
 export const fhirQueryKeys = {
@@ -176,14 +176,17 @@ export function useValueSet(
   canonical: string | undefined,
   options?: ReadQueryOpts<ValueSet>,
 ) {
-  const client = useTerminologyClient();
+  // useOptionalTerminologyClient avoids throwing when canonical is undefined
+  // and this hook is called outside a FhirClientProvider (e.g. CodingInput
+  // with no element binding, which renders free-form and never fires the query).
+  const client = useOptionalTerminologyClient();
   const url = canonical ? canonical.split("|")[0]! : undefined;
   return useQuery({
-    queryKey: fhirQueryKeys.valueSet(client.baseUrl, url ?? ""),
+    queryKey: fhirQueryKeys.valueSet(client?.baseUrl ?? "", url ?? ""),
     queryFn: async ({ signal }) => {
       // 1. $expand
       try {
-        return await client.request<ValueSet>({
+        return await client!.request<ValueSet>({
           path: `/ValueSet/$expand?url=${encodeURIComponent(url!)}`,
           signal,
         });
@@ -192,7 +195,7 @@ export function useValueSet(
       }
       // 2. search by url
       try {
-        const bundle = await client.search<ValueSet>(
+        const bundle = await client!.search<ValueSet>(
           "ValueSet",
           { url: url! },
           { signal },
@@ -209,7 +212,7 @@ export function useValueSet(
         `ValueSet ${url} could not be resolved from this server and is not bundled in the library`,
       );
     },
-    enabled: Boolean(url),
+    enabled: Boolean(url) && Boolean(client),
     staleTime: 24 * 60 * 60_000,
     ...options,
   });

@@ -1,5 +1,5 @@
 import type { Reference, Resource } from "fhir/r4";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SearchParams } from "../client/types.js";
 import { useSearch } from "../hooks/queries.js";
 import { formatReferenceLabel } from "../structure/format.js";
@@ -129,6 +129,13 @@ export function ReferencePicker(props: ReferencePickerProps) {
               setIsOpen(true);
             }}
             onFocus={() => setIsOpen(true)}
+            // iOS Safari otherwise overlays its "AutoFill Contact" bar on top of
+            // our results dropdown, swallowing taps on the actual options.
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            name="reference-picker-search"
             className="min-w-[12rem] flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
           />
           {supportsBirthdate && (
@@ -159,20 +166,35 @@ export function ReferencePicker(props: ReferencePickerProps) {
           {!isFetching && results.length === 0 && (
             <li className="px-3 py-2 text-xs text-slate-500">No matches</li>
           )}
-          {results.map((r) => (
-            <li key={`${r.resourceType}/${r.id}`}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={false}
-                onClick={() => pick(r)}
-                className="flex w-full items-baseline justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-              >
-                <span className="truncate">{formatReferenceLabel(r)}</span>
-                <code className="shrink-0 text-xs text-slate-500">{r.id}</code>
-              </button>
-            </li>
-          ))}
+          {results.map((r) => {
+            const secondary = secondaryLabel(r);
+            return (
+              <li key={`${r.resourceType}/${r.id}`}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  // `mousedown.preventDefault()` keeps the search input
+                  // focused — without that, the input blurs on tap, iOS
+                  // dismisses the keyboard, the page reflows, and the click
+                  // event lands on whatever ends up under the user's finger.
+                  // The actual selection runs from `onClick` so a touch that
+                  // turns into a scroll/drag (no click event from iOS) doesn't
+                  // accidentally pick the row the finger started on.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(r)}
+                  className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="block truncate">{formatReferenceLabel(r)}</span>
+                  {secondary && (
+                    <span className="block truncate text-xs text-slate-500">
+                      {secondary}
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -190,6 +212,21 @@ const namedTypes = new Set([
   "Location",
   "Device",
 ]);
+
+/**
+ * Disambiguator shown beneath the primary label in dropdown items. For
+ * person-shaped resources we surface DOB + gender so two patients with the
+ * same name (very common) can be told apart without leaving the picker.
+ */
+function secondaryLabel(resource: Resource): string {
+  const r = resource as unknown as Record<string, unknown>;
+  if (birthdateTypes.has(resource.resourceType)) {
+    const dob = typeof r.birthDate === "string" ? r.birthDate : undefined;
+    const gender = typeof r.gender === "string" ? r.gender : undefined;
+    return [dob && `DOB ${dob}`, gender].filter(Boolean).join(" · ");
+  }
+  return "";
+}
 
 function defaultSearchParamFor(type: string): string {
   if (namedTypes.has(type)) return "name";

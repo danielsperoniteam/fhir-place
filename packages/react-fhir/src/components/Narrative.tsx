@@ -27,7 +27,6 @@ export function Narrative({ narrative, className }: NarrativeProps) {
   return (
     <div
       className={className ?? "prose prose-sm max-w-none"}
-      // eslint-disable-next-line react/no-danger -- sanitised above via DOMPurify
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

@@ -83,6 +83,18 @@ export const handlers = [
                 { name: "date", type: "date" },
               ],
             },
+            {
+              type: "AllergyIntolerance",
+              interaction: [{ code: "read" }, { code: "search-type" }],
+              searchParam: [
+                {
+                  name: "patient",
+                  type: "reference",
+                  documentation: "Who the sensitivity is for",
+                },
+                { name: "code", type: "token" },
+              ],
+            },
           ],
         },
       ],

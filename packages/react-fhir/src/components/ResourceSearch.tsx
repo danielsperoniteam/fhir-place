@@ -2,7 +2,6 @@ import type {
   CapabilityStatementRestResourceSearchParam,
   CapabilityStatement,
   ElementDefinition,
-  Reference,
 } from "fhir/r4";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -341,17 +340,17 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
 /* ---------- reference ---------- */
 
 /**
- * Reference search field: hands off to the autocomplete `ReferencePicker` so
- * users can find e.g. a Patient by name instead of pasting `Patient/123`. The
- * picker emits a {@link Reference}; we serialise just `Type/id` for the
- * underlying form value (FHIR servers accept both `?patient=Patient/123` and
- * `?patient=123`, but the qualified form survives multi-target params).
+ * Reference search field. Renders the raw `Type/id` text input — always
+ * editable so users who already know the id can paste it directly — and
+ * pairs it with a {@link ReferencePicker} for name-based lookup. Picking a
+ * result populates the text input; the input value is what gets submitted
+ * with the search.
  *
  * Targets come from `SearchParameter.target` when the server exposes them;
  * for the common single-target params used in clinical apps (`patient`,
- * `subject`, `practitioner`, etc.) we fall back to a baked-in mapping so the
- * picker still works against servers that don't surface SearchParameter.
- * When no targets can be derived we render the plain `Type/id` text input.
+ * `practitioner`, etc.) we fall back to a baked-in mapping so the picker
+ * still works against servers that don't surface SearchParameter. When no
+ * targets can be derived we drop the picker and keep just the text input.
  */
 function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps): ReactNode {
   const { data: spec } = useSearchParameter(base, param.name ?? "");
@@ -362,30 +361,35 @@ function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps
     return defaultReferenceTargets(param.name ?? "");
   }, [spec, param.name]);
 
+  const textInput = (
+    <input
+      type="text"
+      aria-label={param.name}
+      placeholder={inputPlaceholder(param.type)}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+    />
+  );
+
   if (targets.length === 0) {
-    return fieldWrapper(
-      <input
-        type="text"
-        aria-label={param.name}
-        placeholder={inputPlaceholder(param.type)}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
-      />,
-      param,
-      base,
-    );
+    return fieldWrapper(textInput, param, base);
   }
 
-  const ref: Reference | undefined = value ? { reference: value } : undefined;
-
   return fieldWrapper(
-    <ReferencePicker
-      targets={targets}
-      value={ref}
-      onChange={(r) => onChange(r?.reference ?? "")}
-      className="relative space-y-2"
-    />,
+    <div className="space-y-1">
+      {textInput}
+      <ReferencePicker
+        targets={targets}
+        // Always undefined so the picker stays in search mode; the raw text
+        // input above is the authoritative value the form submits.
+        value={undefined}
+        onChange={(r) => {
+          if (r?.reference) onChange(r.reference);
+        }}
+        className="relative space-y-2"
+      />
+    </div>,
     param,
     base,
   );

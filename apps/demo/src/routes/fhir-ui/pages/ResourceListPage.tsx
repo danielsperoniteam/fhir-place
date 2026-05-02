@@ -210,12 +210,17 @@ export function ResourceListPage() {
 
   const submitFilters = (next: SearchParams) => {
     const entries: Array<[string, string]> = [];
-    if (patientId) entries.push(["patient", patientId]);
     for (const [k, v] of Object.entries(next)) {
-      if (k === "patient") continue;
+      // In a Patient compartment view the URL owns the `patient` filter;
+      // ignore form-supplied patient values so users can't accidentally
+      // navigate themselves out of the compartment they came in on.
+      if (k === "patient" && patientId) continue;
       if (v === undefined || v === "" || v === null) continue;
       if (Array.isArray(v)) entries.push([k, v.join(",")]);
       else entries.push([k, String(v)]);
+    }
+    if (patientId && !entries.some(([k]) => k === "patient")) {
+      entries.unshift(["patient", patientId]);
     }
     setSearchParams(Object.fromEntries(entries), { replace: true });
   };

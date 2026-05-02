@@ -88,9 +88,10 @@ describe("ResourceSearch", () => {
     );
     // name, identifier, birthdate, gender, organization, address-city, phone, _id
     // - birthdate is a date input (no textbox role)
-    // - organization is a reference, rendered via ReferencePicker → searchbox role
-    // → 6 textboxes + 1 searchbox
-    expect(screen.getAllByRole("textbox").length).toBe(6);
+    // - organization is a reference: a Type/id text input + a name-search
+    //   picker (searchbox)
+    // → 7 textboxes + 1 searchbox
+    expect(screen.getAllByRole("textbox").length).toBe(7);
     expect(screen.getByRole("searchbox", { name: /search organization/i })).toBeInTheDocument();
     expect(screen.getByLabelText("birthdate")).toBeInTheDocument();
     expect(screen.getAllByPlaceholderText(/code or system\|code/i).length).toBeGreaterThan(0);
@@ -161,9 +162,9 @@ describe("ResourceSearch", () => {
     );
     expect(screen.getAllByRole("textbox").length).toBe(3);
     await user.click(screen.getByRole("button", { name: /show.*more parameters/i }));
-    // After expand: 6 textboxes (birthdate is a date input; organization is a
-    // reference picker rendered as a searchbox).
-    expect(screen.getAllByRole("textbox").length).toBe(6);
+    // After expand: 7 textboxes (birthdate is a date input; organization
+    // contributes one Type/id textbox plus a separate name-search box).
+    expect(screen.getAllByRole("textbox").length).toBe(7);
     expect(screen.getByRole("searchbox", { name: /search organization/i })).toBeInTheDocument();
   });
 
@@ -230,8 +231,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-describe("ResourceSearch — reference name search", () => {
-  it("searches Patients by name and submits the picked Patient/id", async () => {
+describe("ResourceSearch — reference filter", () => {
+  const stubPatientSearch = () => {
     server.use(
       http.get(`${BASE}/Patient`, ({ request }) => {
         const q = (new URL(request.url).searchParams.get("name") ?? "").toLowerCase();
@@ -249,6 +250,43 @@ describe("ResourceSearch — reference name search", () => {
         });
       }),
     );
+  };
+
+  it("renders both the raw Type/id text input and the name-search picker", () => {
+    wrap(
+      <ResourceSearch
+        resourceType="AllergyIntolerance"
+        capabilityStatement={allergyCap}
+      />,
+    );
+    // Text input (always visible) — `Type/id` placeholder identifies it.
+    expect(screen.getByRole("textbox", { name: /patient/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/type\/id/i)).toBeInTheDocument();
+    // Search-by-name picker.
+    expect(screen.getByRole("searchbox", { name: /search patient/i })).toBeInTheDocument();
+  });
+
+  it("submits the value when the user types Type/id directly", async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <ResourceSearch
+        resourceType="AllergyIntolerance"
+        capabilityStatement={allergyCap}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: /patient/i }),
+      "Patient/manual-id",
+    );
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenCalledWith({ patient: "Patient/manual-id" });
+  });
+
+  it("populates the text input from a name-search pick and submits it", async () => {
+    stubPatientSearch();
 
     const onSubmit = vi.fn();
     const user = userEvent.setup();
@@ -260,14 +298,52 @@ describe("ResourceSearch — reference name search", () => {
       />,
     );
 
-    const search = screen.getByRole("searchbox", { name: /search patient/i });
-    await user.type(search, "Lovelace");
+    const text = screen.getByRole("textbox", { name: /patient/i });
+    expect(text).toHaveValue("");
+
+    await user.type(
+      screen.getByRole("searchbox", { name: /search patient/i }),
+      "Lovelace",
+    );
     await waitFor(() =>
       expect(screen.getByRole("option", { name: /Ada Lovelace/ })).toBeInTheDocument(),
     );
     await user.click(screen.getByRole("option", { name: /Ada Lovelace/ }));
+
+    // The pick fills the always-visible Type/id text input.
+    expect(text).toHaveValue("Patient/p1");
+
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenCalledWith({ patient: "Patient/p1" });
+  });
+
+  it("lets the user overwrite the picked id by editing the text input afterwards", async () => {
+    stubPatientSearch();
+
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <ResourceSearch
+        resourceType="AllergyIntolerance"
+        capabilityStatement={allergyCap}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("searchbox", { name: /search patient/i }),
+      "Lovelace",
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /Ada Lovelace/ })).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("option", { name: /Ada Lovelace/ }));
+
+    const text = screen.getByRole("textbox", { name: /patient/i });
+    await user.clear(text);
+    await user.type(text, "Patient/different-id");
     await user.click(screen.getByRole("button", { name: /^search$/i }));
 
-    expect(onSubmit).toHaveBeenCalledWith({ patient: "Patient/p1" });
+    expect(onSubmit).toHaveBeenCalledWith({ patient: "Patient/different-id" });
   });
 });

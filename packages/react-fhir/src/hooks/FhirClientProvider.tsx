@@ -51,3 +51,15 @@ export function useTerminologyClient(): FhirClient {
   const data = useFhirClient();
   return tx ?? data;
 }
+
+/**
+ * Like {@link useTerminologyClient} but returns `null` when called outside a
+ * `FhirClientProvider`. Used by hooks whose query is conditionally disabled
+ * (e.g. `useValueSet(undefined)`) so components that render without a
+ * provider can still call the hook without throwing.
+ */
+export function useOptionalTerminologyClient(): FhirClient | null {
+  const tx = useContext(TerminologyClientContext);
+  const data = useContext(FhirClientContext);
+  return tx ?? data;
+}
