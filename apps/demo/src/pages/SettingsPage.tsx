@@ -5,8 +5,10 @@ import {
   type CustomHeader,
   type ServerConfig,
   loadActiveServerId,
+  loadAnthropicApiKey,
   loadServers,
   saveActiveServerId,
+  saveAnthropicApiKey,
   saveServers,
 } from "../config.js";
 import { probeFhirServer } from "../serverProbe.js";
@@ -31,6 +33,12 @@ export function SettingsPage() {
   const [servers, setServers] = useState<ServerConfig[]>(() => loadServers());
   const [activeId, setActiveId] = useState<string | null>(() => loadActiveServerId());
   const [testState, setTestState] = useState<Record<string, TestState>>({});
+  const [anthropicKey, setAnthropicKey] = useState<string>(() => loadAnthropicApiKey());
+
+  const updateAnthropicKey = (next: string) => {
+    setAnthropicKey(next);
+    saveAnthropicApiKey(next.trim());
+  };
 
   const persist = (next: ServerConfig[]) => {
     setServers(next);
@@ -118,6 +126,40 @@ export function SettingsPage() {
       >
         + Add server
       </button>
+
+      <section
+        className="space-y-3 rounded border border-slate-200 bg-white p-4 shadow-sm"
+        data-testid="anthropic-section"
+      >
+        <header className="space-y-1">
+          <h2 className="text-base font-semibold text-slate-900">
+            Natural language queries
+          </h2>
+          <p className="text-xs text-slate-600">
+            Paste an Anthropic API key to enable the{" "}
+            <Link to="/ask" className="underline">
+              Ask
+            </Link>{" "}
+            page, which converts plain-English questions into FHIR search URLs.
+            The key is stored in your browser only and is sent directly from the
+            browser to api.anthropic.com.
+          </p>
+        </header>
+        <label className="block space-y-1">
+          <span className="block text-xs font-medium text-slate-700">
+            Anthropic API key
+          </span>
+          <input
+            type="password"
+            value={anthropicKey}
+            onChange={(e) => updateAnthropicKey(e.target.value)}
+            placeholder="sk-ant-…"
+            className={inputClass}
+            autoComplete="off"
+            data-testid="anthropic-api-key"
+          />
+        </label>
+      </section>
     </div>
   );
 }

@@ -43,6 +43,26 @@ export const BUILTIN_SERVERS: ReadonlyArray<ServerConfig> = [
 
 const SERVERS_STORAGE_KEY = "fhir-place:servers";
 const ACTIVE_SERVER_STORAGE_KEY = "fhir-place:active-server";
+const ANTHROPIC_API_KEY_STORAGE_KEY = "fhir-place:anthropic-api-key";
+
+export const loadAnthropicApiKey = (): string => {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(ANTHROPIC_API_KEY_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+};
+
+export const saveAnthropicApiKey = (key: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    if (key) window.localStorage.setItem(ANTHROPIC_API_KEY_STORAGE_KEY, key);
+    else window.localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE_KEY);
+  } catch {
+    // localStorage unavailable
+  }
+};
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);

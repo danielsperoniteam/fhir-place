@@ -1,4 +1,5 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { AskPage } from "./pages/AskPage.js";
 import { PatientCreatePage } from "./pages/PatientCreatePage.js";
 import { PatientListPage } from "./pages/PatientListPage.js";
 import { ResourceDetailPage } from "./pages/ResourceDetailPage.js";
@@ -13,11 +14,14 @@ export function App() {
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white px-6 py-3">
         <div className="flex items-baseline justify-between gap-4">
-          <div>
+          <div className="flex items-baseline gap-4">
             <Link to="/" className="text-lg font-semibold text-slate-900">
               fhir-place
             </Link>
-            <span className="ml-2 text-sm text-slate-500">
+            <Link to="/ask" className="text-sm text-slate-600 underline">
+              Ask
+            </Link>
+            <span className="text-sm text-slate-500">
               backend-agnostic, spec-driven React for any FHIR REST API
             </span>
           </div>
@@ -33,6 +37,7 @@ export function App() {
       <main className="mx-auto max-w-5xl p-6">
         <Routes>
           <Route path="/" element={<Navigate to="/Patient" replace />} />
+          <Route path="/ask" element={<AskPage />} />
           <Route path="/Patient" element={<PatientListPage />} />
           <Route path="/Patient/new" element={<PatientCreatePage />} />
           <Route path="/settings" element={<SettingsPage />} />
