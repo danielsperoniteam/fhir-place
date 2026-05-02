@@ -16,7 +16,7 @@ import type {
   Reference,
 } from "fhir/r4";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   formatAddress,
   formatHumanName,
@@ -407,14 +407,84 @@ const AttachmentRenderer: FhirTypeRenderer = (value) => {
   return <span>{label}</span>;
 };
 
-const MetaRenderer: FhirTypeRenderer = (value) => {
+const MetaRenderer: FhirTypeRenderer = (value, ctx) => {
   const m = value as Meta;
-  const parts = [
+  const summaryParts = [
     m.versionId && `v${m.versionId}`,
     m.lastUpdated,
     m.source,
   ].filter(Boolean);
-  return <span className="text-slate-600">{parts.join(" · ")}</span>;
+  const fields: { label: string; node: ReactNode }[] = [];
+  if (m.versionId) {
+    fields.push({ label: "Version Id", node: <span>{m.versionId}</span> });
+  }
+  if (m.lastUpdated) {
+    fields.push({
+      label: "Last Updated",
+      node: <time dateTime={m.lastUpdated}>{m.lastUpdated}</time>,
+    });
+  }
+  if (m.source) {
+    fields.push({ label: "Source", node: <span className="break-all">{m.source}</span> });
+  }
+  if (m.profile?.length) {
+    fields.push({
+      label: "Profile",
+      node: (
+        <ul className="space-y-1">
+          {m.profile.map((p, i) => (
+            <li key={`${p}-${i}`} className="break-all">
+              {Uri_(p, ctx)}
+            </li>
+          ))}
+        </ul>
+      ),
+    });
+  }
+  if (m.security?.length) {
+    fields.push({
+      label: "Security",
+      node: (
+        <ul className="space-y-1">
+          {m.security.map((c, i) => (
+            <li key={`${c.system ?? ""}#${c.code ?? ""}#${i}`}>{CodingRenderer(c, ctx)}</li>
+          ))}
+        </ul>
+      ),
+    });
+  }
+  if (m.tag?.length) {
+    fields.push({
+      label: "Tag",
+      node: (
+        <ul className="space-y-1">
+          {m.tag.map((c, i) => (
+            <li key={`${c.system ?? ""}#${c.code ?? ""}#${i}`}>{CodingRenderer(c, ctx)}</li>
+          ))}
+        </ul>
+      ),
+    });
+  }
+
+  if (fields.length === 0) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  return (
+    <details className="group">
+      <summary className="cursor-pointer text-slate-600 marker:text-slate-400">
+        {summaryParts.join(" · ")}
+      </summary>
+      <dl className="mt-2 grid grid-cols-1 gap-x-3 gap-y-1 border-l-2 border-slate-200 pl-3 sm:grid-cols-[minmax(6rem,1fr)_3fr]">
+        {fields.map((f) => (
+          <Fragment key={f.label}>
+            <dt className="text-xs font-medium text-slate-500">{f.label}</dt>
+            <dd className="text-sm">{f.node}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </details>
+  );
 };
 
 const AnnotationRenderer: FhirTypeRenderer = (value) => {

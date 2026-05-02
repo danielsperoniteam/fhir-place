@@ -86,4 +86,14 @@ export const PATIENT_COMPARTMENT: Array<
       occurrenceDateTime: "Administered",
     },
   },
+  {
+    resourceType: "Goal",
+    title: "Goals",
+    columns: ["lifecycleStatus", "description.text", "target.dueDate"],
+    columnLabels: {
+      lifecycleStatus: "Status",
+      "description.text": "Goal",
+      "target.dueDate": "Target Date",
+    },
+  },
 ];

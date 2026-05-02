@@ -1,4 +1,4 @@
-import type { CodeableConcept } from "fhir/r4";
+import type { CodeableConcept, Meta } from "fhir/r4";
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
@@ -170,6 +170,71 @@ describe("CodeableConcept renderer", () => {
     };
     const { container } = render(<>{renderer(cc, ctx)}</>);
     expect(container.querySelector("button")).toBeNull();
+  });
+});
+
+describe("Meta renderer", () => {
+  const renderer = defaultTypeRenderers.Meta!;
+  const ctx = { path: "Patient.meta", typeCode: "Meta" };
+
+  it("renders a summary line with versionId, lastUpdated, and source", () => {
+    const m: Meta = {
+      versionId: "1",
+      lastUpdated: "2026-02-10T17:48:37.700+00:00",
+      source: "#wiWDxr1Jk1z1zMIZ",
+    };
+    const { container } = render(<>{renderer(m, ctx)}</>);
+    const summary = container.querySelector("summary");
+    expect(summary).not.toBeNull();
+    expect(summary!.textContent).toContain("v1");
+    expect(summary!.textContent).toContain("2026-02-10T17:48:37.700+00:00");
+    expect(summary!.textContent).toContain("#wiWDxr1Jk1z1zMIZ");
+  });
+
+  it("exposes one row per Meta field inside the expandable", () => {
+    const m: Meta = {
+      versionId: "3",
+      lastUpdated: "2026-02-10T17:48:37.700+00:00",
+      source: "#abc",
+      profile: ["http://hl7.org/fhir/StructureDefinition/Patient"],
+      security: [{ system: "http://example.org/sec", code: "TOP" }],
+      tag: [{ system: "http://example.org/tag", code: "demo" }],
+    };
+    const { container } = render(<>{renderer(m, ctx)}</>);
+    const labels = Array.from(container.querySelectorAll("dt")).map((n) => n.textContent);
+    expect(labels).toEqual([
+      "Version Id",
+      "Last Updated",
+      "Source",
+      "Profile",
+      "Security",
+      "Tag",
+    ]);
+    expect(container.textContent).toContain("http://hl7.org/fhir/StructureDefinition/Patient");
+    expect(container.textContent).toContain("TOP");
+    expect(container.textContent).toContain("demo");
+  });
+
+  it("toggles open and closed via the summary element", () => {
+    const m: Meta = { versionId: "1", lastUpdated: "2026-02-10T17:48:37.700+00:00" };
+    const { container } = render(<>{renderer(m, ctx)}</>);
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    fireEvent.click(container.querySelector("summary")!);
+    expect(details.open).toBe(true);
+  });
+
+  it("hides rows for fields that are absent", () => {
+    const m: Meta = { versionId: "1" };
+    const { container } = render(<>{renderer(m, ctx)}</>);
+    const labels = Array.from(container.querySelectorAll("dt")).map((n) => n.textContent);
+    expect(labels).toEqual(["Version Id"]);
+  });
+
+  it("renders an em-dash when there are no fields", () => {
+    const { container } = render(<>{renderer({} as Meta, ctx)}</>);
+    expect(container.querySelector("details")).toBeNull();
+    expect(container.textContent).toBe("—");
   });
 });
 

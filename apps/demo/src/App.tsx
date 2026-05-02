@@ -23,6 +23,9 @@ export function App() {
               <Link to="/fhir-ui/Patient" className="text-slate-700 underline">
                 FHIR UI
               </Link>
+              <Link to="/fhir-ui/Goal" className="text-slate-700 underline">
+                Goals
+              </Link>
               <Link to="/cql-runner" className="text-slate-700 underline">
                 CQL Runner
               </Link>

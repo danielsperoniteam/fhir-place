@@ -1,5 +1,6 @@
 import type { Reference, Resource } from "fhir/r4";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { SearchParams } from "../client/types.js";
 import { useSearch } from "../hooks/queries.js";
 import { formatReferenceLabel } from "../structure/format.js";
 
@@ -17,6 +18,14 @@ export interface ReferencePickerProps {
   className?: string;
 }
 
+/** Resource types that support the `birthdate` search parameter in FHIR R4. */
+const birthdateTypes = new Set([
+  "Patient",
+  "Practitioner",
+  "RelatedPerson",
+  "Person",
+]);
+
 /**
  * Debounced search-and-pick picker for FHIR References. Pairs with the
  * library's existing `<ResourceEditor>` by replacing the raw `Type/id` text
@@ -29,6 +38,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
   );
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [birthdate, setBirthdate] = useState("");
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -37,13 +47,22 @@ export function ReferencePicker(props: ReferencePickerProps) {
   }, [query, debounceMs]);
 
   const searchField = props.searchParam ?? defaultSearchParamFor(selectedType);
+  const supportsBirthdate = birthdateTypes.has(selectedType);
+  const activeBirthdate = supportsBirthdate ? birthdate : "";
+  const hasFilter = Boolean(debouncedQuery) || Boolean(activeBirthdate);
+
+  const searchParams = useMemo<SearchParams | undefined>(() => {
+    if (!hasFilter) return undefined;
+    const p: SearchParams = { _count: limit };
+    if (debouncedQuery) p[searchField] = debouncedQuery;
+    if (activeBirthdate) p.birthdate = activeBirthdate;
+    return p;
+  }, [hasFilter, debouncedQuery, searchField, activeBirthdate, limit]);
 
   const { data, isFetching } = useSearch<Resource>(
     selectedType,
-    debouncedQuery
-      ? { [searchField]: debouncedQuery, _count: limit }
-      : undefined,
-    { enabled: Boolean(debouncedQuery) },
+    searchParams,
+    { enabled: hasFilter },
   );
 
   const results = useMemo(
@@ -59,6 +78,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
     });
     setIsOpen(false);
     setQuery("");
+    setBirthdate("");
   };
 
   return (
@@ -84,7 +104,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
           </button>
         </div>
       ) : (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {targets.length > 1 && (
             <select
               aria-label="target type"
@@ -109,12 +129,26 @@ export function ReferencePicker(props: ReferencePickerProps) {
               setIsOpen(true);
             }}
             onFocus={() => setIsOpen(true)}
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+            className="min-w-[12rem] flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
           />
+          {supportsBirthdate && (
+            <input
+              type="date"
+              aria-label="Birth date"
+              title="Filter by date of birth (optional)"
+              value={birthdate}
+              onChange={(e) => {
+                setBirthdate(e.target.value);
+                setIsOpen(true);
+              }}
+              onFocus={() => setIsOpen(true)}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+            />
+          )}
         </div>
       )}
 
-      {!value?.reference && isOpen && debouncedQuery && (
+      {!value?.reference && isOpen && hasFilter && (
         <ul
           role="listbox"
           className="absolute left-2 right-2 z-10 max-h-64 overflow-auto rounded border border-slate-200 bg-white shadow-lg"

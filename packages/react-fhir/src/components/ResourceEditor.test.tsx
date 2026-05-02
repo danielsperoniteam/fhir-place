@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Patient } from "fhir/r4";
+import type { Observation, Patient } from "fhir/r4";
 import { describe, expect, it, vi } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
+import { ObservationStructureDefinition } from "../structure/core/Observation.js";
 import { ResourceEditor } from "./ResourceEditor.js";
 
 const wrap = (ui: React.ReactElement) => {
@@ -162,6 +163,34 @@ describe("ResourceEditor", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /saving/i })).toBeDisabled();
+  });
+
+  it("uses the path-based override for Observation.dataAbsentReason instead of the generic CodeableConcept input", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const obs: Observation = {
+      resourceType: "Observation",
+      status: "final",
+      code: { text: "BP" },
+    };
+    wrap(
+      <ResourceEditor
+        resource={obs}
+        structureDefinition={ObservationStructureDefinition}
+        onChange={onChange}
+      />,
+    );
+    // Before the toggle is clicked, the raw CodeableConcept fields for
+    // dataAbsentReason should not be visible — only the trigger button is.
+    expect(
+      screen.getByRole("button", { name: /mark result as missing/i }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /mark result as missing/i }));
+    const last = onChange.mock.calls.at(-1)?.[0] as Observation;
+    expect(last.dataAbsentReason?.coding?.[0]).toMatchObject({
+      system: "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+      code: "unknown",
+    });
   });
 
   it("falls back to JSON textarea for datatypes without a built-in input", () => {
