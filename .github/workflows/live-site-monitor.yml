@@ -111,7 +111,7 @@ jobs:
             }
 
             for (const g of grouped.values()) {
-              const issueTitle = `[live-monitor] ${g.title}`;
+              const issueTitle = `[demo] ${g.title}`;
               const body = [
                 `**Failed in run:** ${runUrl}`,
                 `**Affected projects:** ${g.projects.join(', ')}`,

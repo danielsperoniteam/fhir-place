@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
  * Live-site smoke tests. Run nightly by `.github/workflows/live-site-monitor.yml`
  * against the deployed demo, hitting real HAPI. Failures auto-file GitHub
  * issues — keep test names short and stable so the dedupe logic
- * (`[live-monitor] <test name>`) works.
+ * (`[demo] <test name>`) works.
  *
  * Tests should be data-shape tolerant — HAPI is a shared public server, the
  * specific patients there change. Assert structure and behavior, not literal
