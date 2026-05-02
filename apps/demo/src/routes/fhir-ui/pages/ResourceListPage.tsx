@@ -576,24 +576,25 @@ export function ResourceListPage() {
           )
         )}
 
-        {/* Load more */}
-        {hasNextPage && (
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-            <button
-              onClick={() => fetchNextPage()}
-              disabled={isFetchingNextPage}
-              data-testid="load-more"
-              style={{
-                ...ccBtn("secondary"),
-                fontSize: 12,
-                opacity: isFetchingNextPage ? 0.6 : 1,
-              }}
-            >
-              {isFetchingNextPage ? "Loading…" : "Load more"}
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Load more */}
+      {hasNextPage && (
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 24px" }}>
+          <button
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            data-testid="load-more"
+            style={{
+              ...ccBtn("secondary"),
+              fontSize: 12,
+              opacity: isFetchingNextPage ? 0.6 : 1,
+            }}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
