@@ -38,7 +38,6 @@ export function ReferencePicker(props: ReferencePickerProps) {
   );
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [birthdate, setBirthdate] = useState("");
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -47,17 +46,14 @@ export function ReferencePicker(props: ReferencePickerProps) {
   }, [query, debounceMs]);
 
   const searchField = props.searchParam ?? defaultSearchParamFor(selectedType);
-  const supportsBirthdate = birthdateTypes.has(selectedType);
-  const activeBirthdate = supportsBirthdate ? birthdate : "";
-  const hasFilter = Boolean(debouncedQuery) || Boolean(activeBirthdate);
+  const hasFilter = Boolean(debouncedQuery);
 
   const searchParams = useMemo<SearchParams | undefined>(() => {
     if (!hasFilter) return undefined;
     const p: SearchParams = { _count: limit };
     if (debouncedQuery) p[searchField] = debouncedQuery;
-    if (activeBirthdate) p.birthdate = activeBirthdate;
     return p;
-  }, [hasFilter, debouncedQuery, searchField, activeBirthdate, limit]);
+  }, [hasFilter, debouncedQuery, searchField, limit]);
 
   const { data, isFetching } = useSearch<Resource>(
     selectedType,
@@ -78,7 +74,6 @@ export function ReferencePicker(props: ReferencePickerProps) {
     });
     setIsOpen(false);
     setQuery("");
-    setBirthdate("");
   };
 
   return (
@@ -138,28 +133,6 @@ export function ReferencePicker(props: ReferencePickerProps) {
             name="reference-picker-search"
             className="min-w-[12rem] flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
           />
-          {supportsBirthdate && (
-            // Visible "DOB" prefix because empty `type="date"` inputs render
-            // as a blank box on iOS, and an unlabeled empty box next to the
-            // search field reads as broken UI rather than an optional filter.
-            <label
-              className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500 shadow-sm focus-within:border-blue-500"
-              title="Filter by date of birth (optional)"
-            >
-              <span>DOB</span>
-              <input
-                type="date"
-                aria-label="Birth date"
-                value={birthdate}
-                onChange={(e) => {
-                  setBirthdate(e.target.value);
-                  setIsOpen(true);
-                }}
-                onFocus={() => setIsOpen(true)}
-                className="border-0 bg-transparent p-0 text-sm text-slate-700 focus:outline-none"
-              />
-            </label>
-          )}
         </div>
       )}
 
