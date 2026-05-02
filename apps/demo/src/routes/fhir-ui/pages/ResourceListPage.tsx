@@ -7,7 +7,7 @@ import {
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
 import type { Resource } from "fhir/r4";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
 import { PatientRowCounts } from "../../../components/PatientRowCounts.js";
@@ -17,6 +17,7 @@ import {
   isTopResourceType,
   type ResourceListColumn,
   type ResourceListConfig,
+  type SortOption,
 } from "../../../resourceListConfig.js";
 
 type Layout = "list" | "table";
@@ -269,6 +270,23 @@ export function ResourceListPage() {
         onSubmit={submitFilters}
       />
 
+      {config?.sortOptions && config.sortOptions.length > 0 && (
+        <SortPicker
+          options={config.sortOptions}
+          value={searchParams.get("_sort") ?? undefined}
+          onChange={(param) => {
+            const entries: Array<[string, string]> = [];
+            if (patientId) entries.push(["patient", patientId]);
+            for (const [k, v] of searchParams.entries()) {
+              if (k === "patient" || k === "_sort") continue;
+              entries.push([k, v]);
+            }
+            if (param) entries.push(["_sort", param]);
+            setSearchParams(Object.fromEntries(entries), { replace: true });
+          }}
+        />
+      )}
+
       <SearchRequestPreview
         baseUrl={client.baseUrl}
         resourceType={resourceType}
@@ -378,6 +396,86 @@ export function ResourceListPage() {
           >
             {isFetchingNextPage ? "Loading…" : "Load more"}
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SortPickerProps {
+  options: SortOption[];
+  value: string | undefined;
+  onChange: (param: string | undefined) => void;
+}
+
+function SortPicker({ options, value, onChange }: SortPickerProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const activeLabel = options.find((o) => o.param === value)?.label;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm shadow-sm ${
+          value
+            ? "border-blue-300 bg-blue-50 text-blue-700"
+            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+        }`}
+      >
+        <span>Sort{activeLabel ? `: ${activeLabel}` : ""}</span>
+        <svg
+          aria-hidden="true"
+          className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+          viewBox="0 0 16 16"
+          fill="currentColor"
+        >
+          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-10 mt-1 w-max rounded border border-slate-200 bg-white p-2 shadow-md">
+          <div className="flex flex-wrap gap-1.5">
+            {options.map((opt) => (
+              <button
+                key={opt.param}
+                type="button"
+                onClick={() => {
+                  onChange(value === opt.param ? undefined : opt.param);
+                  setOpen(false);
+                }}
+                className={`rounded px-2.5 py-1 text-sm font-medium transition-colors ${
+                  value === opt.param
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(undefined); setOpen(false); }}
+              className="mt-2 w-full rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
+            >
+              Clear sort
+            </button>
+          )}
         </div>
       )}
     </div>
