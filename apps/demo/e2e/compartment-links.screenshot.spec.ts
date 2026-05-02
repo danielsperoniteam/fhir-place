@@ -63,13 +63,14 @@ test.describe("Patient compartment links + index pages", () => {
     await expect(page).toHaveURL(/\/Patient\/ada$/);
   });
 
-  test("unscoped index page (no ?patient=) shows the all-patients link", async ({
+  test("unscoped index page (no ?patient=) shows the sidebar and no compartment scope", async ({
     page,
   }) => {
     await page.goto("/Condition");
-    await expect(
-      page.getByRole("link", { name: /all patients/i }),
-    ).toBeVisible();
+    // The FHIR UI sidebar provides cross-resource navigation in place of
+    // the old per-page "Back to patients" affordance.
+    await expect(page.getByTestId("fhir-ui-sidebar")).toBeVisible();
+    await expect(page.getByTestId("sidebar-link-Patient")).toBeVisible();
     await expect(page.getByText(/scoped to/i)).not.toBeVisible();
   });
 });
