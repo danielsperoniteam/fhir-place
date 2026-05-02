@@ -174,19 +174,15 @@ export function ReferencePicker(props: ReferencePickerProps) {
                   type="button"
                   role="option"
                   aria-selected={false}
-                  // `onPointerDown` (not `onClick`) so selection commits before
-                  // the search input blurs. iOS Safari reflows the page when
-                  // the keyboard dismisses on blur, which moves the option out
-                  // from under the user's finger and swallows the tap.
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    pick(r);
-                  }}
-                  // Keyboard activation (Enter/Space on the focused button)
-                  // never produces a pointerdown — `e.detail === 0` flags it.
-                  onClick={(e) => {
-                    if (e.detail === 0) pick(r);
-                  }}
+                  // `mousedown.preventDefault()` keeps the search input
+                  // focused — without that, the input blurs on tap, iOS
+                  // dismisses the keyboard, the page reflows, and the click
+                  // event lands on whatever ends up under the user's finger.
+                  // The actual selection runs from `onClick` so a touch that
+                  // turns into a scroll/drag (no click event from iOS) doesn't
+                  // accidentally pick the row the finger started on.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(r)}
                   className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 >
                   <span className="min-w-0 flex-1">

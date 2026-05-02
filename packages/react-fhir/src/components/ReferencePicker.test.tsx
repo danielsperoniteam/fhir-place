@@ -81,7 +81,11 @@ describe("ReferencePicker", () => {
     });
   });
 
-  it("commits the selection on pointerdown so iOS taps don't get lost to input blur", async () => {
+  it("does not pick on initial touch so a long dropdown remains scrollable", async () => {
+    // Codex review on #202: committing on pointerdown picks the row the
+    // user's finger lands on before they can drag to scroll. Selection now
+    // happens on `click`, which iOS suppresses when a touch resolves into a
+    // scroll gesture.
     server.use(
       http.get(`${BASE}/Patient`, () =>
         HttpResponse.json({
@@ -102,14 +106,40 @@ describe("ReferencePicker", () => {
     await user.type(screen.getByRole("searchbox", { name: /search patient/i }), "L");
     const option = await screen.findByRole("option", { name: /Ada Lovelace/ });
 
-    // Simulate the iOS sequence: pointerdown on the option fires first, BEFORE
-    // any click — emulating the real-world failure mode where the subsequent
-    // tap event was never delivered. pick() must already have run.
+    // pointerdown only — no follow-up click. Mirrors a touch that became a
+    // scroll. `pick()` must NOT run.
     await user.pointer({ keys: "[TouchA>]", target: option });
-    expect(onChange).toHaveBeenCalledWith({
-      reference: "Patient/p1",
-      display: "Ada Lovelace",
-    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("preserves search-input focus when an option is tapped", async () => {
+    // The `mousedown.preventDefault()` keeps focus on the search input so iOS
+    // doesn't dismiss the keyboard between mousedown and click — that reflow
+    // is what made taps land on the wrong row originally.
+    server.use(
+      http.get(`${BASE}/Patient`, () =>
+        HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: patients.map((r) => ({ resource: r })),
+        }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <ReferencePicker targets={["Patient"]} value={undefined} onChange={() => {}} debounceMs={0} />,
+      { wrapper: wrap() },
+    );
+
+    const input = screen.getByRole("searchbox", { name: /search patient/i });
+    await user.type(input, "L");
+    const option = await screen.findByRole("option", { name: /Ada Lovelace/ });
+    expect(input).toHaveFocus();
+
+    // Mousedown on the option should NOT move focus off the input.
+    await user.pointer({ keys: "[MouseLeft>]", target: option });
+    expect(input).toHaveFocus();
   });
 
   it("shows a clear button for an already-selected reference and resets on click", async () => {
