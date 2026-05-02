@@ -22,26 +22,33 @@ import {
   useStructureDefinition,
   useUpdateResource,
   useValueSet,
+  useValueSetExpansion,
 } from "./queries.js";
 
 const BASE = "https://fhir.example.test/fhir";
+const TX_BASE = "https://tx.example.test/r4";
 const server = setupServer();
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-const mkWrapper = () => {
+const mkWrapper = (opts?: { terminologyBaseUrl?: string }) => {
   const client = new FetchFhirClient({ baseUrl: BASE });
+  const terminologyClient = opts?.terminologyBaseUrl
+    ? new FetchFhirClient({ baseUrl: opts.terminologyBaseUrl })
+    : undefined;
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <FhirClientProvider client={client}>{children}</FhirClientProvider>
+      <FhirClientProvider client={client} terminologyClient={terminologyClient}>
+        {children}
+      </FhirClientProvider>
     </QueryClientProvider>
   );
-  return { wrapper, qc, client };
+  return { wrapper, qc, client, terminologyClient };
 };
 
 describe("query hooks", () => {
@@ -288,6 +295,185 @@ describe("query hooks", () => {
       const { wrapper } = mkWrapper();
       const { result } = renderHook(() => useValueSet(undefined), { wrapper });
       expect(result.current.fetchStatus).toBe("idle");
+    });
+
+    it("routes $expand to the terminology client when one is provided", async () => {
+      const url = "http://snomed.info/sct?fhir_vs=isa/123037004";
+      const dataExpand = vi.fn();
+      const txExpand = vi.fn();
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, () => {
+          dataExpand();
+          return HttpResponse.json({ resourceType: "OperationOutcome" }, { status: 501 });
+        }),
+        http.get(`${TX_BASE}/ValueSet/$expand`, ({ request }) => {
+          txExpand();
+          expect(new URL(request.url).searchParams.get("url")).toBe(url);
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [{ system: "http://snomed.info/sct", code: "1" }],
+            },
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper({ terminologyBaseUrl: TX_BASE });
+      const { result } = renderHook(() => useValueSet(url), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(txExpand).toHaveBeenCalled();
+      expect(dataExpand).not.toHaveBeenCalled();
+      expect(result.current.data?.expansion?.contains).toHaveLength(1);
+    });
+
+    it("falls through to the data client when no terminology client is provided", async () => {
+      const url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      const dataExpand = vi.fn();
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, () => {
+          dataExpand();
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [{ system: "s", code: "male" }],
+            },
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => useValueSet(url), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(dataExpand).toHaveBeenCalled();
+    });
+
+    it("scopes the query cache by the terminology client's baseUrl", async () => {
+      const url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      server.use(
+        http.get(`${TX_BASE}/ValueSet/$expand`, () =>
+          HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [],
+            },
+          }),
+        ),
+      );
+      const { wrapper, qc } = mkWrapper({ terminologyBaseUrl: TX_BASE });
+      const { result } = renderHook(() => useValueSet(url), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const keys = qc.getQueryCache().getAll().map((q) => q.queryKey);
+      const valueSetKey = keys.find(
+        (k) => Array.isArray(k) && k.includes("ValueSet"),
+      );
+      expect(valueSetKey).toBeDefined();
+      expect((valueSetKey as readonly unknown[])[1]).toBe(TX_BASE);
+      expect((valueSetKey as readonly unknown[])[1]).not.toBe(BASE);
+    });
+  });
+
+  describe("useValueSetExpansion", () => {
+    const url = "http://snomed.info/sct?fhir_vs=isa/123037004";
+
+    it("hits the terminology client's base URL when one is provided", async () => {
+      const dataExpand = vi.fn();
+      const txExpand = vi.fn();
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, () => {
+          dataExpand();
+          return HttpResponse.json({ resourceType: "OperationOutcome" }, { status: 501 });
+        }),
+        http.get(`${TX_BASE}/ValueSet/$expand`, ({ request }) => {
+          txExpand();
+          const params = new URL(request.url).searchParams;
+          expect(params.get("url")).toBe(url);
+          expect(params.get("filter")).toBe("body");
+          expect(params.get("count")).toBe("20");
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [{ system: "http://snomed.info/sct", code: "1", display: "body part" }],
+            },
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper({ terminologyBaseUrl: TX_BASE });
+      const { result } = renderHook(() => useValueSetExpansion(url, "body"), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(txExpand).toHaveBeenCalled();
+      expect(dataExpand).not.toHaveBeenCalled();
+      expect(result.current.data?.expansion?.contains).toHaveLength(1);
+    });
+
+    it("falls through to the data client when no terminology client is provided", async () => {
+      const dataExpand = vi.fn();
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, () => {
+          dataExpand();
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [],
+            },
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => useValueSetExpansion(url, "anything"), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(dataExpand).toHaveBeenCalled();
+    });
+
+    it("scopes the cache key by the terminology client's baseUrl, not the data client's", async () => {
+      server.use(
+        http.get(`${TX_BASE}/ValueSet/$expand`, () =>
+          HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [],
+            },
+          }),
+        ),
+      );
+      const { wrapper, qc } = mkWrapper({ terminologyBaseUrl: TX_BASE });
+      const { result } = renderHook(() => useValueSetExpansion(url, "x"), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const keys = qc.getQueryCache().getAll().map((q) => q.queryKey);
+      const expansionKey = keys.find(
+        (k) =>
+          Array.isArray(k) && k.includes("ValueSet") && k.includes("expand"),
+      );
+      expect(expansionKey).toBeDefined();
+      expect((expansionKey as readonly unknown[])[1]).toBe(TX_BASE);
+      expect((expansionKey as readonly unknown[])[1]).not.toBe(BASE);
     });
   });
 

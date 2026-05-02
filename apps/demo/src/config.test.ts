@@ -236,3 +236,39 @@ describe("resolveActiveServer", () => {
     expect(resolveActiveServer().id).toBe(BUILTIN_SERVERS[0]!.id);
   });
 });
+
+describe("terminology base URL persistence", () => {
+  it("returns the default tx.fhir.org URL when storage is empty", async () => {
+    const { DEFAULT_TERMINOLOGY_BASE_URL, loadStoredTerminologyBaseUrl } =
+      await import("./config.js");
+    expect(DEFAULT_TERMINOLOGY_BASE_URL).toBe("https://tx.fhir.org/r4");
+    expect(loadStoredTerminologyBaseUrl()).toBeNull();
+  });
+
+  it("round-trips through localStorage via save/load", async () => {
+    const { loadStoredTerminologyBaseUrl, saveTerminologyBaseUrl } = await import(
+      "./config.js"
+    );
+    saveTerminologyBaseUrl("https://ontoserver.example/fhir");
+    expect(loadStoredTerminologyBaseUrl()).toBe("https://ontoserver.example/fhir");
+  });
+
+  it("clears storage when an empty value is saved (revert to default)", async () => {
+    const { loadStoredTerminologyBaseUrl, saveTerminologyBaseUrl } = await import(
+      "./config.js"
+    );
+    saveTerminologyBaseUrl("https://ontoserver.example/fhir");
+    saveTerminologyBaseUrl("");
+    expect(loadStoredTerminologyBaseUrl()).toBeNull();
+  });
+
+  it("trims whitespace before storing, treats whitespace-only as clear", async () => {
+    const { loadStoredTerminologyBaseUrl, saveTerminologyBaseUrl } = await import(
+      "./config.js"
+    );
+    saveTerminologyBaseUrl("  https://x.example/fhir  ");
+    expect(loadStoredTerminologyBaseUrl()).toBe("https://x.example/fhir");
+    saveTerminologyBaseUrl("   ");
+    expect(loadStoredTerminologyBaseUrl()).toBeNull();
+  });
+});

@@ -58,6 +58,7 @@ export const BUILTIN_SERVERS: ReadonlyArray<ServerConfig> = [
 const SERVERS_STORAGE_KEY = "fhir-place:servers";
 const ACTIVE_SERVER_STORAGE_KEY = "fhir-place:active-server";
 const ANTHROPIC_API_KEY_STORAGE_KEY = "fhir-place:anthropic-api-key";
+const TERMINOLOGY_BASE_URL_STORAGE_KEY = "fhir-place:terminology-base-url";
 
 export const loadAnthropicApiKey = (): string => {
   if (typeof window === "undefined") return "";
@@ -224,6 +225,54 @@ export const buildRequestHeaders = (server: ServerConfig): Record<string, string
   }
   return headers;
 };
+
+/**
+ * Separate terminology server for ValueSet/$expand. Most data servers (HAPI
+ * default, Aidbox without a SNOMED license, Medplum) cannot expand SNOMED,
+ * LOINC, ICD-10, or BCP-47, so dropdowns bound to those code systems return
+ * 4xx/5xx and stay empty. `tx.fhir.org` is the HL7 community terminology
+ * service, allows browser CORS, and covers the common bindings.
+ *
+ * Note: embedding this URL does NOT grant any user a SNOMED license. Self-
+ * hosted production deployments must use a licensed Ontoserver/Snowstorm and
+ * a CORS proxy. See https://www.hl7.org/fhir/snomedct.html and IHTSDO's
+ * licensing docs.
+ */
+export const DEFAULT_TERMINOLOGY_BASE_URL = "https://tx.fhir.org/r4";
+
+export const loadStoredTerminologyBaseUrl = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = window.localStorage.getItem(TERMINOLOGY_BASE_URL_STORAGE_KEY);
+    return v && v.trim() ? v.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveTerminologyBaseUrl = (url: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    const trimmed = url.trim();
+    if (trimmed) {
+      window.localStorage.setItem(TERMINOLOGY_BASE_URL_STORAGE_KEY, trimmed);
+    } else {
+      window.localStorage.removeItem(TERMINOLOGY_BASE_URL_STORAGE_KEY);
+    }
+  } catch {
+    // localStorage unavailable; changes simply don't persist.
+  }
+};
+
+const TERMINOLOGY_BASE_URL_RESOLVED: string = (() => {
+  if (USE_MOCK) return FHIR_BASE_URL;
+  if (import.meta.env.VITE_TERMINOLOGY_BASE_URL) {
+    return import.meta.env.VITE_TERMINOLOGY_BASE_URL;
+  }
+  return loadStoredTerminologyBaseUrl() ?? DEFAULT_TERMINOLOGY_BASE_URL;
+})();
+
+export const TERMINOLOGY_BASE_URL: string = TERMINOLOGY_BASE_URL_RESOLVED;
 
 export const ROUTER_BASENAME: string = BASE.replace(/\/$/, "") || "/";
 

@@ -8,6 +8,7 @@ import {
   ACTIVE_SERVER_CONFIG,
   FHIR_BASE_URL,
   ROUTER_BASENAME,
+  TERMINOLOGY_BASE_URL,
   USE_HASH_ROUTER,
   USE_MOCK,
   buildRequestHeaders,
@@ -40,6 +41,16 @@ const fhirClient = new FetchFhirClient({
   baseUrl: FHIR_BASE_URL,
   headers: buildRequestHeaders(ACTIVE_SERVER_CONFIG),
 });
+
+// Terminology calls (ValueSet/$expand for SNOMED, LOINC, ICD-10, BCP-47…)
+// route to a separate client so they hit a SNOMED-capable server independent
+// of the data server. Falls through to the data client when the URL matches —
+// this is the case under MSW, and lets users opt out of the split by clearing
+// the field on the Settings page.
+const terminologyClient =
+  TERMINOLOGY_BASE_URL && TERMINOLOGY_BASE_URL !== FHIR_BASE_URL
+    ? new FetchFhirClient({ baseUrl: TERMINOLOGY_BASE_URL })
+    : undefined;
 
 async function bootstrap() {
   if (USE_MOCK) {
@@ -90,7 +101,7 @@ async function bootstrap() {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
-        <FhirClientProvider client={fhirClient}>
+        <FhirClientProvider client={fhirClient} terminologyClient={terminologyClient}>
           <Router {...routerProps}>
             <App />
           </Router>

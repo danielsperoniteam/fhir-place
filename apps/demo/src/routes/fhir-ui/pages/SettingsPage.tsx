@@ -2,15 +2,18 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ACTIVE_SERVER_CONFIG,
+  DEFAULT_TERMINOLOGY_BASE_URL,
   type AuthMode,
   type CustomHeader,
   type ServerConfig,
   loadActiveServerId,
   loadAnthropicApiKey,
   loadServers,
+  loadStoredTerminologyBaseUrl,
   saveActiveServerId,
   saveAnthropicApiKey,
   saveServers,
+  saveTerminologyBaseUrl,
 } from "../../../config.js";
 import { probeFhirServer } from "../../../serverProbe.js";
 
@@ -37,6 +40,14 @@ export function SettingsPage() {
   );
   const [testState, setTestState] = useState<Record<string, TestState>>({});
   const [anthropicKey, setAnthropicKey] = useState<string>(() => loadAnthropicApiKey());
+  const [terminologyUrl, setTerminologyUrl] = useState<string>(
+    () => loadStoredTerminologyBaseUrl() ?? "",
+  );
+
+  const updateTerminologyUrl = (next: string) => {
+    setTerminologyUrl(next);
+    saveTerminologyBaseUrl(next);
+  };
 
   const updateAnthropicKey = (next: string) => {
     setAnthropicKey(next);
@@ -131,6 +142,43 @@ export function SettingsPage() {
       >
         + Add server
       </button>
+
+      <section
+        className="space-y-3 rounded border border-slate-200 bg-white p-4 shadow-sm"
+        data-testid="terminology-section"
+      >
+        <header className="space-y-1">
+          <h2 className="text-base font-semibold text-slate-900">
+            Terminology server
+          </h2>
+          <p className="text-xs text-slate-600">
+            Routes <code>ValueSet/$expand</code> to a separate server so SNOMED,
+            LOINC, ICD-10 and BCP-47 dropdowns populate even when the data
+            server can't expand them. Defaults to{" "}
+            <code>{DEFAULT_TERMINOLOGY_BASE_URL}</code> (HL7's community service)
+            when blank. Reload after changing.
+          </p>
+          <p className="text-xs text-slate-500">
+            Embedding a URL here does <em>not</em> grant a SNOMED license.
+            Production deployments must use a licensed Ontoserver/Snowstorm and
+            (for self-hosted) a CORS proxy.
+          </p>
+        </header>
+        <label className="block space-y-1">
+          <span className="block text-xs font-medium text-slate-700">
+            Terminology base URL
+          </span>
+          <input
+            type="url"
+            value={terminologyUrl}
+            onChange={(e) => updateTerminologyUrl(e.target.value)}
+            placeholder={DEFAULT_TERMINOLOGY_BASE_URL}
+            className={inputClass}
+            autoComplete="off"
+            data-testid="terminology-base-url-input"
+          />
+        </label>
+      </section>
 
       <section
         className="space-y-3 rounded border border-slate-200 bg-white p-4 shadow-sm"

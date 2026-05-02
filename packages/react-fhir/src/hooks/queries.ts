@@ -18,7 +18,7 @@ import type {
 import type { FhirClient, SearchParams } from "../client/types.js";
 import { coreValueSet } from "../structure/core/valuesets.js";
 import { resolveStructureDefinition } from "../structure/resolve.js";
-import { useFhirClient } from "./FhirClientProvider.js";
+import { useFhirClient, useTerminologyClient } from "./FhirClientProvider.js";
 
 /** Stable query keys so callers can target them with invalidate/refetch. */
 export const fhirQueryKeys = {
@@ -169,7 +169,7 @@ export function useValueSet(
   canonical: string | undefined,
   options?: ReadQueryOpts<ValueSet>,
 ) {
-  const client = useFhirClient();
+  const client = useTerminologyClient();
   return useQuery({
     queryKey: fhirQueryKeys.valueSet(client.baseUrl, canonical ?? ""),
     queryFn: async ({ signal }) => {
@@ -231,7 +231,7 @@ export function useValueSetExpansion(
   filter: string,
   options?: UseValueSetExpansionOptions,
 ) {
-  const client = useFhirClient();
+  const client = useTerminologyClient();
   const trimmed = filter.trim();
   const count = options?.count ?? 20;
   const enabled = (options?.enabled ?? true) && Boolean(canonical) && trimmed.length > 0;

@@ -2,15 +2,31 @@ import { createContext, useContext, type ReactNode } from "react";
 import type { FhirClient } from "../client/types.js";
 
 const FhirClientContext = createContext<FhirClient | null>(null);
+const TerminologyClientContext = createContext<FhirClient | null>(null);
 
 export interface FhirClientProviderProps {
   client: FhirClient;
+  /**
+   * Optional separate client for ValueSet/CodeSystem operations. When omitted,
+   * terminology hooks fall through to the data `client`. Pass a distinct
+   * client (e.g. https://tx.fhir.org/r4) when the data server cannot expand
+   * large terminologies like SNOMED, LOINC, or BCP-47.
+   */
+  terminologyClient?: FhirClient;
   children: ReactNode;
 }
 
-export function FhirClientProvider({ client, children }: FhirClientProviderProps) {
+export function FhirClientProvider({
+  client,
+  terminologyClient,
+  children,
+}: FhirClientProviderProps) {
   return (
-    <FhirClientContext.Provider value={client}>{children}</FhirClientContext.Provider>
+    <FhirClientContext.Provider value={client}>
+      <TerminologyClientContext.Provider value={terminologyClient ?? null}>
+        {children}
+      </TerminologyClientContext.Provider>
+    </FhirClientContext.Provider>
   );
 }
 
@@ -22,4 +38,16 @@ export function useFhirClient(): FhirClient {
     );
   }
   return client;
+}
+
+/**
+ * Returns the terminology client when one was provided to
+ * `FhirClientProvider`, otherwise falls through to the data client. Use this
+ * for `ValueSet/$expand` and other terminology operations so they can target
+ * a SNOMED-capable server independent of the data server.
+ */
+export function useTerminologyClient(): FhirClient {
+  const tx = useContext(TerminologyClientContext);
+  const data = useFhirClient();
+  return tx ?? data;
 }
