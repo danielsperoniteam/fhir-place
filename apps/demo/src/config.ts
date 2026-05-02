@@ -39,6 +39,20 @@ export const BUILTIN_SERVERS: ReadonlyArray<ServerConfig> = [
     authMode: "none",
     builtin: true,
   },
+  {
+    id: "builtin-firely",
+    label: "Firely Server (R4)",
+    baseUrl: "https://server.fire.ly",
+    authMode: "none",
+    builtin: true,
+  },
+  {
+    id: "builtin-fhir-test",
+    label: "test.fhir.org (R4)",
+    baseUrl: "https://test.fhir.org/r4",
+    authMode: "none",
+    builtin: true,
+  },
 ];
 
 const SERVERS_STORAGE_KEY = "fhir-place:servers";

@@ -33,13 +33,14 @@ export function ServerPicker() {
       <select
         value={activeId}
         onChange={onChange}
-        className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+        className="max-w-[12rem] truncate rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
         data-testid="server-picker"
         aria-label="FHIR server"
+        title={ACTIVE_SERVER_CONFIG.baseUrl}
       >
         {servers.map((server) => (
-          <option key={server.id} value={server.id}>
-            {server.label} — {server.baseUrl}
+          <option key={server.id} value={server.id} title={server.baseUrl}>
+            {server.label}
           </option>
         ))}
       </select>

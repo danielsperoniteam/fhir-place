@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  ACTIVE_SERVER_CONFIG,
   type AuthMode,
   type CustomHeader,
   type ServerConfig,
@@ -31,7 +32,9 @@ const blankServer = (): ServerConfig => ({
 
 export function SettingsPage() {
   const [servers, setServers] = useState<ServerConfig[]>(() => loadServers());
-  const [activeId, setActiveId] = useState<string | null>(() => loadActiveServerId());
+  const [activeId, setActiveId] = useState<string>(
+    () => loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id,
+  );
   const [testState, setTestState] = useState<Record<string, TestState>>({});
   const [anthropicKey, setAnthropicKey] = useState<string>(() => loadAnthropicApiKey());
 
@@ -50,10 +53,12 @@ export function SettingsPage() {
   };
 
   const removeServer = (id: string) => {
-    persist(servers.filter((s) => s.id !== id));
+    const next = servers.filter((s) => s.id !== id);
+    persist(next);
     if (activeId === id) {
-      saveActiveServerId(servers[0]?.id ?? "");
-      setActiveId(servers[0]?.id ?? null);
+      const fallback = next[0]?.id ?? "";
+      saveActiveServerId(fallback);
+      setActiveId(fallback);
     }
   };
 
