@@ -1,4 +1,5 @@
 import type { ValueSet } from "fhir/r4";
+import { generatedCoreValueSets } from "./valuesets.generated.js";
 
 /**
  * Bundled R4 core ValueSets — served from memory when the target FHIR server
@@ -340,8 +341,11 @@ export const coreValueSets: Map<string, ValueSet> = new Map(
  */
 export function coreValueSet(canonical: string | undefined): ValueSet | undefined {
   if (!canonical) return undefined;
-  return coreValueSets.get(canonical);
+  return coreValueSets.get(canonical) ?? generatedCoreValueSets.get(canonical);
 }
 
 /** Canonical URLs the library ships bundled ValueSets for. */
-export const bundledValueSetUrls = Array.from(coreValueSets.keys());
+export const bundledValueSetUrls = Array.from(new Set([
+  ...coreValueSets.keys(),
+  ...generatedCoreValueSets.keys(),
+]));

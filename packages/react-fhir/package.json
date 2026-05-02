@@ -65,7 +65,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
-    "prepare": "tsc -p tsconfig.build.json"
+    "prepare": "tsc -p tsconfig.build.json",
+    "sync:valuesets": "node --experimental-strip-types scripts/sync-bundled-valuesets.ts"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5.0.0",

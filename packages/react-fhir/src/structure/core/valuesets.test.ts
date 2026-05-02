@@ -45,8 +45,10 @@ describe("bundled core ValueSets", () => {
     for (const url of bundledValueSetUrls) {
       expect(coreValueSet(url)).toBeDefined();
     }
-    // Internal Map and the URL list agree.
-    expect(new Set(bundledValueSetUrls)).toEqual(new Set(coreValueSets.keys()));
+    // URL list always includes hand-curated entries.
+    for (const url of coreValueSets.keys()) {
+      expect(bundledValueSetUrls).toContain(url);
+    }
   });
 
   it("every bundled ValueSet produces at least one code", () => {
