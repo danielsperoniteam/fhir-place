@@ -297,6 +297,51 @@ describe("query hooks", () => {
       expect(result.current.fetchStatus).toBe("idle");
     });
 
+    it("strips a `|version` suffix before resolving against the server", async () => {
+      const base = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      let captured: string | null = null;
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, ({ request }) => {
+          captured = new URL(request.url).searchParams.get("url");
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url: base,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [{ system: "s", code: "male" }],
+            },
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => useValueSet(`${base}|4.0.1`), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(captured).toBe(base);
+    });
+
+    it("falls back to a bundled core ValueSet when the canonical carries a version", async () => {
+      const base = "http://hl7.org/fhir/ValueSet/allergy-intolerance-category";
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, () =>
+          HttpResponse.json({ resourceType: "OperationOutcome" }, { status: 501 }),
+        ),
+        http.get(`${BASE}/ValueSet`, () =>
+          HttpResponse.json({ resourceType: "Bundle", type: "searchset", entry: [] }),
+        ),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => useValueSet(`${base}|4.0.1`), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.url).toBe(base);
+      expect(result.current.data?.expansion?.contains).toBeDefined();
+    });
+
     it("routes $expand to the terminology client when one is provided", async () => {
       const url = "http://snomed.info/sct?fhir_vs=isa/123037004";
       const dataExpand = vi.fn();

@@ -1,6 +1,7 @@
 import type {
   CapabilityStatementRestResourceSearchParam,
   CapabilityStatement,
+  ElementDefinition,
   Reference,
 } from "fhir/r4";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -65,6 +66,28 @@ const inputType = (type: SpecType): string => {
       return "url";
     default:
       return "text";
+  }
+};
+
+/**
+ * Token-field placeholder narrowed by the resolved element. Defaults to the
+ * generic `code or system|code` hint, but drops the system half when the
+ * element is a primitive that has no system component (e.g. `code`,
+ * `boolean`, `uri`) — for those, `system|...` is never valid syntax.
+ */
+export const tokenPlaceholder = (element: ElementDefinition | undefined): string => {
+  const code = element?.type?.[0]?.code;
+  switch (code) {
+    case "code":
+      return "code";
+    case "boolean":
+      return "true | false";
+    case "uri":
+    case "url":
+    case "canonical":
+      return "https://…";
+    default:
+      return "code or system|code";
   }
 };
 
@@ -270,7 +293,7 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
     <input
       type="text"
       aria-label={param.name}
-      placeholder={inputPlaceholder(param.type)}
+      placeholder={tokenPlaceholder(element)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
