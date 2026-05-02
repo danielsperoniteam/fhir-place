@@ -29,10 +29,16 @@ export function App() {
               <Link to="/fhir-ui/ask" className="text-slate-600 underline">
                 Ask
               </Link>
+              {SETTINGS_ENABLED && (
+                <Link
+                  to="/fhir-ui/settings"
+                  className="text-slate-600 underline"
+                  data-testid="nav-settings-link"
+                >
+                  Settings
+                </Link>
+              )}
             </nav>
-            <span className="text-sm text-slate-500">
-              backend-agnostic, spec-driven React for any FHIR REST API
-            </span>
           </div>
           {SETTINGS_ENABLED ? (
             <ServerPicker />
