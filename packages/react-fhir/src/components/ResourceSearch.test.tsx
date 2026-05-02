@@ -63,6 +63,29 @@ describe("findSearchParamsForResource", () => {
     expect(findSearchParamsForResource(cap, "Unknown")).toEqual([]);
   });
 
+  it("excludes _count (redundant with page-size control)", () => {
+    const capWithCount: CapabilityStatement = {
+      ...cap,
+      rest: [
+        {
+          mode: "server",
+          resource: [
+            {
+              type: "Patient",
+              searchParam: [
+                { name: "name", type: "string" },
+                { name: "_count", type: "number" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const names = findSearchParamsForResource(capWithCount, "Patient").map((p) => p.name);
+    expect(names).not.toContain("_count");
+    expect(names).toContain("name");
+  });
+
   it("orders priority params first, then alphabetical", () => {
     const params = findSearchParamsForResource(cap, "Patient", [
       "_id",

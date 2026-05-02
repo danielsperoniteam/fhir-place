@@ -503,7 +503,7 @@ export function findSearchParamsForResource(
   if (!cap) return [];
   const server = cap.rest?.find((r) => r.mode === "server") ?? cap.rest?.[0];
   const resource = server?.resource?.find((r) => r.type === resourceType);
-  const params = (resource?.searchParam ?? []).filter((p) => p.name);
+  const params = (resource?.searchParam ?? []).filter((p) => p.name && p.name !== "_count");
   if (priority.length === 0) return params;
   const rank = new Map(priority.map((p, i) => [p, i]));
   return [...params].sort((a, b) => {
