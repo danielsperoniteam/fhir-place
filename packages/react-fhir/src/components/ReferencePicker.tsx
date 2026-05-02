@@ -129,6 +129,13 @@ export function ReferencePicker(props: ReferencePickerProps) {
               setIsOpen(true);
             }}
             onFocus={() => setIsOpen(true)}
+            // iOS Safari otherwise overlays its "AutoFill Contact" bar on top of
+            // our results dropdown, swallowing taps on the actual options.
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            name="reference-picker-search"
             className="min-w-[12rem] flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
           />
           {supportsBirthdate && (
@@ -159,20 +166,42 @@ export function ReferencePicker(props: ReferencePickerProps) {
           {!isFetching && results.length === 0 && (
             <li className="px-3 py-2 text-xs text-slate-500">No matches</li>
           )}
-          {results.map((r) => (
-            <li key={`${r.resourceType}/${r.id}`}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={false}
-                onClick={() => pick(r)}
-                className="flex w-full items-baseline justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-              >
-                <span className="truncate">{formatReferenceLabel(r)}</span>
-                <code className="shrink-0 text-xs text-slate-500">{r.id}</code>
-              </button>
-            </li>
-          ))}
+          {results.map((r) => {
+            const secondary = secondaryLabel(r);
+            return (
+              <li key={`${r.resourceType}/${r.id}`}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  // `onPointerDown` (not `onClick`) so selection commits before
+                  // the search input blurs. iOS Safari reflows the page when
+                  // the keyboard dismisses on blur, which moves the option out
+                  // from under the user's finger and swallows the tap.
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    pick(r);
+                  }}
+                  // Keyboard activation (Enter/Space on the focused button)
+                  // never produces a pointerdown — `e.detail === 0` flags it.
+                  onClick={(e) => {
+                    if (e.detail === 0) pick(r);
+                  }}
+                  className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{formatReferenceLabel(r)}</span>
+                    {secondary && (
+                      <span className="block truncate text-xs text-slate-500">
+                        {secondary}
+                      </span>
+                    )}
+                  </span>
+                  <code className="shrink-0 text-xs text-slate-500">{r.id}</code>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -190,6 +219,21 @@ const namedTypes = new Set([
   "Location",
   "Device",
 ]);
+
+/**
+ * Disambiguator shown beneath the primary label in dropdown items. For
+ * person-shaped resources we surface DOB + gender so two patients with the
+ * same name (very common) can be told apart without leaving the picker.
+ */
+function secondaryLabel(resource: Resource): string {
+  const r = resource as unknown as Record<string, unknown>;
+  if (birthdateTypes.has(resource.resourceType)) {
+    const dob = typeof r.birthDate === "string" ? r.birthDate : undefined;
+    const gender = typeof r.gender === "string" ? r.gender : undefined;
+    return [dob && `DOB ${dob}`, gender].filter(Boolean).join(" · ");
+  }
+  return "";
+}
 
 function defaultSearchParamFor(type: string): string {
   if (namedTypes.has(type)) return "name";

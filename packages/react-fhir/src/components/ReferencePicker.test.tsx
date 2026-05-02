@@ -30,8 +30,20 @@ const wrap = () => {
 
 describe("ReferencePicker", () => {
   const patients = [
-    { resourceType: "Patient", id: "p1", name: [{ given: ["Ada"], family: "Lovelace" }] },
-    { resourceType: "Patient", id: "p2", name: [{ given: ["Alan"], family: "Turing" }] },
+    {
+      resourceType: "Patient",
+      id: "p1",
+      name: [{ given: ["Ada"], family: "Lovelace" }],
+      birthDate: "1815-12-10",
+      gender: "female",
+    },
+    {
+      resourceType: "Patient",
+      id: "p2",
+      name: [{ given: ["Alan"], family: "Turing" }],
+      birthDate: "1912-06-23",
+      gender: "male",
+    },
   ];
 
   it("searches when the user types and picks a resource on click", async () => {
@@ -60,7 +72,40 @@ describe("ReferencePicker", () => {
     await waitFor(() =>
       expect(screen.getByRole("option", { name: /Ada Lovelace/ })).toBeInTheDocument(),
     );
+    // DOB + gender render as the secondary disambiguator beneath the name.
+    expect(screen.getByText(/DOB 1815-12-10 · female/)).toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: /Ada Lovelace/ }));
+    expect(onChange).toHaveBeenCalledWith({
+      reference: "Patient/p1",
+      display: "Ada Lovelace",
+    });
+  });
+
+  it("commits the selection on pointerdown so iOS taps don't get lost to input blur", async () => {
+    server.use(
+      http.get(`${BASE}/Patient`, () =>
+        HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: patients.map((r) => ({ resource: r })),
+        }),
+      ),
+    );
+
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReferencePicker targets={["Patient"]} value={undefined} onChange={onChange} debounceMs={0} />,
+      { wrapper: wrap() },
+    );
+
+    await user.type(screen.getByRole("searchbox", { name: /search patient/i }), "L");
+    const option = await screen.findByRole("option", { name: /Ada Lovelace/ });
+
+    // Simulate the iOS sequence: pointerdown on the option fires first, BEFORE
+    // any click — emulating the real-world failure mode where the subsequent
+    // tap event was never delivered. pick() must already have run.
+    await user.pointer({ keys: "[TouchA>]", target: option });
     expect(onChange).toHaveBeenCalledWith({
       reference: "Patient/p1",
       display: "Ada Lovelace",
