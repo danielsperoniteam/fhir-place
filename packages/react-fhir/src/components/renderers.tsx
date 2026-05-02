@@ -16,6 +16,7 @@ import type {
   Reference,
 } from "fhir/r4";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import {
   formatAddress,
   formatHumanName,
@@ -221,61 +222,91 @@ export function preferredCoding(
   return cc.coding[0];
 }
 
-const CodingRenderer: FhirTypeRenderer = (value) => {
-  const c = value as Coding;
-  const sys = codeSystemLabel(c.system);
-  if (c.display) {
-    return (
-      <span>
-        {c.display}
-        <code
-          className="ml-1 rounded bg-slate-100 px-1 py-0.5 text-xs"
-          title={c.system ? `${c.system}#${c.code}` : c.code}
-        >
-          {sys ? `${sys} ` : ""}
-          {c.code}
-        </code>
-      </span>
-    );
-  }
+function CodeChip({ coding }: { coding: Coding }) {
+  const sys = codeSystemLabel(coding.system);
   return (
     <code
       className="rounded bg-slate-100 px-1 py-0.5 text-xs"
-      title={c.system ? `${c.system}#${c.code}` : c.code}
+      title={coding.system ? `${coding.system}#${coding.code}` : coding.code}
     >
       {sys ? `${sys} ` : ""}
-      {c.code}
+      {coding.code}
     </code>
   );
+}
+
+function ExtraCodings({ codings }: { codings: readonly Coding[] }) {
+  const [open, setOpen] = useState(false);
+  if (codings.length === 0) return null;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="ml-1 text-xs text-slate-500 underline"
+        aria-expanded={open}
+        aria-label={
+          open ? "Hide other codings" : `Show ${codings.length} other coding${codings.length === 1 ? "" : "s"}`
+        }
+      >
+        {open ? "hide" : `+${codings.length} more`}
+      </button>
+      {open && (
+        <span className="ml-1 inline-flex flex-wrap gap-1">
+          {codings.map((c, i) => (
+            <CodeChip key={`${c.system ?? ""}#${c.code ?? ""}#${i}`} coding={c} />
+          ))}
+        </span>
+      )}
+    </>
+  );
+}
+
+const CodingRenderer: FhirTypeRenderer = (value) => {
+  const c = value as Coding;
+  if (c.display) {
+    return (
+      <span>
+        {c.display} <CodeChip coding={c} />
+      </span>
+    );
+  }
+  return <CodeChip coding={c} />;
 };
 
 const CodeableConceptRenderer: FhirTypeRenderer = (value, ctx) => {
   const cc = value as CodeableConcept;
+  const all = cc.coding ?? [];
+  const chosen = preferredCoding(cc, ctx.path);
+  const extras = chosen ? all.filter((c) => c !== chosen) : all.slice();
+
   if (cc.text) {
-    const codingSummary = cc.coding
-      ?.map((c) => [codeSystemLabel(c.system), c.code].filter(Boolean).join(" "))
+    const codingSummary = all
+      .map((c) => [codeSystemLabel(c.system), c.code].filter(Boolean).join(" "))
       .filter(Boolean)
       .join(", ");
-    const chosen = preferredCoding(cc, ctx.path);
-    if (chosen?.code) {
-      const sys = codeSystemLabel(chosen.system);
-      return (
-        <span title={codingSummary}>
-          {cc.text}
-          <code
-            className="ml-1 rounded bg-slate-100 px-1 py-0.5 text-xs"
-            title={chosen.system ? `${chosen.system}#${chosen.code}` : chosen.code}
-          >
-            {sys ? `${sys} ` : ""}
-            {chosen.code}
-          </code>
-        </span>
-      );
-    }
-    return <span title={codingSummary}>{cc.text}</span>;
+    return (
+      <span title={codingSummary}>
+        {cc.text}
+        {chosen?.code && (
+          <>
+            {" "}
+            <CodeChip coding={chosen} />
+          </>
+        )}
+        <ExtraCodings codings={extras} />
+      </span>
+    );
   }
-  const chosen = preferredCoding(cc, ctx.path);
-  if (chosen) return CodingRenderer(chosen, ctx);
+  if (chosen) {
+    return (
+      <span>
+        {chosen.display ? <>{chosen.display} </> : null}
+        <CodeChip coding={chosen} />
+        <ExtraCodings codings={extras} />
+      </span>
+    );
+  }
   return <span className="text-slate-400">—</span>;
 };
 

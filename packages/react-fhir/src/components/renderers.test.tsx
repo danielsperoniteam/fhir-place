@@ -1,5 +1,5 @@
 import type { CodeableConcept } from "fhir/r4";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   codeSystemLabel,
@@ -136,6 +136,40 @@ describe("CodeableConcept renderer", () => {
     const { container } = render(<>{renderer(cc, ctx)}</>);
     expect(container.textContent).toContain("Diastolic blood pressure");
     expect(container.textContent).toContain("8462-4");
+  });
+
+  it("hides non-preferred codings behind a +N more toggle", () => {
+    const cc: CodeableConcept = {
+      text: "Diastolic blood pressure",
+      coding: [
+        { system: "http://loinc.org", code: "8462-4" },
+        { system: "http://snomed.info/sct", code: "271650006" },
+        { system: "http://example.org/custom", code: "DBP-9" },
+      ],
+    };
+    const { container, getByRole } = render(<>{renderer(cc, ctx)}</>);
+    // preferred coding visible
+    expect(container.textContent).toContain("8462-4");
+    // extras hidden initially
+    expect(container.textContent).not.toContain("271650006");
+    expect(container.textContent).not.toContain("DBP-9");
+    // expand toggle visible
+    const toggle = getByRole("button", { name: /show 2 other codings/i });
+    expect(toggle.textContent).toBe("+2 more");
+    fireEvent.click(toggle);
+    // extras now visible
+    expect(container.textContent).toContain("271650006");
+    expect(container.textContent).toContain("DBP-9");
+    expect(toggle.textContent).toBe("hide");
+  });
+
+  it("does not render the toggle when there is only one coding", () => {
+    const cc: CodeableConcept = {
+      text: "Diastolic blood pressure",
+      coding: [{ system: "http://loinc.org", code: "8462-4" }],
+    };
+    const { container } = render(<>{renderer(cc, ctx)}</>);
+    expect(container.querySelector("button")).toBeNull();
   });
 });
 
