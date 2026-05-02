@@ -314,7 +314,7 @@ export function ResourceListPage() {
         params={draftParams}
       />
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {hasListView ? (
           <div
             role="group"
