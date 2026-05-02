@@ -32,6 +32,8 @@ export const fhirQueryKeys = {
     [...fhirQueryKeys.all(baseUrl), "StructureDefinition", type, profile ?? ""] as const,
   valueSet: (baseUrl: string, canonical: string) =>
     [...fhirQueryKeys.all(baseUrl), "ValueSet", canonical] as const,
+  valueSetExpand: (baseUrl: string, canonical: string, filter: string, count: number) =>
+    [...fhirQueryKeys.all(baseUrl), "ValueSet", canonical, "expand", filter, count] as const,
   reference: (baseUrl: string, ref: string) =>
     [...fhirQueryKeys.all(baseUrl), "ref", ref] as const,
   searchParameter: (baseUrl: string, base: string, code: string) =>
@@ -203,6 +205,48 @@ export function useValueSet(
     enabled: Boolean(canonical),
     staleTime: 24 * 60 * 60_000,
     ...options,
+  });
+}
+
+export interface UseValueSetExpandOptions {
+  /** Max codes returned by the server (`count` parameter on $expand). Default 20. */
+  count?: number;
+  /** Skip firing the expand call entirely (e.g. while debouncing). Default true. */
+  enabled?: boolean;
+}
+
+/**
+ * Filtered ValueSet expansion: hits `$expand?url=...&filter=...&count=...` so
+ * autocomplete UIs can search large terminology sets (SNOMED body-site, LOINC,
+ * etc.) without pulling thousands of codes into memory.
+ *
+ * Caching is keyed on `(canonical, filter, count)`; callers should debounce the
+ * filter themselves to keep the keyspace bounded. Cache TTL is short (5 min)
+ * because filter results vary by query, unlike full ValueSet definitions.
+ *
+ * Empty filter is allowed and returns the first `count` codes — useful for
+ * "show suggestions on focus" UX.
+ */
+export function useValueSetExpand(
+  canonical: string | undefined,
+  filter: string,
+  options?: UseValueSetExpandOptions,
+) {
+  const client = useFhirClient();
+  const count = options?.count ?? 20;
+  const enabled = (options?.enabled ?? true) && Boolean(canonical);
+  return useQuery<ValueSet>({
+    queryKey: fhirQueryKeys.valueSetExpand(client.baseUrl, canonical ?? "", filter, count),
+    queryFn: ({ signal }) => {
+      const params = new URLSearchParams({ url: canonical!, count: String(count) });
+      if (filter) params.set("filter", filter);
+      return client.request<ValueSet>({
+        path: `/ValueSet/$expand?${params.toString()}`,
+        signal,
+      });
+    },
+    enabled,
+    staleTime: 5 * 60_000,
   });
 }
 

@@ -22,6 +22,7 @@ import {
   useStructureDefinition,
   useUpdateResource,
   useValueSet,
+  useValueSetExpand,
 } from "./queries.js";
 
 const BASE = "https://fhir.example.test/fhir";
@@ -287,6 +288,81 @@ describe("query hooks", () => {
     it("is disabled when canonical is undefined", () => {
       const { wrapper } = mkWrapper();
       const { result } = renderHook(() => useValueSet(undefined), { wrapper });
+      expect(result.current.fetchStatus).toBe("idle");
+    });
+  });
+
+  describe("useValueSetExpand", () => {
+    it("forwards filter and count to $expand and returns the expansion", async () => {
+      const url = "http://hl7.org/fhir/ValueSet/body-site";
+      let captured: URLSearchParams | null = null;
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, ({ request }) => {
+          captured = new URL(request.url).searchParams;
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              contains: [
+                { system: "http://snomed.info/sct", code: "10200004", display: "Liver structure" },
+              ],
+            },
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(
+        () => useValueSetExpand(url, "liver", { count: 5 }),
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(captured!.get("url")).toBe(url);
+      expect(captured!.get("filter")).toBe("liver");
+      expect(captured!.get("count")).toBe("5");
+      expect(result.current.data?.expansion?.contains).toHaveLength(1);
+    });
+
+    it("omits the filter param when filter is empty", async () => {
+      const url = "http://hl7.org/fhir/ValueSet/body-site";
+      let captured: URLSearchParams | null = null;
+      server.use(
+        http.get(`${BASE}/ValueSet/$expand`, ({ request }) => {
+          captured = new URL(request.url).searchParams;
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url,
+            expansion: { identifier: "x", timestamp: "2024-01-01T00:00:00Z", contains: [] },
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => useValueSetExpand(url, ""), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(captured!.has("filter")).toBe(false);
+      expect(captured!.get("count")).toBe("20");
+    });
+
+    it("is disabled when canonical is undefined", () => {
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => useValueSetExpand(undefined, "x"), {
+        wrapper,
+      });
+      expect(result.current.fetchStatus).toBe("idle");
+    });
+
+    it("respects the enabled option (e.g. only firing when the dropdown is open)", () => {
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(
+        () =>
+          useValueSetExpand("http://hl7.org/fhir/ValueSet/body-site", "x", {
+            enabled: false,
+          }),
+        { wrapper },
+      );
       expect(result.current.fetchStatus).toBe("idle");
     });
   });
