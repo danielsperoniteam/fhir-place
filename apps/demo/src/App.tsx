@@ -15,7 +15,7 @@ export function App() {
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white px-6 py-3">
-        <div className="flex items-baseline justify-between gap-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-4">
           <div className="flex items-baseline gap-4">
             <Link to="/" className="text-lg font-semibold text-slate-900">
               fhir-place
