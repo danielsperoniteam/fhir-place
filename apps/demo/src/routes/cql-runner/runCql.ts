@@ -1,8 +1,11 @@
 import type { FhirClient } from "@fhir-place/react-fhir";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import * as cqlExecution from "cql-execution";
 import { buildFhirDataSource } from "./fhirDataSource.js";
 import { translateCql, type TranslationError } from "./translator.js";
+
+// Dynamically imported so the ~2.5 MB `cql-execution` package is only
+// fetched when the user actually runs CQL — keeps the editor lightweight
+// when someone just opens the runner page.
+const loadCqlExecution = () => import("cql-execution");
 
 /**
  * Single seam between the UI and the CQL runtime. Long-term, swapping in a
@@ -51,6 +54,7 @@ export async function runCql({
   }
 
   try {
+    const cqlExecution = await loadCqlExecution();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { Library, Executor } = cqlExecution as any;
     const library = new Library(translation.elm);

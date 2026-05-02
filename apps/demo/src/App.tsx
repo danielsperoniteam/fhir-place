@@ -1,14 +1,47 @@
+import { lazy, Suspense } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
-import { AskPage } from "./routes/fhir-ui/pages/AskPage.js";
-import { ResourceCreatePage } from "./routes/fhir-ui/pages/ResourceCreatePage.js";
-import { ResourceDetailPage } from "./routes/fhir-ui/pages/ResourceDetailPage.js";
-import { ResourceEditPage } from "./routes/fhir-ui/pages/ResourceEditPage.js";
 import { ResourceListPage } from "./routes/fhir-ui/pages/ResourceListPage.js";
-import { SettingsPage } from "./routes/fhir-ui/pages/SettingsPage.js";
-import { CqlRunnerPage } from "./routes/cql-runner/CqlRunnerPage.js";
 import { FhirUiLayout } from "./components/FhirUiLayout.js";
 import { ServerPicker } from "./components/ServerPicker.js";
 import { FHIR_BASE_URL, SETTINGS_ENABLED, USE_MOCK } from "./config.js";
+
+// Lazy chunks. The list page (`/fhir-ui/Patient` is the default landing
+// route) stays in the main bundle so the first paint doesn't wait on a
+// network round-trip. The remaining pages — especially CQL Runner and
+// Ask, which pull in cql-execution / cql-exec-fhir / @anthropic-ai/sdk —
+// move into per-route chunks so they load only when navigated to.
+const lazyExport = <T extends string>(
+  loader: () => Promise<Record<T, React.ComponentType>>,
+  name: T,
+) => lazy(() => loader().then((m) => ({ default: m[name] })));
+
+const AskPage = lazyExport(() => import("./routes/fhir-ui/pages/AskPage.js"), "AskPage");
+const ResourceCreatePage = lazyExport(
+  () => import("./routes/fhir-ui/pages/ResourceCreatePage.js"),
+  "ResourceCreatePage",
+);
+const ResourceDetailPage = lazyExport(
+  () => import("./routes/fhir-ui/pages/ResourceDetailPage.js"),
+  "ResourceDetailPage",
+);
+const ResourceEditPage = lazyExport(
+  () => import("./routes/fhir-ui/pages/ResourceEditPage.js"),
+  "ResourceEditPage",
+);
+const SettingsPage = lazyExport(
+  () => import("./routes/fhir-ui/pages/SettingsPage.js"),
+  "SettingsPage",
+);
+const CqlRunnerPage = lazyExport(
+  () => import("./routes/cql-runner/CqlRunnerPage.js"),
+  "CqlRunnerPage",
+);
+
+const RouteFallback = () => (
+  <p className="text-sm text-slate-500" data-testid="route-loading">
+    Loading…
+  </p>
+);
 
 export function App() {
   return (
@@ -44,6 +77,7 @@ export function App() {
         </div>
       </header>
       <main className="mx-auto max-w-5xl p-6">
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
           {/* CQL runner */}
@@ -75,6 +109,7 @@ export function App() {
           />
           <Route path="/:resourceType" element={<RedirectToFhirUi />} />
         </Routes>
+        </Suspense>
       </main>
     </div>
   );

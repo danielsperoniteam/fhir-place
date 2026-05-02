@@ -1,10 +1,12 @@
 import type { FhirClient } from "@fhir-place/react-fhir";
 import type { Bundle } from "fhir/r4";
+
 // `cql-exec-fhir` ships only loose .d.ts globals, no top-level type export.
 // The .js entry exposes PatientSource / FHIRWrapper as named exports; we
 // shape them as `any` here and wrap behind a typed surface below.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import * as cqlExecFhir from "cql-exec-fhir";
+// Loaded dynamically so it ships in the same chunk as `cql-execution`,
+// fetched on-demand from `runCql`.
+const loadCqlExecFhir = () => import("cql-exec-fhir");
 
 /**
  * Builds a `cql-execution`-compatible DataProvider for a single patient by
@@ -40,6 +42,7 @@ export async function buildFhirDataSource({
 }: FhirDataSourceOptions): Promise<BuiltDataSource> {
   const bundle = await fetchPatientEverything(client, patientId, signal);
 
+  const cqlExecFhir = await loadCqlExecFhir();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const factory = (cqlExecFhir as any).PatientSource ?? (cqlExecFhir as any).default?.PatientSource;
   if (!factory || typeof factory.FHIRv401 !== "function") {
