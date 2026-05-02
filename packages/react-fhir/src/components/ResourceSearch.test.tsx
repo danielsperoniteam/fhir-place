@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { CapabilityStatement } from "fhir/r4";
-import { describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import {
@@ -84,9 +86,11 @@ describe("ResourceSearch", () => {
       />,
     );
     // name, identifier, birthdate, gender, organization, address-city, phone, _id
-    // birthdate is a date input (role is not textbox), so textbox count is 7.
-    const fields = screen.getAllByRole("textbox");
-    expect(fields.length).toBe(7);
+    // - birthdate is a date input (no textbox role)
+    // - organization is a reference, rendered via ReferencePicker → searchbox role
+    // → 6 textboxes + 1 searchbox
+    expect(screen.getAllByRole("textbox").length).toBe(6);
+    expect(screen.getByRole("searchbox", { name: /search organization/i })).toBeInTheDocument();
     expect(screen.getByLabelText("birthdate")).toBeInTheDocument();
     expect(screen.getAllByPlaceholderText(/code or system\|code/i).length).toBeGreaterThan(0);
   });
@@ -156,12 +160,85 @@ describe("ResourceSearch", () => {
     );
     expect(screen.getAllByRole("textbox").length).toBe(3);
     await user.click(screen.getByRole("button", { name: /show.*more parameters/i }));
-    // birthdate is a date input, not a textbox — so 7 textboxes after expand.
-    expect(screen.getAllByRole("textbox").length).toBe(7);
+    // After expand: 6 textboxes (birthdate is a date input; organization is a
+    // reference picker rendered as a searchbox).
+    expect(screen.getAllByRole("textbox").length).toBe(6);
+    expect(screen.getByRole("searchbox", { name: /search organization/i })).toBeInTheDocument();
   });
 
   it("shows a friendly message when no params are advertised", () => {
     wrap(<ResourceSearch resourceType="UnknownType" capabilityStatement={cap} />);
     expect(screen.getByText(/no searchable parameters/i)).toBeInTheDocument();
+  });
+});
+
+const allergyCap: CapabilityStatement = {
+  resourceType: "CapabilityStatement",
+  status: "active",
+  date: "2024-01-01",
+  kind: "instance",
+  fhirVersion: "4.0.1",
+  format: ["json"],
+  rest: [
+    {
+      mode: "server",
+      resource: [
+        {
+          type: "AllergyIntolerance",
+          searchParam: [
+            { name: "patient", type: "reference", documentation: "Who the sensitivity is for" },
+            { name: "code", type: "token" },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const BASE = "https://fhir.example.test/fhir";
+const server = setupServer();
+beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+describe("ResourceSearch — reference name search", () => {
+  it("searches Patients by name and submits the picked Patient/id", async () => {
+    server.use(
+      http.get(`${BASE}/Patient`, ({ request }) => {
+        const q = (new URL(request.url).searchParams.get("name") ?? "").toLowerCase();
+        const all = [
+          { resourceType: "Patient", id: "p1", name: [{ given: ["Ada"], family: "Lovelace" }] },
+          { resourceType: "Patient", id: "p2", name: [{ given: ["Alan"], family: "Turing" }] },
+        ];
+        const matches = all.filter((p) =>
+          (p.name[0]?.family ?? "").toLowerCase().includes(q),
+        );
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: matches.map((r) => ({ resource: r })),
+        });
+      }),
+    );
+
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <ResourceSearch
+        resourceType="AllergyIntolerance"
+        capabilityStatement={allergyCap}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const search = screen.getByRole("searchbox", { name: /search patient/i });
+    await user.type(search, "Lovelace");
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /Ada Lovelace/ })).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("option", { name: /Ada Lovelace/ }));
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ patient: "Patient/p1" });
   });
 });
