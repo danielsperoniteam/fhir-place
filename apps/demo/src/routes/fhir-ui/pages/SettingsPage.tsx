@@ -386,13 +386,28 @@ function ServerForm({
             </button>
           </div>
         ))}
-        <button
-          type="button"
-          onClick={() => updateHeaders([...headers, { key: "", value: "" }])}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-        >
-          + Add header
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => updateHeaders([...headers, { key: "", value: "" }])}
+            className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+          >
+            + Add header
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              updateHeaders([
+                ...headers,
+                { key: "Authorization", value: "Bearer " },
+              ])
+            }
+            className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+            data-testid="add-bearer-header"
+          >
+            + Add bearer
+          </button>
+        </div>
       </fieldset>
 
       <TestResult state={testState} />
