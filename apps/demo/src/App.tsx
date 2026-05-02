@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AskPage } from "./routes/fhir-ui/pages/AskPage.js";
-import { PatientCreatePage } from "./routes/fhir-ui/pages/PatientCreatePage.js";
+import { ResourceCreatePage } from "./routes/fhir-ui/pages/ResourceCreatePage.js";
 import { ResourceDetailPage } from "./routes/fhir-ui/pages/ResourceDetailPage.js";
 import { ResourceEditPage } from "./routes/fhir-ui/pages/ResourceEditPage.js";
 import { ResourceListPage } from "./routes/fhir-ui/pages/ResourceListPage.js";
@@ -51,8 +51,8 @@ export function App() {
           {/* FHIR UI surface */}
           <Route path="/fhir-ui" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
           <Route path="/fhir-ui/ask" element={<AskPage />} />
-          <Route path="/fhir-ui/Patient/new" element={<PatientCreatePage />} />
           <Route path="/fhir-ui/settings" element={<SettingsPage />} />
+          <Route path="/fhir-ui/:resourceType/new" element={<ResourceCreatePage />} />
           <Route path="/fhir-ui/:resourceType/:id/edit" element={<ResourceEditPage />} />
           <Route path="/fhir-ui/:resourceType/:id" element={<ResourceDetailPage />} />
           <Route element={<FhirUiLayout />}>

@@ -215,9 +215,20 @@ export const handlers = [
         }
       }
       return [
-        http.get(`*${BASE}/${type}`, ({ request }) =>
-          okJson(searchBundle(source(patientIdFromRequest(request)))),
-        ),
+        http.get(`*${BASE}/${type}`, ({ request }) => {
+          const fixtures = source(patientIdFromRequest(request));
+          // Created-during-session resources of this type that don't belong to
+          // a patient compartment — surface them on the unscoped index search
+          // so e2e create flows can immediately see what they just made.
+          const url = new URL(request.url);
+          const hasPatientFilter = url.searchParams.has("patient") || url.searchParams.has("subject");
+          const extras = hasPatientFilter
+            ? []
+            : Array.from(store.values()).filter(
+                (r) => !fixtures.some((f) => f.id === r.id),
+              );
+          return okJson(searchBundle([...fixtures, ...extras]));
+        }),
         http.get(`*${BASE}/${type}/:id`, ({ params }) => {
           const hit = store.get(String(params.id));
           if (hit) return okJson(hit);
@@ -230,6 +241,18 @@ export const handlers = [
             },
             { status: 404 },
           );
+        }),
+        http.post(`*${BASE}/${type}`, async ({ request }) => {
+          const body = (await request.json()) as T & { id?: string };
+          const id = body.id ?? `${type.toLowerCase()}-${Date.now()}`;
+          const created = {
+            ...body,
+            id,
+            resourceType: type,
+            meta: { versionId: "1", lastUpdated: new Date().toISOString() },
+          } as T;
+          store.set(id, created);
+          return okJson(created, { status: 201 });
         }),
         http.put(`*${BASE}/${type}/:id`, async ({ params, request }) => {
           const id = String(params.id);
