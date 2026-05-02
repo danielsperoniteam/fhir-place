@@ -29,17 +29,15 @@ export function ServerPicker() {
       className="flex items-center gap-2 text-xs text-slate-500"
       data-testid="base-url"
     >
-      <span>live ·</span>
       <select
         value={activeId}
         onChange={onChange}
         className="max-w-[12rem] truncate rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
         data-testid="server-picker"
         aria-label="FHIR server"
-        title={ACTIVE_SERVER_CONFIG.baseUrl}
       >
         {servers.map((server) => (
-          <option key={server.id} value={server.id} title={server.baseUrl}>
+          <option key={server.id} value={server.id}>
             {server.label}
           </option>
         ))}

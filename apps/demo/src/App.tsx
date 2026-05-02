@@ -8,7 +8,7 @@ import { SettingsPage } from "./routes/fhir-ui/pages/SettingsPage.js";
 import { CqlRunnerPage } from "./routes/cql-runner/CqlRunnerPage.js";
 import { FhirUiLayout } from "./components/FhirUiLayout.js";
 import { ServerPicker } from "./components/ServerPicker.js";
-import { ACTIVE_SERVER_CONFIG, SETTINGS_ENABLED, USE_MOCK } from "./config.js";
+import { ACTIVE_SERVER_CONFIG, SETTINGS_ENABLED } from "./config.js";
 
 export function App() {
   return (
@@ -32,26 +32,20 @@ export function App() {
               <Link to="/fhir-ui/ask" className="text-slate-600 underline">
                 Ask
               </Link>
-              {SETTINGS_ENABLED && (
-                <Link
-                  to="/fhir-ui/settings"
-                  className="text-slate-600 underline"
-                  data-testid="nav-settings-link"
-                >
-                  Settings
-                </Link>
-              )}
+              <Link
+                to="/fhir-ui/settings"
+                className="text-slate-600 underline"
+                data-testid="nav-settings-link"
+              >
+                Settings
+              </Link>
             </nav>
           </div>
           {SETTINGS_ENABLED ? (
             <ServerPicker />
           ) : (
-            <div
-              className="text-xs text-slate-500"
-              data-testid="base-url"
-              title={ACTIVE_SERVER_CONFIG.baseUrl}
-            >
-              {USE_MOCK ? "mock" : "live"} · {ACTIVE_SERVER_CONFIG.label}
+            <div className="text-xs text-slate-500" data-testid="base-url">
+              {ACTIVE_SERVER_CONFIG.label}
             </div>
           )}
         </div>
