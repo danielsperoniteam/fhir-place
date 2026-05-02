@@ -58,12 +58,8 @@ export function ResourceDetailPage() {
   const onReferenceClick = (ref: Reference) => {
     const r = ref.reference;
     if (!r) return;
-    if (/^https?:\/\//i.test(r)) {
-      window.open(r, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const [type, refId] = r.split("/");
-    if (type && refId) navigate(`/fhir-ui/${type}/${refId}`);
+    const match = r.match(/([A-Za-z]+)\/([^/]+)$/);
+    if (match) navigate(`/fhir-ui/${match[1]}/${match[2]}`);
   };
 
   const handleDelete = async () => {

@@ -14,13 +14,16 @@ import type {
   Range,
   Ratio,
   Reference,
+  Resource,
 } from "fhir/r4";
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
 import {
   formatAddress,
   formatHumanName,
+  formatReferenceLabel,
 } from "../structure/format.js";
+import { useReadReference } from "../hooks/queries.js";
 
 /** Context passed to every renderer. */
 export interface RendererContext {
@@ -377,20 +380,34 @@ const IdentifierRenderer: FhirTypeRenderer = (value) => {
   );
 };
 
+function ReferenceCellLink({
+  reference,
+  onClick,
+}: {
+  reference: Reference;
+  onClick: (ref: Reference) => void;
+}) {
+  const { data } = useReadReference<Resource>(reference, { staleTime: 5 * 60_000 });
+  const label = data
+    ? formatReferenceLabel(data)
+    : (reference.display ?? reference.reference ?? "—");
+  return (
+    <button
+      type="button"
+      className="text-blue-700 underline"
+      onClick={() => onClick(reference)}
+    >
+      {label}
+    </button>
+  );
+}
+
 const ReferenceRenderer: FhirTypeRenderer = (value, ctx) => {
   const r = value as Reference;
-  const label = r.display ?? r.reference ?? "—";
   if (ctx.onReferenceClick && r.reference) {
-    return (
-      <button
-        type="button"
-        className="text-blue-700 underline"
-        onClick={() => ctx.onReferenceClick?.(r)}
-      >
-        {label}
-      </button>
-    );
+    return <ReferenceCellLink reference={r} onClick={ctx.onReferenceClick} />;
   }
+  const label = r.display ?? r.reference ?? "—";
   return <span>{label}</span>;
 };
 

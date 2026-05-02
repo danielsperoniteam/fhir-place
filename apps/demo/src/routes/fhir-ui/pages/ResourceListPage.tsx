@@ -7,7 +7,7 @@ import {
   useInfiniteSearch,
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
-import type { Resource } from "fhir/r4";
+import type { Reference, Resource } from "fhir/r4";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
@@ -112,6 +112,13 @@ export function ResourceListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const client = useFhirClient();
+
+  const onReferenceClick = (ref: Reference) => {
+    const r = ref.reference;
+    if (!r) return;
+    const match = r.match(/([A-Za-z]+)\/([^/]+)$/);
+    if (match) navigate(`/fhir-ui/${match[1]}/${match[2]}`);
+  };
   const patientId = searchParams.get("patient") ?? undefined;
 
   const config: ResourceListConfig | undefined = isTopResourceType(resourceType)
@@ -543,6 +550,7 @@ export function ResourceListPage() {
                     }
                   : undefined
               }
+              onReferenceClick={onReferenceClick}
               onRowClick={(r) => r.id && navigate(`/fhir-ui/${r.resourceType}/${r.id}`)}
               emptyState={
                 <p
