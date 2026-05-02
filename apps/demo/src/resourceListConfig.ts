@@ -28,13 +28,6 @@ export interface ResourceListColumn {
   label: string;
 }
 
-export interface SortOption {
-  /** Human-readable label, e.g. "Date (newest)". */
-  label: string;
-  /** FHIR _sort value, e.g. "-date" for descending. */
-  param: string;
-}
-
 export interface ResourceListConfig<T extends Resource = Resource> {
   /** Heading on the unscoped index page, e.g. "Patients". */
   title: string;
@@ -46,8 +39,6 @@ export interface ResourceListConfig<T extends Resource = Resource> {
   tableColumns: ResourceListColumn[];
   /** Column subset shown by default. */
   defaultVisibleColumns: string[];
-  /** Resource-specific sort options exposed in the sort picker. */
-  sortOptions?: SortOption[];
   /** Optional list-view title. When omitted the type only renders in table view. */
   formatPrimary?: (resource: T) => string;
   /** Optional list-view metadata items rendered after the title. */
@@ -100,12 +91,6 @@ const PATIENT: ResourceListConfig<Patient> = {
   title: "Patients",
   singular: "patient",
   priorityParams: ["name", "family", "given", "gender", "birthdate", "address-city"],
-  sortOptions: [
-    { label: "Name (A → Z)", param: "family" },
-    { label: "Name (Z → A)", param: "-family" },
-    { label: "Birth date (newest)", param: "-birthdate" },
-    { label: "Birth date (oldest)", param: "birthdate" },
-  ],
   tableColumns: [
     { path: "name", label: "Name" },
     { path: "gender", label: "Gender" },
@@ -141,11 +126,6 @@ const OBSERVATION: ResourceListConfig<Observation> = {
   title: "Observations",
   singular: "observation",
   priorityParams: ["patient", "code", "category", "status", "date"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Code (A → Z)", param: "code" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "code.text", label: "Observation" },
@@ -165,13 +145,6 @@ const CONDITION: ResourceListConfig<Condition> = {
   title: "Conditions",
   singular: "condition",
   priorityParams: ["patient", "code", "category", "clinical-status", "onset-date"],
-  sortOptions: [
-    { label: "Onset (newest)", param: "-onset-date" },
-    { label: "Onset (oldest)", param: "onset-date" },
-    { label: "Recorded (newest)", param: "-recorded-date" },
-    { label: "Recorded (oldest)", param: "recorded-date" },
-    { label: "Code (A → Z)", param: "code" },
-  ],
   tableColumns: [
     { path: "clinicalStatus.text", label: "Status" },
     { path: "code.text", label: "Condition" },
@@ -190,11 +163,6 @@ const MEDICATION_REQUEST: ResourceListConfig<MedicationRequest> = {
   title: "Medication requests",
   singular: "medication request",
   priorityParams: ["patient", "code", "status", "intent", "authoredon"],
-  sortOptions: [
-    { label: "Ordered (newest)", param: "-authoredon" },
-    { label: "Ordered (oldest)", param: "authoredon" },
-    { label: "Medication (A → Z)", param: "code" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "intent", label: "Intent" },
@@ -213,11 +181,6 @@ const ALLERGY_INTOLERANCE: ResourceListConfig<AllergyIntolerance> = {
   title: "Allergies & intolerances",
   singular: "allergy",
   priorityParams: ["patient", "code", "clinical-status", "type", "category"],
-  sortOptions: [
-    { label: "Substance (A → Z)", param: "code" },
-    { label: "Clinical status", param: "clinical-status" },
-    { label: "Criticality", param: "criticality" },
-  ],
   tableColumns: [
     { path: "clinicalStatus.text", label: "Status" },
     { path: "code.text", label: "Substance" },
@@ -237,12 +200,6 @@ const PROCEDURE: ResourceListConfig<Procedure> = {
   title: "Procedures",
   singular: "procedure",
   priorityParams: ["patient", "code", "status", "date"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Code (A → Z)", param: "code" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "code.text", label: "Procedure" },
@@ -259,12 +216,6 @@ const ENCOUNTER: ResourceListConfig<Encounter> = {
   title: "Encounters",
   singular: "encounter",
   priorityParams: ["patient", "status", "class", "type", "date"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Status", param: "status" },
-    { label: "Type (A → Z)", param: "type" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "class.code", label: "Class" },
@@ -283,12 +234,6 @@ const IMMUNIZATION: ResourceListConfig<Immunization> = {
   title: "Immunizations",
   singular: "immunization",
   priorityParams: ["patient", "vaccine-code", "status", "date"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Vaccine (A → Z)", param: "vaccine-code" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "vaccineCode.text", label: "Vaccine" },
@@ -305,13 +250,6 @@ const DIAGNOSTIC_REPORT: ResourceListConfig<DiagnosticReport> = {
   title: "Diagnostic reports",
   singular: "diagnostic report",
   priorityParams: ["patient", "code", "category", "status", "date"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Issued (newest)", param: "-issued" },
-    { label: "Issued (oldest)", param: "issued" },
-    { label: "Code (A → Z)", param: "code" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "code.text", label: "Report" },
@@ -330,12 +268,6 @@ const CARE_PLAN: ResourceListConfig<CarePlan> = {
   title: "Care plans",
   singular: "care plan",
   priorityParams: ["patient", "category", "status", "intent", "date"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Status", param: "status" },
-    { label: "Intent", param: "intent" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "intent", label: "Intent" },
@@ -354,11 +286,6 @@ const APPOINTMENT: ResourceListConfig<Appointment> = {
   title: "Appointments",
   singular: "appointment",
   priorityParams: ["patient", "practitioner", "status", "date", "service-type"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "serviceType.text", label: "Service" },
@@ -378,11 +305,6 @@ const CARE_TEAM: ResourceListConfig<CareTeam> = {
   title: "Care teams",
   singular: "care team",
   priorityParams: ["patient", "subject", "status", "category"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "name", label: "Name" },
@@ -400,11 +322,6 @@ const DOCUMENT_REFERENCE: ResourceListConfig<DocumentReference> = {
   title: "Documents",
   singular: "document",
   priorityParams: ["patient", "type", "category", "status", "date"],
-  sortOptions: [
-    { label: "Date (newest)", param: "-date" },
-    { label: "Date (oldest)", param: "date" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "type.text", label: "Type" },
@@ -423,11 +340,6 @@ const GOAL: ResourceListConfig<Goal> = {
   title: "Goals",
   singular: "goal",
   priorityParams: ["patient", "subject", "lifecycle-status", "category", "start-date"],
-  sortOptions: [
-    { label: "Start date (newest)", param: "-start-date" },
-    { label: "Start date (oldest)", param: "start-date" },
-    { label: "Status", param: "lifecycle-status" },
-  ],
   tableColumns: [
     { path: "lifecycleStatus", label: "Status" },
     { path: "description.text", label: "Goal" },
@@ -445,11 +357,6 @@ const LOCATION: ResourceListConfig<Location> = {
   title: "Locations",
   singular: "location",
   priorityParams: ["name", "address", "address-city", "type", "status"],
-  sortOptions: [
-    { label: "Name (A → Z)", param: "name" },
-    { label: "Name (Z → A)", param: "-name" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "name", label: "Name" },
@@ -467,10 +374,6 @@ const MEDICATION: ResourceListConfig<Medication> = {
   title: "Medications",
   singular: "medication",
   priorityParams: ["code", "status", "form", "manufacturer"],
-  sortOptions: [
-    { label: "Code (A → Z)", param: "code" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "code.text", label: "Medication" },
@@ -487,10 +390,6 @@ const ORGANIZATION: ResourceListConfig<Organization> = {
   title: "Organizations",
   singular: "organization",
   priorityParams: ["name", "address-city", "type", "active", "identifier"],
-  sortOptions: [
-    { label: "Name (A → Z)", param: "name" },
-    { label: "Name (Z → A)", param: "-name" },
-  ],
   tableColumns: [
     { path: "active", label: "Active" },
     { path: "name", label: "Name" },
@@ -508,10 +407,6 @@ const PRACTITIONER: ResourceListConfig<Practitioner> = {
   title: "Practitioners",
   singular: "practitioner",
   priorityParams: ["name", "family", "given", "identifier", "active"],
-  sortOptions: [
-    { label: "Name (A → Z)", param: "family" },
-    { label: "Name (Z → A)", param: "-family" },
-  ],
   tableColumns: [
     { path: "active", label: "Active" },
     { path: "name", label: "Name" },
@@ -530,12 +425,6 @@ const SERVICE_REQUEST: ResourceListConfig<ServiceRequest> = {
   title: "Service requests",
   singular: "service request",
   priorityParams: ["patient", "code", "status", "intent", "category", "authored"],
-  sortOptions: [
-    { label: "Authored (newest)", param: "-authored" },
-    { label: "Authored (oldest)", param: "authored" },
-    { label: "Code (A → Z)", param: "code" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "intent", label: "Intent" },
@@ -554,11 +443,6 @@ const TASK: ResourceListConfig<Task> = {
   title: "Tasks",
   singular: "task",
   priorityParams: ["patient", "subject", "status", "code", "authored-on"],
-  sortOptions: [
-    { label: "Authored (newest)", param: "-authored-on" },
-    { label: "Authored (oldest)", param: "authored-on" },
-    { label: "Status", param: "status" },
-  ],
   tableColumns: [
     { path: "status", label: "Status" },
     { path: "intent", label: "Intent" },
