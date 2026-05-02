@@ -2,6 +2,7 @@ import {
   ColumnPicker,
   ResourceSearch,
   ResourceTable,
+  useFhirClient,
   useInfiniteSearch,
 } from "@fhir-place/react-fhir";
 import type { Patient } from "fhir/r4";
@@ -9,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
 import { PatientRowCounts } from "../components/PatientRowCounts.js";
+import { SearchRequestPreview } from "../components/SearchRequestPreview.js";
 
 const formatName = (p: Patient): string => {
   const n = p.name?.[0];
@@ -82,12 +84,17 @@ export function PatientListPage() {
     () => DEFAULT_VISIBLE_COLUMNS,
   );
   const navigate = useNavigate();
+  const client = useFhirClient();
 
   // Derive search params from the URL so reload / share-link / browser back
   // all replay the same query. `_count` is paging metadata; we keep it out of
   // the URL so users see clean shareable links (`?name=hop`, not
   // `?name=hop&_count=20`).
   const params = useMemo(() => paramsFromUrl(searchParams), [searchParams]);
+  // Live form state, used by the request-preview panel so the URL updates as
+  // the user types (independent of pressing Search / committing to the URL).
+  const [draftParams, setDraftParams] = useState<SearchParams>(params);
+  useEffect(() => setDraftParams(params), [params]);
   // Snapshot the URL state for the form's `initialParams` — re-read whenever
   // the URL changes (e.g. browser back) so the form mirrors what's filtered.
   const formInitial = useMemo(
@@ -161,7 +168,14 @@ export function PatientListPage() {
         initialVisible={6}
         initialParams={formInitial}
         priorityParams={["name", "family", "given", "gender", "birthdate", "address-city"]}
+        onChange={(p) => setDraftParams({ _count: PAGE_SIZE, ...p })}
         onSubmit={submitFilters}
+      />
+
+      <SearchRequestPreview
+        baseUrl={client.baseUrl}
+        resourceType="Patient"
+        params={draftParams}
       />
 
       <div className="flex items-center justify-between gap-2">

@@ -2,6 +2,7 @@ import {
   ColumnPicker,
   ResourceSearch,
   ResourceTable,
+  useFhirClient,
   useInfiniteSearch,
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
@@ -10,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
 import { PATIENT_COMPARTMENT } from "../compartment.js";
+import { SearchRequestPreview } from "../components/SearchRequestPreview.js";
 
 const columnLabelFromPath = (path: string): string => {
   const last = path.split(".").pop() ?? path;
@@ -63,12 +65,16 @@ export function ResourceIndexPage() {
   const { resourceType = "" } = useParams();
   const [query] = useSearchParams();
   const navigate = useNavigate();
+  const client = useFhirClient();
   const patientId = query.get("patient") ?? undefined;
 
   const [params, setParams] = useState<SearchParams>({
     _count: 20,
     ...(patientId ? { patient: patientId } : {}),
   });
+  // Live form state for the request-preview panel — updates as the user
+  // types, independent of when the search is actually submitted.
+  const [draftParams, setDraftParams] = useState<SearchParams>(params);
 
   const {
     data,
@@ -179,9 +185,18 @@ export function ResourceIndexPage() {
       <ResourceSearch
         resourceType={resourceType}
         initialVisible={6}
+        onChange={(p) =>
+          setDraftParams({ _count: 20, ...(patientId ? { patient: patientId } : {}), ...p })
+        }
         onSubmit={(p) =>
           setParams({ _count: 20, ...(patientId ? { patient: patientId } : {}), ...p })
         }
+      />
+
+      <SearchRequestPreview
+        baseUrl={client.baseUrl}
+        resourceType={resourceType}
+        params={draftParams}
       />
 
       <div className="flex justify-end">
