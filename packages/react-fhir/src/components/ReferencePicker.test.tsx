@@ -113,4 +113,80 @@ describe("ReferencePicker", () => {
       expect(screen.getByText(/no matches/i)).toBeInTheDocument(),
     );
   });
+
+  it("does not render a birth-date input for non-person target types", () => {
+    render(
+      <ReferencePicker targets={["Organization"]} value={undefined} onChange={() => {}} />,
+      { wrapper: wrap() },
+    );
+    expect(screen.queryByLabelText(/birth date/i)).not.toBeInTheDocument();
+  });
+
+  it("searches by birthdate alone (no free-text query) for Patient", async () => {
+    const seen: string[] = [];
+    server.use(
+      http.get(`${BASE}/Patient`, ({ request }) => {
+        seen.push(request.url);
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: [{ resource: patients[0] }],
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <ReferencePicker
+        targets={["Patient"]}
+        value={undefined}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+      { wrapper: wrap() },
+    );
+
+    await user.type(screen.getByLabelText(/birth date/i), "1815-12-10");
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /Ada Lovelace/ })).toBeInTheDocument(),
+    );
+    const url = new URL(seen[seen.length - 1]!);
+    expect(url.searchParams.get("birthdate")).toBe("1815-12-10");
+    expect(url.searchParams.get("name")).toBeNull();
+  });
+
+  it("combines name and birthdate when both are set", async () => {
+    const seen: string[] = [];
+    server.use(
+      http.get(`${BASE}/Patient`, ({ request }) => {
+        seen.push(request.url);
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: [{ resource: patients[0] }],
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <ReferencePicker
+        targets={["Patient"]}
+        value={undefined}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+      { wrapper: wrap() },
+    );
+
+    await user.type(screen.getByRole("searchbox", { name: /search patient/i }), "Lovelace");
+    await user.type(screen.getByLabelText(/birth date/i), "1815-12-10");
+    await waitFor(() => {
+      const last = seen[seen.length - 1];
+      if (!last) throw new Error("no request yet");
+      const url = new URL(last);
+      expect(url.searchParams.get("name")).toBe("Lovelace");
+      expect(url.searchParams.get("birthdate")).toBe("1815-12-10");
+    });
+  });
 });
