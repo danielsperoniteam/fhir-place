@@ -1,11 +1,14 @@
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ACTIVE_SERVER_CONFIG } from "../config.js";
+import { ACTIVE_SERVER_CONFIG, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
 import { TOP_RESOURCE_TYPES } from "../resourceListConfig.js";
 import { CC_MONO } from "./ccStyles.js";
 
 export function CCSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   const activeType = (() => {
     const m = location.pathname.match(/^\/fhir-ui\/([^/]+)/);
@@ -13,6 +16,30 @@ export function CCSidebar() {
     const rt = m[1];
     return TOP_RESOURCE_TYPES.includes(rt as (typeof TOP_RESOURCE_TYPES)[number]) ? rt : null;
   })();
+
+  const isSettings = location.pathname === "/fhir-ui/settings";
+  const isAsk = location.pathname === "/fhir-ui/ask";
+  const isCql = location.pathname === "/cql-runner";
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [pickerOpen]);
+
+  const servers = loadServers();
+  const activeServerId = loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id;
+
+  const switchServer = (id: string) => {
+    saveActiveServerId(id);
+    setPickerOpen(false);
+    window.location.reload();
+  };
 
   return (
     <div
@@ -29,7 +56,7 @@ export function CCSidebar() {
       }}
     >
       {/* Server picker */}
-      <div style={{ padding: "14px 12px", borderBottom: "1px solid var(--border)" }}>
+      <div ref={pickerRef} style={{ padding: "14px 12px", borderBottom: "1px solid var(--border)", position: "relative" }}>
         <div
           style={{
             display: "flex",
@@ -41,8 +68,9 @@ export function CCSidebar() {
             background: "var(--sunken)",
             cursor: "pointer",
           }}
-          onClick={() => navigate("/fhir-ui/settings")}
-          title="Manage servers"
+          onClick={() => setPickerOpen((v) => !v)}
+          title="Switch server"
+          data-testid="server-picker-trigger"
         >
           <div
             style={{
@@ -73,10 +101,84 @@ export function CCSidebar() {
               {ACTIVE_SERVER_CONFIG.baseUrl}
             </div>
           </div>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--text-muted)" strokeWidth="1.5">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="var(--text-muted)"
+            strokeWidth="1.5"
+            style={{ transform: pickerOpen ? "rotate(180deg)" : "none", transition: "transform 120ms", flexShrink: 0 }}
+          >
             <path d="M3 5l3-3 3 3M3 7l3 3 3-3" />
           </svg>
         </div>
+
+        {pickerOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% - 4px)",
+              left: 12,
+              right: 12,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+              zIndex: 100,
+              overflow: "hidden",
+            }}
+          >
+            {servers.map((s) => {
+              const isActive = s.id === activeServerId;
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 10px",
+                    cursor: isActive ? "default" : "pointer",
+                    background: isActive ? "var(--accent-soft)" : "transparent",
+                  }}
+                  onClick={() => !isActive && switchServer(s.id)}
+                  data-testid={`server-option-${s.id}`}
+                >
+                  <div
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      background: isActive ? "var(--success)" : "var(--text-subtle)",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: isActive ? 600 : 400, color: "var(--text)", lineHeight: 1.2 }}>
+                      {s.label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--text-muted)",
+                        fontFamily: CC_MONO,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {s.baseUrl}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <span style={{ fontSize: 10, color: "var(--accent-text)", fontWeight: 600 }}>Active</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Search */}
@@ -194,10 +296,73 @@ export function CCSidebar() {
           FP
         </div>
         <div style={{ flex: 1, fontSize: 12, color: "var(--text)" }}>fhir-place</div>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--text-muted)" strokeWidth="1.5">
-          <circle cx="6" cy="6" r="4.5" />
-          <path d="M6 4v2M6 8h.01" />
-        </svg>
+        {/* Ask */}
+        <button
+          onClick={() => navigate("/fhir-ui/ask")}
+          title="Ask"
+          data-testid="ask-nav"
+          style={{
+            background: isAsk ? "var(--accent-soft)" : "transparent",
+            border: "none",
+            borderRadius: 6,
+            padding: "4px 5px",
+            cursor: "pointer",
+            color: isAsk ? "var(--accent-text)" : "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 8.5a1 1 0 01-1 1H4l-2.5 2.5V3a1 1 0 011-1h9a1 1 0 011 1v5.5z" />
+          </svg>
+        </button>
+        {/* CQL Runner */}
+        <button
+          onClick={() => navigate("/cql-runner")}
+          title="CQL Runner"
+          data-testid="cql-nav"
+          style={{
+            background: isCql ? "var(--accent-soft)" : "transparent",
+            border: "none",
+            borderRadius: 6,
+            padding: "4px 5px",
+            cursor: "pointer",
+            color: isCql ? "var(--accent-text)" : "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3.5 4.5L1 7l2.5 2.5M10.5 4.5L13 7l-2.5 2.5M8 2l-2 10" />
+          </svg>
+        </button>
+        {/* Settings */}
+        <button
+          onClick={() => navigate("/fhir-ui/settings")}
+          title="Settings"
+          data-testid="settings-nav"
+          style={{
+            background: isSettings ? "var(--accent-soft)" : "transparent",
+            border: "none",
+            borderRadius: 6,
+            padding: "4px 5px",
+            cursor: "pointer",
+            color: isSettings ? "var(--accent-text)" : "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <circle cx="7" cy="7" r="2" />
+            <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.6 2.6l1 1M10.4 10.4l1 1M11.4 2.6l-1 1M3.6 10.4l-1 1" />
+          </svg>
+        </button>
       </div>
     </div>
   );
