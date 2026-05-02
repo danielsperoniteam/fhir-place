@@ -17,6 +17,9 @@ export interface FhirInputProps<T = unknown> {
 export type FhirTypeInput<T = unknown> = (props: FhirInputProps<T>) => ReactNode;
 export type TypeInputs = Record<string, FhirTypeInput>;
 
+/** Per-path overrides keyed by full ElementDefinition.path (e.g. "Observation.dataAbsentReason"). */
+export type PathInputs = Record<string, FhirTypeInput>;
+
 /** Shared form-field classes so every datatype renders consistently. */
 export const baseField =
   "w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none";

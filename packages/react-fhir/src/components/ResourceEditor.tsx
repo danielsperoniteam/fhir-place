@@ -15,9 +15,11 @@ import {
   type Path,
 } from "../structure/index.js";
 import {
+  defaultPathInputs,
   defaultTypeInputs,
   JsonFallbackInput,
   type FhirTypeInput,
+  type PathInputs,
   type TypeInputs,
 } from "./inputs/index.js";
 
@@ -31,6 +33,8 @@ export interface ResourceEditorProps {
   onCancel?: () => void;
   /** Override input components by FHIR datatype code. */
   inputs?: TypeInputs;
+  /** Override input components by full ElementDefinition path (e.g. "Observation.dataAbsentReason"). Wins over `inputs`. */
+  pathInputs?: PathInputs;
   saveLabel?: string;
   /** When true, the Save button shows a spinner and becomes disabled. */
   saving?: boolean;
@@ -89,6 +93,10 @@ export function ResourceEditor(props: ResourceEditorProps) {
     () => ({ ...defaultTypeInputs, ...props.inputs }),
     [props.inputs],
   );
+  const pathInputs = useMemo(
+    () => ({ ...defaultPathInputs, ...props.pathInputs }),
+    [props.pathInputs],
+  );
 
   const setAt = useCallback(
     (path: Path, value: unknown) => {
@@ -144,6 +152,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
         pathPrefix={[]}
         draft={draft as unknown as Record<string, unknown>}
         inputs={inputs}
+        pathInputs={pathInputs}
         setAt={setAt}
       />
 
@@ -175,6 +184,7 @@ interface FieldGroupProps {
   pathPrefix: Path;
   draft: Record<string, unknown>;
   inputs: TypeInputs;
+  pathInputs: PathInputs;
   setAt: (path: Path, value: unknown) => void;
 }
 
@@ -184,6 +194,7 @@ function FieldGroup({
   pathPrefix,
   draft,
   inputs,
+  pathInputs,
   setAt,
 }: FieldGroupProps): ReactNode {
   const children = directChildren(sd, parentPath).filter((el) => {
@@ -204,6 +215,7 @@ function FieldGroup({
           pathPrefix={pathPrefix}
           draft={draft}
           inputs={inputs}
+          pathInputs={pathInputs}
           setAt={setAt}
         />
       ))}
@@ -222,6 +234,7 @@ function Field({
   pathPrefix,
   draft,
   inputs,
+  pathInputs,
   setAt,
 }: FieldProps): ReactNode {
   const path = element.path!;
@@ -239,6 +252,7 @@ function Field({
         label={label}
         draft={draft}
         inputs={inputs}
+        pathInputs={pathInputs}
         setAt={setAt}
       />
     );
@@ -269,6 +283,7 @@ function Field({
                 path={[...fullPath, i]}
                 draft={draft}
                 inputs={inputs}
+                pathInputs={pathInputs}
                 setAt={setAt}
               />
             </ArrayRow>
@@ -296,6 +311,7 @@ function Field({
           path={fullPath}
           draft={draft}
           inputs={inputs}
+          pathInputs={pathInputs}
           setAt={setAt}
         />
       </dd>
@@ -311,6 +327,7 @@ interface ChoiceFieldProps {
   label: string;
   draft: Record<string, unknown>;
   inputs: TypeInputs;
+  pathInputs: PathInputs;
   setAt: (path: Path, value: unknown) => void;
 }
 
@@ -322,6 +339,7 @@ function ChoiceField({
   label,
   draft,
   inputs,
+  pathInputs,
   setAt,
 }: ChoiceFieldProps): ReactNode {
   const base = relative.slice(0, -3);
@@ -373,6 +391,7 @@ function ChoiceField({
             path={activePath}
             draft={draft}
             inputs={inputs}
+            pathInputs={pathInputs}
             setAt={setAt}
             override={activeValue}
           />
@@ -389,6 +408,7 @@ interface SingleValueInputProps {
   path: Path;
   draft: Record<string, unknown>;
   inputs: TypeInputs;
+  pathInputs: PathInputs;
   setAt: (path: Path, value: unknown) => void;
   override?: unknown;
 }
@@ -400,6 +420,7 @@ function SingleValueInput({
   path,
   draft,
   inputs,
+  pathInputs,
   setAt,
   override,
 }: SingleValueInputProps): ReactNode {
@@ -414,6 +435,7 @@ function SingleValueInput({
           pathPrefix={path}
           draft={draft}
           inputs={inputs}
+          pathInputs={pathInputs}
           setAt={setAt}
         />
       </div>
@@ -421,7 +443,9 @@ function SingleValueInput({
   }
 
   const input: FhirTypeInput =
-    (typeCode ? inputs[typeCode] : undefined) ?? JsonFallbackInput;
+    pathInputs[element.path!] ??
+    (typeCode ? inputs[typeCode] : undefined) ??
+    JsonFallbackInput;
   return (
     <>
       {input({
