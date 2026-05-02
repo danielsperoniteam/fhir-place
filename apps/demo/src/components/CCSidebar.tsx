@@ -18,6 +18,8 @@ export function CCSidebar() {
   })();
 
   const isSettings = location.pathname === "/fhir-ui/settings";
+  const isAsk = location.pathname === "/fhir-ui/ask";
+  const isCql = location.pathname === "/cql-runner";
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -294,6 +296,51 @@ export function CCSidebar() {
           FP
         </div>
         <div style={{ flex: 1, fontSize: 12, color: "var(--text)" }}>fhir-place</div>
+        {/* Ask */}
+        <button
+          onClick={() => navigate("/fhir-ui/ask")}
+          title="Ask"
+          data-testid="ask-nav"
+          style={{
+            background: isAsk ? "var(--accent-soft)" : "transparent",
+            border: "none",
+            borderRadius: 6,
+            padding: "4px 5px",
+            cursor: "pointer",
+            color: isAsk ? "var(--accent-text)" : "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 8.5a1 1 0 01-1 1H4l-2.5 2.5V3a1 1 0 011-1h9a1 1 0 011 1v5.5z" />
+          </svg>
+        </button>
+        {/* CQL Runner */}
+        <button
+          onClick={() => navigate("/cql-runner")}
+          title="CQL Runner"
+          data-testid="cql-nav"
+          style={{
+            background: isCql ? "var(--accent-soft)" : "transparent",
+            border: "none",
+            borderRadius: 6,
+            padding: "4px 5px",
+            cursor: "pointer",
+            color: isCql ? "var(--accent-text)" : "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3.5 4.5L1 7l2.5 2.5M10.5 4.5L13 7l-2.5 2.5M8 2l-2 10" />
+          </svg>
+        </button>
+        {/* Settings */}
         <button
           onClick={() => navigate("/fhir-ui/settings")}
           title="Settings"
