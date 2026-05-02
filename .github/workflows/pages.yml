@@ -28,16 +28,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fhir-place/react-fhir build
       - name: Build demo for GitHub Pages (live HAPI R4)
+        # Intentionally no VITE_FHIR_BASE_URL: pinning it disables the in-app
+        # server picker / settings page (see SETTINGS_ENABLED in config.ts).
+        # HAPI remains the default via BUILTIN_SERVERS[0]; users can switch to
+        # SMART/Firely/etc. from the settings page and have it actually take
+        # effect after the localStorage-driven reload.
         run: pnpm --filter @fhir-place/demo build
         env:
           VITE_USE_MOCK: "false"
-          VITE_FHIR_BASE_URL: "https://hapi.fhir.org/baseR4"
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/"
       - name: Build goals-tasks for GitHub Pages (live HAPI R4)
         run: pnpm --filter @fhir-place/goals-tasks build
         env:
           VITE_USE_MOCK: "false"
-          VITE_FHIR_BASE_URL: "https://hapi.fhir.org/baseR4"
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/goals/"
       - name: Stage goals-tasks under /goals
         run: |
