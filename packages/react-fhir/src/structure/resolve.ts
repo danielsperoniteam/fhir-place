@@ -67,7 +67,7 @@ export async function resolveStructureDefinition(
 
   // 3. Bundled core fallback.
   if (options.useBundledFallback !== false && canUseBundledFallback) {
-    const bundled = await coreStructureDefinition(type);
+    const bundled = await coreStructureDefinition(type, signal);
     if (bundled) return bundled;
   }
 

@@ -5,6 +5,12 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
+import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
+import {
+  clearSpecFetcherCache,
+  createDefaultSpecFetcher,
+  setCoreStructureDefinitionFetcher,
+} from "../structure/core/index.js";
 import { FhirClientProvider } from "./FhirClientProvider.js";
 import {
   fhirQueryKeys,
@@ -29,9 +35,20 @@ const BASE = "https://fhir.example.test/fhir";
 const TX_BASE = "https://tx.example.test/r4";
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  setCoreStructureDefinitionFetcher(async (type) =>
+    type === "Patient" ? PatientStructureDefinition : undefined,
+  );
+});
+afterEach(() => {
+  server.resetHandlers();
+  clearSpecFetcherCache();
+});
+afterAll(() => {
+  server.close();
+  setCoreStructureDefinitionFetcher(createDefaultSpecFetcher());
+});
 
 const mkWrapper = (opts?: { terminologyBaseUrl?: string }) => {
   const client = new FetchFhirClient({ baseUrl: BASE });

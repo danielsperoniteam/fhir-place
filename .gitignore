@@ -22,5 +22,9 @@ apps/workbench/eval-report.json
 packages/react-fhir/scripts/cache/r4-spec/*.zip
 packages/react-fhir/scripts/cache/r4-spec/expansions.json
 
+# fhir-r4 spec sync cache (zip + extracted bundle); the generated per-type
+# JSON files under apps/demo/public/fhir-r4/ ARE committed.
+apps/demo/scripts/cache/
+
 # Claude editor metadata
 .claude/

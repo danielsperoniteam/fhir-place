@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test",
     "e2e:screenshot": "playwright test --project=screenshots",
-    "e2e:live": "playwright test --config=playwright.live.config.ts"
+    "e2e:live": "playwright test --config=playwright.live.config.ts",
+    "sync:fhir-spec": "node --experimental-strip-types scripts/sync-fhir-r4-sds.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",

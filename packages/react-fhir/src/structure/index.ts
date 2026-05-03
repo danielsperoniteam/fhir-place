@@ -4,4 +4,12 @@ export * from "./resolve.js";
 export * from "./binding.js";
 export * from "./searchBinding.js";
 export * from "./format.js";
-export { coreStructureDefinition, bundledCoreTypes } from "./core/index.js";
+export {
+  coreStructureDefinition,
+  type SpecFetcher,
+  DEFAULT_SPEC_BASE_URL,
+  createDefaultSpecFetcher,
+  setCoreStructureDefinitionFetcher,
+  getCoreStructureDefinitionFetcher,
+  clearSpecFetcherCache,
+} from "./core/index.js";

@@ -11,14 +11,36 @@ import {
   vi,
 } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
+import { ObservationStructureDefinition } from "../../test/fixtures/StructureDefinition-Observation.js";
+import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
+import {
+  clearSpecFetcherCache,
+  createDefaultSpecFetcher,
+  setCoreStructureDefinitionFetcher,
+} from "./core/index.js";
 import { resolveStructureDefinition } from "./resolve.js";
 
 const BASE = "https://fhir.example.test/fhir";
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+const FIXTURES: Record<string, StructureDefinition> = {
+  Patient: PatientStructureDefinition,
+  Observation: ObservationStructureDefinition,
+};
+
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  // Stub the spec fetcher so step 3 doesn't try to hit hl7.org from tests.
+  setCoreStructureDefinitionFetcher(async (type) => FIXTURES[type]);
+});
+afterEach(() => {
+  server.resetHandlers();
+  clearSpecFetcherCache();
+});
+afterAll(() => {
+  server.close();
+  setCoreStructureDefinitionFetcher(createDefaultSpecFetcher());
+});
 
 const mkClient = () => new FetchFhirClient({ baseUrl: BASE });
 
