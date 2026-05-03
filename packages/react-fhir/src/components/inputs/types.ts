@@ -22,6 +22,6 @@ export type PathInputs = Record<string, FhirTypeInput>;
 
 /** Shared form-field classes so every datatype renders consistently. */
 export const baseField =
-  "w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none";
-export const subLabel = "mb-1 block text-xs font-medium text-slate-500";
+  "w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none";
+export const subLabel = "mb-1 block text-xs font-medium text-[var(--text-muted)]";
 export const subRow = "grid grid-cols-1 gap-2 sm:grid-cols-2";

@@ -136,11 +136,11 @@ export function ResourceSearch(props: ResourceSearchProps) {
   };
 
   if (!cap && capQuery.isLoading) {
-    return <p className="text-sm text-slate-500">Loading server capabilities…</p>;
+    return <p className="text-sm text-[var(--text-muted)]">Loading server capabilities…</p>;
   }
   if (params.length === 0) {
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-[var(--text-muted)]">
         No searchable parameters advertised for {resourceType}.
       </p>
     );
@@ -150,13 +150,13 @@ export function ResourceSearch(props: ResourceSearchProps) {
     <form
       onSubmit={handleSubmit}
       data-testid="resource-search"
-      className={className ?? "space-y-3 rounded border border-slate-200 bg-white p-3"}
+      className={className ?? "space-y-3 rounded border border-[var(--border)] bg-[var(--surface)] p-3"}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-700">
+        <h3 className="text-sm font-semibold text-[var(--text)]">
           Search {resourceType}
         </h3>
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-[var(--text-subtle)]">
           {params.length} parameters available
         </span>
       </div>
@@ -178,7 +178,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
         {params.length > initialVisible ? (
           <button
             type="button"
-            className="text-xs text-slate-500 underline"
+            className="text-xs text-[var(--text-muted)] underline"
             onClick={() => setShowAll((v) => !v)}
           >
             {showAll
@@ -198,7 +198,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
               // click on Search.
               onSubmit?.({});
             }}
-            className="rounded border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+            className="rounded border border-[var(--border)] bg-[var(--sunken)] px-3 py-1 text-sm text-[var(--text)] hover:bg-[var(--surface)]"
           >
             Clear
           </button>
@@ -231,12 +231,12 @@ const fieldWrapper = (
   return (
     <label className="block">
       <span className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="text-xs font-medium text-slate-600">{param.name}</span>
-        <span className="text-[10px] uppercase text-slate-400">{param.type}</span>
+        <span className="text-xs font-medium text-[var(--text-muted)]">{param.name}</span>
+        <span className="text-[10px] uppercase text-[var(--text-subtle)]">{param.type}</span>
       </span>
       {children}
       {doc && (
-        <span className="mt-0.5 block text-[11px] text-slate-400">{doc}</span>
+        <span className="mt-0.5 block text-[11px] text-[var(--text-subtle)]">{doc}</span>
       )}
     </label>
   );
@@ -263,7 +263,7 @@ function SearchField({ base, param, value, onChange, profile }: SearchFieldProps
       placeholder={inputPlaceholder(param.type)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
     />,
     param,
     base,
@@ -295,7 +295,7 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
       placeholder={tokenPlaceholder(element)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
     />
   );
 
@@ -307,7 +307,7 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
         value={value}
         readOnly
         placeholder="Loading value set…"
-        className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm"
+        className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm"
       />,
       param,
       base,
@@ -323,7 +323,7 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
       aria-label={param.name}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
     >
       <option value="">—</option>
       {codes.map((c) => (
@@ -368,7 +368,7 @@ function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps
       placeholder={inputPlaceholder(param.type)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
     />
   );
 
@@ -379,10 +379,10 @@ function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps
   return fieldWrapper(
     <div className="space-y-1.5">
       {textInput}
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-400">
-        <span className="h-px flex-1 bg-slate-200" />
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-[var(--text-subtle)]">
+        <span className="h-px flex-1 bg-[var(--border)]" />
         <span>or look up</span>
-        <span className="h-px flex-1 bg-slate-200" />
+        <span className="h-px flex-1 bg-[var(--border)]" />
       </div>
       <ReferencePicker
         targets={targets}
@@ -473,7 +473,7 @@ function DateSearchField({ base, param, value, onChange }: DateSearchFieldProps)
         aria-label={`${param.name} prefix`}
         value={prefix}
         onChange={(e) => commit(e.target.value, date)}
-        className="rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+        className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
       >
         {DATE_PREFIXES.map((p) => (
           <option key={`${p.value}-${p.label}`} value={p.value} title={p.title}>
@@ -486,7 +486,7 @@ function DateSearchField({ base, param, value, onChange }: DateSearchFieldProps)
         aria-label={param.name}
         value={date}
         onChange={(e) => commit(prefix, e.target.value)}
-        className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+        className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
       />
     </div>,
     param,

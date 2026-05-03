@@ -78,14 +78,14 @@ export function ReferencePicker(props: ReferencePickerProps) {
 
   return (
     <div
-      className={className ?? "relative space-y-2 rounded border border-slate-200 bg-slate-50 p-2"}
+      className={className ?? "relative space-y-2 rounded border border-[var(--border)] bg-[var(--sunken)] p-2"}
       data-testid="reference-picker"
     >
       {value?.reference ? (
         <div className="flex items-center gap-2">
           <span className="flex-1 truncate text-sm">
             {value.display ?? value.reference}{" "}
-            <code className="ml-1 rounded bg-slate-100 px-1 py-0.5 text-xs text-slate-500">
+            <code className="ml-1 rounded bg-[var(--surface)] px-1 py-0.5 text-xs text-[var(--text-muted)]">
               {value.reference}
             </code>
           </span>
@@ -93,7 +93,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
             type="button"
             aria-label="Clear reference"
             onClick={() => onChange(undefined)}
-            className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:border-red-400 hover:text-red-600"
+            className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-xs text-[var(--text-muted)] hover:border-red-400 hover:text-red-600"
           >
             ×
           </button>
@@ -105,7 +105,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
               aria-label="target type"
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+              className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)]"
             >
               {targets.map((t) => (
                 <option key={t} value={t}>
@@ -131,7 +131,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
             autoCapitalize="off"
             spellCheck={false}
             name="reference-picker-search"
-            className="min-w-[12rem] flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+            className="min-w-[12rem] flex-1 rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
           />
         </div>
       )}
@@ -139,13 +139,13 @@ export function ReferencePicker(props: ReferencePickerProps) {
       {!value?.reference && isOpen && hasFilter && (
         <ul
           role="listbox"
-          className="absolute left-2 right-2 z-10 max-h-64 overflow-auto rounded border border-slate-200 bg-white shadow-lg"
+          className="absolute left-2 right-2 z-10 max-h-64 overflow-auto rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg"
         >
           {isFetching && results.length === 0 && (
-            <li className="px-3 py-2 text-xs text-slate-500">Searching…</li>
+            <li className="px-3 py-2 text-xs text-[var(--text-muted)]">Searching…</li>
           )}
           {!isFetching && results.length === 0 && (
-            <li className="px-3 py-2 text-xs text-slate-500">No matches</li>
+            <li className="px-3 py-2 text-xs text-[var(--text-muted)]">No matches</li>
           )}
           {results.map((r) => {
             const secondary = secondaryLabel(r);
@@ -164,11 +164,11 @@ export function ReferencePicker(props: ReferencePickerProps) {
                   // accidentally pick the row the finger started on.
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pick(r)}
-                  className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--sunken)]"
                 >
                   <span className="block truncate">{formatReferenceLabel(r)}</span>
                   {secondary && (
-                    <span className="block truncate text-xs text-slate-500">
+                    <span className="block truncate text-xs text-[var(--text-muted)]">
                       {secondary}
                     </span>
                   )}
@@ -228,24 +228,24 @@ export function ReferencePickerFallback({ value, onChange }: ReferencePickerFall
     onChange({ ...v, [k]: val });
   return (
     <div
-      className="grid grid-cols-1 gap-2 rounded border border-slate-200 bg-slate-50 p-2 sm:grid-cols-[1fr_1fr]"
+      className="grid grid-cols-1 gap-2 rounded border border-[var(--border)] bg-[var(--sunken)] p-2 sm:grid-cols-[1fr_1fr]"
       data-testid="reference-picker-fallback"
     >
       <label>
-        <span className="mb-1 block text-xs font-medium text-slate-500">
+        <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
           Reference (Type/id)
         </span>
         <input
-          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+          className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)]"
           placeholder="Patient/123"
           value={v.reference ?? ""}
           onChange={(e) => patch("reference", e.target.value || undefined)}
         />
       </label>
       <label>
-        <span className="mb-1 block text-xs font-medium text-slate-500">Display</span>
+        <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Display</span>
         <input
-          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+          className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)]"
           value={v.display ?? ""}
           onChange={(e) => patch("display", e.target.value || undefined)}
         />
