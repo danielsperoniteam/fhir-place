@@ -12,7 +12,7 @@ test.describe("AllergyIntolerance patient filter", () => {
     await page.goto("/fhir-ui/AllergyIntolerance");
 
     const search = page.getByTestId("resource-search");
-    const text = search.getByRole("textbox", { name: "patient" });
+    const text = search.getByRole("textbox", { name: "patient", exact: true });
     const picker = search.getByRole("searchbox", { name: /search patient/i });
 
     // Both inputs are present and the text input starts empty.
@@ -40,7 +40,7 @@ test.describe("AllergyIntolerance patient filter", () => {
     await page.goto("/fhir-ui/AllergyIntolerance");
 
     const search = page.getByTestId("resource-search");
-    const text = search.getByRole("textbox", { name: "patient" });
+    const text = search.getByRole("textbox", { name: "patient", exact: true });
 
     await text.fill("Patient/ada");
     await search.getByRole("button", { name: /search/i }).click();
