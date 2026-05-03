@@ -59,8 +59,54 @@ The app adds its own app-layer concerns on top:
 - **Routing** (`react-router-dom`) — `/:resourceType`, `/:resourceType/:id`, `/:resourceType/:id/edit`, `/new`, `/ask`, `/settings`, `/cql-runner`
 - **Tab context** (`TabsContext`) — open-tab list kept in React state, synced to the browser URL
 - **Theme context** (`ThemeContext`) — CSS variable swap for dark/light mode
-- **Resource list config** (`resourceListConfig.ts`) — per-type `formatPrimary` / `formatMeta` / `priorityParams` / `tableColumns` for the most common resource types (Patient, Observation, Condition, …). Unknown types fall back to StructureDefinition-derived columns automatically.
+- **Resource list config** (`resourceListConfig.ts`) — see below
 - **NLP query translation** (`ask/anthropicQuery.ts`) — calls the Anthropic API to turn a natural-language question into `{ resourceType, params }`.
+
+## Resource list config (`resourceListConfig.ts`)
+
+This file is the main place to touch when adding or customising how a resource type looks in the list/table view. It defines a `ResourceListConfig` per type and collects them all into `RESOURCE_LIST_CONFIG`.
+
+### The `ResourceListConfig` interface
+
+```ts
+interface ResourceListConfig<T extends Resource = Resource> {
+  title: string;              // page heading, e.g. "Patients"
+  singular: string;           // used in "+ New {singular}" and empty-state copy
+  priorityParams: string[];   // search params shown first in the filter form
+  tableColumns: ResourceListColumn[];       // all columns the column-picker can offer
+  defaultVisibleColumns: string[];          // subset shown before the user customises
+  formatPrimary?: (resource: T) => string;  // main text in list-view rows (enables List layout)
+  formatMeta?: (resource: T) => Array<string | undefined | null>; // secondary metadata in list rows
+}
+```
+
+`formatPrimary` is optional. When omitted the resource type only renders in Table or JSON layout — the List toggle is disabled. Most resource types provide it; types like `Location` and `Medication` that don't have a natural "name" field still get one via `codeText()`.
+
+`tableColumns` uses dot-notation paths (`"address.city"`, `"period.start"`). The special path `"__counts"` on Patient renders the `<PatientRowCounts>` component (compartment counts) rather than a raw field value.
+
+### Configured resource types
+
+All 20 types in `TOP_RESOURCE_TYPES` have explicit configs: Patient, AllergyIntolerance, Appointment, CarePlan, CareTeam, Condition, DiagnosticReport, DocumentReference, Encounter, Goal, Immunization, Location, Medication, MedicationRequest, Observation, Organization, Practitioner, Procedure, ServiceRequest, Task.
+
+### Fallback for unconfigured types
+
+Any resource type not in `RESOURCE_LIST_CONFIG` (e.g. a custom or less-common type) still works. `ResourceListPage` detects the missing config and falls back to:
+1. Fetching the resource's `StructureDefinition` via `useStructureDefinition`.
+2. Deriving columns from the `isSummary` elements in the SD snapshot (up to 8).
+3. If the SD has no summary elements, defaulting to `["status", "code.text", "subject.reference", "id"]`.
+
+This means the app handles any FHIR R4 resource type out of the box, with the configured types getting polished list-view presentation.
+
+### Adding a new resource type
+
+1. Add the type string to `TOP_RESOURCE_TYPES` in `resourceListConfig.ts`.
+2. Define a `ResourceListConfig<YourType>` constant with the fields above.
+3. Add it to the `RESOURCE_LIST_CONFIG` record.
+4. Optionally add compartment entries in `compartment.ts` if the type should appear as a patient compartment chip.
+
+### `patientFields.ts`
+
+A separate utility that builds `PatientFieldOption[]` from a live `StructureDefinition`. Used by the Patient column picker to offer every top-level Patient field (including choice-type variants like `deceasedBoolean` / `deceasedDateTime`) with human-readable labels derived from the SD's `short` descriptions. Not part of `resourceListConfig.ts` because it depends on a runtime SD fetch rather than being statically declared.
 
 ## App structure
 
