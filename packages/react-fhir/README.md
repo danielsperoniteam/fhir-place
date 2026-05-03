@@ -151,6 +151,7 @@ for (const node of walkResource(patient, structureDef)) {
 - **`<ResourceTable>`** — generic list/table renderer driven by the StructureDefinition; FHIR-datatype-aware cell formatting (HumanName, CodeableConcept, Reference, …) using the same renderer map as `<ResourceView>`. Supports controlled sort, row clicks, custom per-column renderers.
 - **`<ColumnPicker>`** — companion popover to `<ResourceTable>`: toggle column visibility with checkboxes, persist user choice to `localStorage` via `storageKey`. Keyboard-accessible.
 - **`<SortPicker>`** — popover to choose the `_sort` search parameter, driven by the resource's search params.
+- **`<ReferencePicker>`** — debounced search-and-pick widget for FHIR `Reference` fields. Accepts `targets` (allowed resource types), searches the server live as the user types, and returns a typed `Reference`. Replaces the raw `Type/id` text field that `<ResourceEditor>` generates for Reference elements by default. Also exports `<ReferencePickerFallback>` for when the search fails.
 - **`<Narrative>`** — the *only* place `dangerouslySetInnerHTML` is used. DOMPurify with a FHIR-appropriate allowlist: no `<script>`, no `on*`, no `javascript:`, no forms or inputs.
 - **`defaultTypeRenderers` / `defaultTypeInputs`** — the dispatch maps. Every built-in renderer/input is overridable by passing `renderers` / `inputs` props.
 
@@ -239,7 +240,6 @@ Tracked items (comment / upvote on the issue, or pick one up — each has a conc
 | # | Item |
 | --- | --- |
 | [#4](https://github.com/samsuffolksperoni/fhir-place/issues/4) | ValueSet resolution + binding-aware code input |
-| [#5](https://github.com/samsuffolksperoni/fhir-place/issues/5) | `<ReferencePicker>` search-and-pick widget |
 | [#121](https://github.com/samsuffolksperoni/fhir-place/issues/121) | Typed search builder v0 — core API |
 | [#123](https://github.com/samsuffolksperoni/fhir-place/issues/123) | Profile-aware codegen spike (US Core 7 seed) |
 | [#124](https://github.com/samsuffolksperoni/fhir-place/issues/124) | Experimental Zod schema generation from `StructureDefinition` |

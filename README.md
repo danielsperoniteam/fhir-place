@@ -47,6 +47,17 @@ docker compose up -d
 VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 ```
 
+### Goal/Task deployable starter
+
+[`apps/goals-tasks`](apps/goals-tasks/README.md) is a minimal but deployable sample for a Goal + Task workflow. It shows how to use the library primitives together for a real clinical use case:
+
+- Search and list a patient's goals with `useSearch` + `<ResourceSearch>`
+- Render goal and task details with `<ResourceView>`
+- Create and update goals and tasks with `<ResourceEditor>` plus `useCreateResource` / `useUpdateResource`
+- Persist state transitions through your FHIR server (`Task.status`, `Goal.lifecycleStatus`) using the generic mutation hooks
+
+See [`apps/goals-tasks/README.md`](apps/goals-tasks/README.md) for the full breakdown and how to run it.
+
 ## Documentation
 
 | Doc | What it covers |
