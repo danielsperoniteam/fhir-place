@@ -28,6 +28,10 @@ fhir-ui is a full FHIR browser and editor built on [`@fhir-place/react-fhir`](..
 - Requires an Anthropic API key, set in Settings. The key stays local (localStorage only).
 - Standalone Ask page available via the sidebar.
 
+### Goal / Task workflows (early)
+
+Goal and Task resource types work through the generic fhir-ui pages — search, list, detail, create, and edit all work without any Goal/Task-specific code, because the app derives its UI from the `StructureDefinition`. There are no dedicated workflow pages (e.g. a goal-progress tracker or task state machine view) yet; those would live in `routes/fhir-ui/pages/` when the time comes.
+
 ### CQL runner
 
 - Paste or write Clinical Quality Language (CQL) and evaluate it against resources fetched from the active FHIR server.
