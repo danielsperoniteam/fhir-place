@@ -1,10 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  createDefaultSpecFetcher,
   FetchFhirClient,
   FhirClientProvider,
   FhirError,
-  setCoreStructureDefinitionFetcher,
 } from "@fhir-place/react-fhir";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -47,15 +45,6 @@ const fhirClient = new FetchFhirClient({
   baseUrl: FHIR_BASE_URL,
   headers: buildRequestHeaders(ACTIVE_SERVER_CONFIG),
 });
-
-// Resolve core R4 StructureDefinitions from a local mirror under
-// `${BASE_URL}fhir-r4/` so detail/edit pages work for any resource type
-// regardless of what the FHIR server stores. The JSON files come straight
-// from https://hl7.org/fhir/R4/{type}.profile.json — sync them once via
-// `pnpm --filter @fhir-place/demo sync:fhir-spec`.
-setCoreStructureDefinitionFetcher(
-  createDefaultSpecFetcher(`${import.meta.env.BASE_URL}fhir-r4`),
-);
 
 // Terminology calls (ValueSet/$expand for SNOMED, LOINC, ICD-10, BCP-47…)
 // route to a separate client so they hit a SNOMED-capable server independent

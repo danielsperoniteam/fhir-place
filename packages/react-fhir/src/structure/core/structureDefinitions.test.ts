@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import {
   clearSpecFetcherCache,
   coreStructureDefinition,
+  createBundledSpecFetcher,
   createDefaultSpecFetcher,
-  DEFAULT_SPEC_BASE_URL,
   setCoreStructureDefinitionFetcher,
 } from "./index.js";
+
+const TEST_BASE_URL = "https://spec.example.test/fhir/R4";
 
 const sd = (type: string): StructureDefinition => ({
   resourceType: "StructureDefinition",
@@ -25,17 +27,17 @@ describe("coreStructureDefinition (runtime spec fetcher)", () => {
 
   beforeEach(() => {
     clearSpecFetcherCache();
-    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher());
+    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher(TEST_BASE_URL));
     fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher());
+    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher(TEST_BASE_URL));
     clearSpecFetcherCache();
   });
 
-  it("fetches the per-type profile JSON from the published R4 spec", async () => {
+  it("fetches the per-type profile JSON from the configured base URL", async () => {
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify(sd("Patient")), { status: 200 }),
     );
@@ -43,7 +45,7 @@ describe("coreStructureDefinition (runtime spec fetcher)", () => {
     expect(result?.type).toBe("Patient");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const url = fetchSpy.mock.calls[0]![0] as string;
-    expect(url).toBe(`${DEFAULT_SPEC_BASE_URL}/patient.profile.json`);
+    expect(url).toBe(`${TEST_BASE_URL}/patient.profile.json`);
   });
 
   it("lower-cases the type segment so URL casing matches the published files", async () => {
@@ -52,7 +54,7 @@ describe("coreStructureDefinition (runtime spec fetcher)", () => {
     );
     await coreStructureDefinition("AdverseEvent");
     const url = fetchSpy.mock.calls[0]![0] as string;
-    expect(url).toBe(`${DEFAULT_SPEC_BASE_URL}/adverseevent.profile.json`);
+    expect(url).toBe(`${TEST_BASE_URL}/adverseevent.profile.json`);
   });
 
   it("returns undefined for 404 (unknown resource type)", async () => {
@@ -118,5 +120,30 @@ describe("coreStructureDefinition (runtime spec fetcher)", () => {
     await coreStructureDefinition("Patient", ctrl.signal);
     const opts = fetchSpy.mock.calls[0]![1] as RequestInit | undefined;
     expect(opts?.signal).toBe(ctrl.signal);
+  });
+});
+
+describe("createBundledSpecFetcher (in-package R4 SDs)", () => {
+  beforeEach(() => {
+    clearSpecFetcherCache();
+    setCoreStructureDefinitionFetcher(createBundledSpecFetcher());
+  });
+  afterEach(() => {
+    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher(TEST_BASE_URL));
+    clearSpecFetcherCache();
+  });
+
+  it("resolves a core resource type from the generated bundle without any network call", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const result = await coreStructureDefinition("MedicationRequest");
+    expect(result?.resourceType).toBe("StructureDefinition");
+    expect(result?.type).toBe("MedicationRequest");
+    expect(result?.snapshot?.element?.some((e) => e.path === "MedicationRequest.status")).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("returns undefined for types not in the bundle so the resolver throws its friendly error", async () => {
+    expect(await coreStructureDefinition("NotARealResource")).toBeUndefined();
   });
 });

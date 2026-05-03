@@ -7,7 +7,6 @@ export * from "./format.js";
 export {
   coreStructureDefinition,
   type SpecFetcher,
-  DEFAULT_SPEC_BASE_URL,
   createDefaultSpecFetcher,
   setCoreStructureDefinitionFetcher,
   getCoreStructureDefinitionFetcher,

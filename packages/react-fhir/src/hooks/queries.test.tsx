@@ -8,7 +8,7 @@ import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
 import {
   clearSpecFetcherCache,
-  createDefaultSpecFetcher,
+  createBundledSpecFetcher,
   setCoreStructureDefinitionFetcher,
 } from "../structure/core/index.js";
 import { FhirClientProvider } from "./FhirClientProvider.js";
@@ -47,7 +47,7 @@ afterEach(() => {
 });
 afterAll(() => {
   server.close();
-  setCoreStructureDefinitionFetcher(createDefaultSpecFetcher());
+  setCoreStructureDefinitionFetcher(createBundledSpecFetcher());
 });
 
 const mkWrapper = (opts?: { terminologyBaseUrl?: string }) => {

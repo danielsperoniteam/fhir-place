@@ -1,4 +1,5 @@
 import type { StructureDefinition } from "fhir/r4";
+import { loaders as bundledLoaders } from "./sd/index.generated.js";
 
 /**
  * Strategy for resolving a core R4 StructureDefinition at runtime, used as the
@@ -16,16 +17,6 @@ export type SpecFetcher = (
   signal?: AbortSignal,
 ) => Promise<StructureDefinition | undefined>;
 
-/**
- * Canonical location pattern for the published R4 spec — one JSON file per
- * resource StructureDefinition. Override via `setCoreStructureDefinitionFetcher`
- * if you mirror the spec locally (e.g. as static assets) or need a CORS-
- * friendly proxy.
- *
- * @see https://hl7.org/fhir/R4/
- */
-export const DEFAULT_SPEC_BASE_URL = "https://hl7.org/fhir/R4";
-
 const cache = new Map<string, Promise<StructureDefinition | undefined>>();
 
 /** Drop the in-memory cache. Useful in tests; consumers rarely need this. */
@@ -34,14 +25,41 @@ export function clearSpecFetcherCache(): void {
 }
 
 /**
- * Default fetcher: GETs `{baseUrl}/{lowercase-type}.profile.json` and parses
- * the JSON. Returns `undefined` on 404 so the resolver throws a friendly
- * not-found error rather than a network error. Successful responses are
- * memoised so each type costs at most one round-trip per page load.
+ * Bundled fetcher: resolves the SD by lazy-importing the per-type module
+ * generated under `src/structure/core/sd/` (one chunk per type at build
+ * time). No network call. Returns `undefined` for types not in the bundle.
+ *
+ * This is the global default — no app-side configuration required to support
+ * any core R4 resource type. Consumers who need profiles, custom SDs, or a
+ * different spec version should override via `setCoreStructureDefinitionFetcher`.
  */
-export function createDefaultSpecFetcher(
-  baseUrl: string = DEFAULT_SPEC_BASE_URL,
-): SpecFetcher {
+export function createBundledSpecFetcher(): SpecFetcher {
+  return async (type) => {
+    const cacheKey = `bundled|${type}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+    const loader = bundledLoaders[type];
+    if (!loader) return undefined;
+    const promise = loader().then((m) => m.sd);
+    promise.catch(() => cache.delete(cacheKey));
+    cache.set(cacheKey, promise);
+    return promise;
+  };
+}
+
+/**
+ * HTTP-mirror fetcher: GETs `{baseUrl}/{lowercase-type}.profile.json` and
+ * parses the JSON. Useful when consumers prefer to host the spec themselves
+ * (e.g. as static assets in their app, behind a CORS-friendly proxy) rather
+ * than ship the SDs in their bundle. Returns `undefined` on 404 so the
+ * resolver throws a friendly not-found error rather than a network error.
+ * Successful responses are memoised so each type costs at most one round-trip
+ * per page load.
+ *
+ * `baseUrl` is required: pointing this at hl7.org from a browser is a CORS
+ * and reliability footgun, so consumers must opt in to a specific mirror.
+ */
+export function createDefaultSpecFetcher(baseUrl: string): SpecFetcher {
   return async (type, signal) => {
     const cacheKey = `${baseUrl}|${type}`;
     const cached = cache.get(cacheKey);
@@ -72,7 +90,7 @@ export function createDefaultSpecFetcher(
   };
 }
 
-let activeFetcher: SpecFetcher = createDefaultSpecFetcher();
+let activeFetcher: SpecFetcher = createBundledSpecFetcher();
 
 /**
  * Override the process-global fetcher. Call once at app boot — for example to
