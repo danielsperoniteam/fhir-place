@@ -84,10 +84,13 @@ async function checkFhirReachable(baseUrl: string): Promise<boolean> {
 
 async function main() {
   const cli = parseArgs();
-  const task = TASKS_BY_ID[cli.taskId];
+  const task =
+    cli.taskId === "random"
+      ? ALL_TASKS[Math.floor(Math.random() * ALL_TASKS.length)]
+      : TASKS_BY_ID[cli.taskId];
   if (!task) {
     console.error(
-      `Unknown task: ${cli.taskId}. Known: ${Object.keys(TASKS_BY_ID).join(", ")}`,
+      `Unknown task: ${cli.taskId}. Known: random, ${Object.keys(TASKS_BY_ID).join(", ")}`,
     );
     process.exit(2);
   }

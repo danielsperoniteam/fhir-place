@@ -19,6 +19,7 @@ export ANTHROPIC_API_KEY=...
 pnpm --filter @fhir-place/demo agent:run
 # or pick a task / change targets:
 pnpm --filter @fhir-place/demo agent:run --task=find-allergies
+pnpm --filter @fhir-place/demo agent:run --task=random
 LIVE_SITE_BASE_URL=http://localhost:5173 pnpm --filter @fhir-place/demo agent:run --headed
 ```
 
