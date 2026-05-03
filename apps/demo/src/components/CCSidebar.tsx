@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ACTIVE_SERVER_CONFIG, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
 import { TOP_RESOURCE_TYPES } from "../resourceListConfig.js";
+import { JumpDialog } from "./JumpDialog.js";
 import { CC_MONO } from "./ccStyles.js";
 
 export function CCSidebar() {
@@ -9,6 +10,18 @@ export function CCSidebar() {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setJumpOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const activeType = (() => {
     const m = location.pathname.match(/^\/fhir-ui\/([^/]+)/);
@@ -181,9 +194,13 @@ export function CCSidebar() {
         )}
       </div>
 
-      {/* Search */}
+      {/* Search / Jump */}
       <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)" }}>
         <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setJumpOpen(true)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setJumpOpen(true); }}
           style={{
             display: "flex",
             alignItems: "center",
@@ -192,14 +209,14 @@ export function CCSidebar() {
             border: "1px solid var(--border)",
             borderRadius: 6,
             background: "var(--bg)",
-            cursor: "text",
+            cursor: "pointer",
           }}
         >
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="var(--text-subtle)" strokeWidth="1.5">
             <circle cx="6" cy="6" r="4.5" />
             <path d="M9.5 9.5L13 13" />
           </svg>
-          <span style={{ fontSize: 12, color: "var(--text-subtle)", flex: 1 }}>Jump to…</span>
+          <span style={{ fontSize: 12, color: "var(--text-subtle)", flex: 1 }}>Search in plain English…</span>
           <span
             style={{
               fontSize: 10,
@@ -214,6 +231,8 @@ export function CCSidebar() {
           </span>
         </div>
       </div>
+
+      <JumpDialog open={jumpOpen} onClose={() => setJumpOpen(false)} />
 
       {/* Resources */}
       <div style={{ padding: "12px 8px", overflowY: "auto", flex: 1 }}>

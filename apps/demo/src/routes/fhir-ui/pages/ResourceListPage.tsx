@@ -8,12 +8,14 @@ import {
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
 import type { Reference, Resource } from "fhir/r4";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
+import { naturalLanguageToFhirQuery } from "../../../ask/anthropicQuery.js";
 import { PatientRowCounts } from "../../../components/PatientRowCounts.js";
 import { SearchRequestPreview } from "../../../components/SearchRequestPreview.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
+import { loadAnthropicApiKey } from "../../../config.js";
 import {
   RESOURCE_LIST_CONFIG,
   isTopResourceType,
@@ -215,6 +217,23 @@ export function ResourceListPage() {
     });
   }, [tableColumns, defaultVisibleColumns]);
 
+  const askAI = useCallback(
+    async (question: string): Promise<Record<string, string> | null> => {
+      const apiKey = loadAnthropicApiKey();
+      if (!apiKey) throw new Error("No Anthropic API key — add one in Settings first.");
+      const plan = await naturalLanguageToFhirQuery(question, apiKey);
+      const { _count, ...rest } = plan.params;
+      void _count;
+      if (plan.resourceType !== resourceType) {
+        const qs = new URLSearchParams(rest);
+        navigate(`/fhir-ui/${plan.resourceType}${qs.toString() ? `?${qs}` : ""}`);
+        return null;
+      }
+      return rest;
+    },
+    [resourceType, navigate],
+  );
+
   const submitFilters = (next: SearchParams) => {
     const entries: Array<[string, string]> = [];
     for (const [k, v] of Object.entries(next)) {
@@ -355,6 +374,7 @@ export function ResourceListPage() {
               })
             }
             onSubmit={submitFilters}
+            onAskAI={askAI}
           />
 
           {/* Request preview */}
