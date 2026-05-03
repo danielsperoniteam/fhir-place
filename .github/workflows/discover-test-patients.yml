@@ -1,0 +1,63 @@
+name: Discover test patients
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample:
+        description: "Number of patients to sample per server"
+        default: "40"
+        required: false
+      top:
+        description: "Number of top candidates to report"
+        default: "4"
+        required: false
+      server1:
+        description: "FHIR server 1 base URL"
+        default: "https://r4.smarthealthit.org"
+        required: false
+      server2:
+        description: "FHIR server 2 base URL"
+        default: "https://hapi.fhir.org/baseR4"
+        required: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run discovery script
+        env:
+          SERVER1: ${{ inputs.server1 }}
+          SERVER2: ${{ inputs.server2 }}
+          SAMPLE:  ${{ inputs.sample }}
+          TOP:     ${{ inputs.top }}
+        run: |
+          node scripts/discover-test-patients.mjs 2>&1 | tee /tmp/discovery-output.txt
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo '## Test patient discovery results' >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          echo '| Input | Value |' >> $GITHUB_STEP_SUMMARY
+          echo '|---|---|' >> $GITHUB_STEP_SUMMARY
+          echo "| Server 1 | ${{ inputs.server1 }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Server 2 | ${{ inputs.server2 }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Sample size | ${{ inputs.sample }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Top N | ${{ inputs.top }} |" >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/discovery-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload full output as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-output
+          path: /tmp/discovery-output.txt
+          retention-days: 14
