@@ -127,14 +127,29 @@ with clinical data, if the pediatric rendering path becomes important to test.
 - [x] Run discovery against SMART Health IT; pick 4 patient IDs
 - [x] Create `apps/demo/src/mocks/test-patients.json` with chosen patients
 
-### Phase 2 — Second server decision (blocked on open question #1)
+### Phase 1.5 — Targeted searches (next)
 
-Once the server 2 choice is made:
+Two follow-up runs of `discover-test-patients` against SMART Health IT, using the
+new `patient_query` workflow input:
 
-- [ ] **If local HAPI:** write `scripts/seed-test-patients.mjs` using Synthea bundles;
-  add a `docker compose up` post-hook or a dev-setup README step to seed on first run
-- [ ] **If Medplum:** add Medplum patient IDs to `test-patients.json`; document the
-  one-time seeding step in `interop-matrix.md`
+- [ ] **Allergy-rich patient** — `patient_query=_has:AllergyIntolerance:patient:_id:exists=true`
+  finds patients with at least one AllergyIntolerance. Pick the highest-scoring one to
+  replace or supplement the current full-breadth slot (Hobert has only 1 AI record).
+- [ ] **Pediatric patient** — `patient_query=birthdate=gt2010-01-01` finds children.
+  Pick a candidate with growth observations and a vaccine series; add as a 5th profile.
+
+### Phase 2 — Server 2 (Medplum)
+
+Decided: Medplum sandbox is server 2. Project-scoped, seeds survive indefinitely,
+no weekly re-seed. Bearer-token auth is already documented in `interop-matrix.md`.
+
+- [ ] Create a Medplum project + ClientApplication; obtain a long-lived access token
+  scoped to the test-fixtures project
+- [ ] Write `scripts/seed-medplum.mjs` that POSTs Synthea-derived Transaction bundles
+  for each profile and captures the Medplum-assigned IDs into `test-patients.json`
+- [ ] Add the access token as a GitHub repo secret (`MEDPLUM_TEST_TOKEN`); document
+  local-dev setup via `.env.local`
+- [ ] Update `interop-matrix.md` with the seeding step
 
 ### Phase 3 — MSW fixture expansion (1–2 days)
 
@@ -143,15 +158,31 @@ Once the server 2 choice is made:
 - [ ] Lamarr remains sparse (only name + gender) — tests empty-state compartment paths
 - [ ] Turing: add 10+ Observations, 3 Conditions, 2 MedicationRequests, 2 Encounters
 - [ ] Hopper: add 12 Immunizations, 5+ Observations (vitals), 3 Encounters
+- [ ] If pediatric profile is added: extend a synthetic patient (or repurpose one of
+  the existing ones) with growth Observations and an immunization series
 
-### Phase 4 — Test updates (1–2 days)
+### Phase 4 — Live-server test coverage (1–2 days)
 
+The Vitest integration suite (`packages/react-fhir/integration/`) stays focused on
+protocol-drift CRUD roundtrips against HAPI public — its design (random identifiers,
+clean up after, never assert on pre-existing data) is incompatible with asserting on
+known patient IDs. The new live-data assertions live in two new places:
+
+**a) New `LiveRead.integration.test.ts`** (gated on `FHIR_BASE_URL` pointing at SMART):
+- [ ] `describe.skipIf(!url.includes("smarthealthit"))` so the suite no-ops against HAPI
+- [ ] For each chosen patient: `client.read("Patient", id)` returns 200, names match
+- [ ] Compartment search returns >0 for each non-zero type in `test-patients.json.totals`
+  (assert non-empty, not exact counts — Synthea regen could shift counts by ±5%)
+- [ ] Hobert: AllergyIntolerance search returns ≥1
+- [ ] Add an Actions matrix to `integration.yml`: run once with HAPI (existing) and
+  once with `FHIR_BASE_URL=https://r4.smarthealthit.org` (new)
+
+**b) Extend `apps/demo/e2e-live/`** (Playwright against the deployed app):
 - [ ] Add a `getTestPatient(profile)` helper reading `test-patients.json`
-- [ ] Update `compartment.screenshot.spec.ts` to exercise all 4 profiles
-- [ ] Add assertions in `allergy-intolerance-patient-filter.spec.ts` for Hobert (1 allergy)
-  and Ada (0 allergies from live server — empty state)
-- [ ] Add `e2e/patient-profiles.spec.ts`: visit each profile patient, assert correct
-  compartment tabs are present/absent
+- [ ] New `e2e-live/patient-profiles.spec.ts`: navigate to each profile patient on the
+  deployed site (configured to point at SMART), assert the right compartment tabs render
+- [ ] Add Hobert-specific assertion: AllergyIntolerance compartment shows ≥1 row
+- [ ] Tag tests with `@smart` so they skip when the live site points elsewhere
 
 ---
 
@@ -160,18 +191,20 @@ Once the server 2 choice is made:
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | SMART Health IT corpus resets, changing patient IDs | Low | Re-run `discover-test-patients` workflow; update `test-patients.json` |
-| AllergyIntolerance data too sparse for meaningful tests | Medium | Hobert has 1 AI resource; a targeted search would find richer candidates if needed |
-| Pediatric path untested on live server | Medium | Targeted query for young patients post-discovery; or rely on MSW fixture for that path |
+| AllergyIntolerance data too sparse for meaningful tests | Addressed | Phase 1.5 runs a targeted `_has:AllergyIntolerance` search to replace the full-breadth slot |
+| Pediatric path untested on live server | Addressed | Phase 1.5 runs a targeted `birthdate=gt2010-01-01` search to add a 5th profile |
 | HAPI public rate limits worsen | N/A | HAPI public dropped as server 2 for rich patient data |
 
 ---
 
-## Open questions for human decision
+## Decisions (2026-05-03)
 
-1. **Server 2 choice** — local HAPI Docker (seed once, stable per container) or Medplum
-   sandbox (stable indefinitely, requires bearer token)? HAPI public is confirmed
-   unsuitable for rich patient fixtures.
-2. **AllergyIntolerance coverage** — Hobert has only 1 AI resource. Is that enough, or
-   should we run a targeted discovery search for a patient with 3–5 allergies?
-3. **Pediatric profile** — is it in scope? If yes, a targeted `/Patient?birthdate=gt2010`
-   query on SMART Health IT is the next step.
+1. **Server 2 = Medplum sandbox.** Project-scoped, seeds survive indefinitely. HAPI
+   public dropped for rich-fixture purposes (severe rate limiting + sparse data
+   confirmed in the discovery run). Local HAPI via Docker remains useful for ad-hoc
+   developer testing but isn't part of the canonical fixture set.
+2. **Run a targeted allergy search** — 1 AI record on Hobert is insufficient; a search
+   for a patient with multiple allergies will replace or supplement the full-breadth
+   slot.
+3. **Add a pediatric profile** — bring the total to 5 patients. Targeted search by
+   `birthdate=gt2010-01-01` against SMART Health IT.

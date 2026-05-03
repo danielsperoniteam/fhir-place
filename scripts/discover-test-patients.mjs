@@ -11,6 +11,11 @@
  *   SERVER2=https://hapi.fhir.org/baseR4 \
  *   SAMPLE=40 \
  *     node scripts/discover-test-patients.mjs
+ *
+ * PATIENT_QUERY narrows the patient pool (filters appended to /Patient).
+ * Examples:
+ *   PATIENT_QUERY='birthdate=gt2010-01-01'                    # pediatric
+ *   PATIENT_QUERY='_has:AllergyIntolerance:patient:_id:exists=true'  # has allergies
  */
 
 const SERVERS = [
@@ -30,9 +35,10 @@ const COMPARTMENT_TYPES = [
   "CarePlan",
 ];
 
-const SAMPLE_SIZE = parseInt(process.env.SAMPLE ?? "40", 10);
-const TOP_N       = parseInt(process.env.TOP    ?? "4",  10);
-const CONCURRENCY = 6;
+const SAMPLE_SIZE   = parseInt(process.env.SAMPLE ?? "40", 10);
+const TOP_N         = parseInt(process.env.TOP    ?? "4",  10);
+const CONCURRENCY   = 6;
+const PATIENT_QUERY = (process.env.PATIENT_QUERY ?? "").trim();
 
 async function fhirGet(url) {
   const res = await fetch(url, {
@@ -70,7 +76,8 @@ async function pool(tasks, concurrency) {
 
 async function fetchPatientIds(base, count) {
   const ids = [];
-  let url = `${base}/Patient?_count=${count}`;
+  const filter = PATIENT_QUERY ? `&${PATIENT_QUERY}` : "";
+  let url = `${base}/Patient?_count=${count}${filter}`;
   while (url && ids.length < count) {
     const bundle = await fhirGet(url);
     for (const e of bundle.entry ?? []) {
@@ -103,6 +110,7 @@ function patientLabel(p) {
 async function scoreServer(server) {
   console.log(`\n${"═".repeat(60)}`);
   console.log(`Server: ${server.name}  (${server.url})`);
+  if (PATIENT_QUERY) console.log(`Filter: ${PATIENT_QUERY}`);
   console.log("═".repeat(60));
 
   console.log(`Fetching up to ${SAMPLE_SIZE} patients…`);
