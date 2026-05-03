@@ -137,7 +137,6 @@ export function ResourceSearch(props: ResourceSearchProps) {
         setValues(result);
         onSubmit?.(buildSearchParams(result));
         setShowAll(true);
-        setAskQuestion("");
       }
     } catch (err) {
       setAskError(err instanceof Error ? err.message : String(err));
@@ -152,6 +151,16 @@ export function ResourceSearch(props: ResourceSearchProps) {
   }, [JSON.stringify(values)]);
 
   const visible = showAll ? params : params.slice(0, initialVisible);
+
+  // Params in `values` that have no matching entry in the CapabilityStatement
+  // (e.g. _has:Condition:patient:code, _text, chained params). These come from
+  // the URL or from AI-generated queries and must stay visible so they're not
+  // silently lost when the user edits the form.
+  const knownNames = useMemo(() => new Set(params.map((p) => p.name)), [params]);
+  const extraParams = useMemo(
+    () => Object.keys(values).filter((k) => !knownNames.has(k)),
+    [values, knownNames],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,6 +242,37 @@ export function ResourceSearch(props: ResourceSearchProps) {
           />
         ))}
       </div>
+
+      {/* Extra params from URL / AI not advertised in CapabilityStatement */}
+      {extraParams.length > 0 && (
+        <div className="space-y-2 border-t border-[var(--border)] pt-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
+            Additional filters
+          </span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {extraParams.map((k) => (
+              <label key={k} className="block">
+                <span className="mb-1 flex items-baseline gap-2">
+                  <span
+                    className="text-xs font-medium text-[var(--text-muted)]"
+                    style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)" }}
+                  >
+                    {k}
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  aria-label={k}
+                  value={values[k] ?? ""}
+                  onChange={(e) => setParam(k, e.target.value)}
+                  className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+                  style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)" }}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         {params.length > initialVisible ? (
