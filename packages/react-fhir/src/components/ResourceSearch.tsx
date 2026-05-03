@@ -3,7 +3,7 @@ import type {
   CapabilityStatement,
   ElementDefinition,
 } from "fhir/r4";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   useCapabilities,
   useSearchParameter,
@@ -122,15 +122,9 @@ export function ResourceSearch(props: ResourceSearchProps) {
   const [values, setValues] = useState<Record<string, string>>(initialParams ?? {});
   const [showAll, setShowAll] = useState(false);
 
-  const [askOpen, setAskOpen] = useState(false);
   const [askQuestion, setAskQuestion] = useState("");
   const [askLoading, setAskLoading] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
-  const askInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (askOpen) setTimeout(() => askInputRef.current?.focus(), 20);
-  }, [askOpen]);
 
   const handleAsk = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,9 +137,8 @@ export function ResourceSearch(props: ResourceSearchProps) {
         setValues(result);
         onSubmit?.(buildSearchParams(result));
         setShowAll(true);
+        setAskQuestion("");
       }
-      setAskOpen(false);
-      setAskQuestion("");
     } catch (err) {
       setAskError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -195,54 +188,31 @@ export function ResourceSearch(props: ResourceSearchProps) {
         <h3 className="text-sm font-semibold text-[var(--text)]">
           Search {resourceType}
         </h3>
-        <div className="flex items-center gap-2">
-          {onAskAI && (
-            <button
-              type="button"
-              onClick={() => { setAskOpen((v) => !v); setAskError(null); }}
-              className="flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--sunken)]"
-              title="Ask AI to fill search filters"
-            >
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.5 1.5M8 8l1.5 1.5M9.5 2.5L8 4M4 8l-1.5 1.5" />
-              </svg>
-              Ask AI
-            </button>
-          )}
-          <span className="text-xs text-[var(--text-subtle)]">
-            {params.length} parameters available
-          </span>
-        </div>
+        <span className="text-xs text-[var(--text-subtle)]">
+          {params.length} parameters available
+        </span>
       </div>
 
-      {/* Inline Ask AI panel */}
-      {askOpen && onAskAI && (
-        <div className="rounded border border-blue-200 bg-blue-50 p-2 space-y-1.5">
+      {/* Always-visible Ask AI input */}
+      {onAskAI && (
+        <div className="space-y-1.5">
           <div className="flex gap-2">
             <input
-              ref={askInputRef}
               type="text"
               value={askQuestion}
               onChange={(e) => setAskQuestion(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleAsk(e); } if (e.key === "Escape") { setAskOpen(false); setAskError(null); } }}
-              placeholder={`Describe what you're looking for in plain English…`}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleAsk(e); } }}
+              placeholder={`Ask in plain English… e.g. patients with diabetes over 65`}
               disabled={askLoading}
-              className="flex-1 rounded border border-blue-300 bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] focus:border-blue-500 focus:outline-none disabled:opacity-60"
+              className="flex-1 rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1.5 text-sm text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:border-blue-500 focus:outline-none disabled:opacity-60"
             />
             <button
               type="button"
               onClick={(e) => { void handleAsk(e); }}
               disabled={askLoading || !askQuestion.trim()}
-              className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
             >
-              {askLoading ? "…" : "Fill"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setAskOpen(false); setAskError(null); }}
-              className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text-muted)] hover:bg-[var(--sunken)]"
-            >
-              ✕
+              {askLoading ? "Generating…" : "Generate filters"}
             </button>
           </div>
           {askError && (
