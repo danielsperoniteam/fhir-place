@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext.js";
+import { usePinned } from "../state/pinned.js";
 import { CC_FONT, CC_MONO, ccBtn } from "./ccStyles.js";
 
 function SunIcon() {
@@ -19,10 +20,38 @@ function MoonIcon() {
   );
 }
 
+function PinIcon({ filled }: { filled: boolean }) {
+  // Bookmark/pin glyph; switches to a filled fill when the route is pinned
+  // so the topbar reads as a toggle, not a one-shot action.
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 14 14"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    >
+      <path d="M3.5 1.5h7v9.25L7 8.5 3.5 10.75z" />
+    </svg>
+  );
+}
+
 export function CCTopbar() {
   const location = useLocation();
   const { theme, toggle } = useTheme();
+  const { isPinned, togglePin } = usePinned();
   const isSettings = location.pathname === "/fhir-ui/settings";
+
+  const fullPath = `${location.pathname}${location.search}`;
+  const pinnable =
+    location.pathname.startsWith("/fhir-ui/") &&
+    location.pathname !== "/fhir-ui/settings" &&
+    location.pathname !== "/fhir-ui/ask" &&
+    location.pathname !== "/fhir-ui/types" &&
+    !location.pathname.endsWith("/new");
+  const pinned = pinnable && isPinned(fullPath);
 
   // useParams() returns {} when rendered outside <Routes>, so parse from pathname directly.
   const p = location.pathname;
@@ -92,6 +121,22 @@ export function CCTopbar() {
 
       {/* Actions */}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button
+          onClick={() => pinnable && togglePin(fullPath)}
+          disabled={!pinnable}
+          style={{
+            ...ccBtn("ghost"),
+            color: pinned ? "var(--accent-text)" : "var(--text-muted)",
+            background: pinned ? "var(--accent-soft)" : "transparent",
+            opacity: pinnable ? 1 : 0.4,
+            cursor: pinnable ? "pointer" : "not-allowed",
+          }}
+          title={pinned ? "Unpin this view" : "Pin this view"}
+          aria-pressed={pinned}
+          data-testid="topbar-pin"
+        >
+          <PinIcon filled={pinned} />
+        </button>
         <button
           onClick={toggle}
           style={ccBtn("ghost")}

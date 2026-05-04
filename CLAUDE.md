@@ -19,6 +19,23 @@
 - Use `data-testid` selectors; avoid CSS class names and positional selectors.
 - See `apps/demo/e2e/README.md` for the full test map and update rules.
 
+## Screenshots on PRs
+
+- **Every PR that changes anything user-visible** — demo apps under
+  `apps/**` *and* library components under `packages/react-fhir/**` —
+  must include screenshots in the PR body. Pure infra / CI / docs / private
+  internal refactors may write "N/A — no user-visible change" instead, but
+  must not skip the section silently.
+- Commit the PNGs under `screenshots/pr-<branch-slug>/` in the same PR.
+- Reference each one inline using the raw URL pattern so it renders in the
+  PR description:
+  `![desktop](https://raw.githubusercontent.com/samsuffolksperoni/fhir-place/<branch>/screenshots/pr-<slug>/<file>.png)`
+- Include before/after frames for state changes. Mobile (375x812) is
+  required when the change touches a responsive layout.
+- This is **separate** from the e2e snapshot baselines under
+  `apps/demo/e2e/__screenshots__/` — those still require human review of the
+  diff before they're overwritten.
+
 ## QA agent
 
 When asked to do a QA pass on the demo app:

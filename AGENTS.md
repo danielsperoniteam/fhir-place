@@ -19,6 +19,23 @@
 - Use `data-testid` selectors; avoid CSS class names and positional selectors.
 - See `apps/demo/e2e/README.md` for the full test map and update rules.
 
+## Screenshots on PRs
+
+- **Every PR that changes anything user-visible** — demo apps under
+  `apps/**` *and* library components under `packages/react-fhir/**` —
+  must include screenshots in the PR body. Pure infra / CI / docs / private
+  internal refactors may write "N/A — no user-visible change" instead, but
+  must not skip the section silently.
+- Commit the PNGs under `screenshots/pr-<branch-slug>/` in the same PR.
+- Reference each one inline using the raw URL pattern so it renders in the
+  PR description:
+  `![desktop](https://raw.githubusercontent.com/samsuffolksperoni/fhir-place/<branch>/screenshots/pr-<slug>/<file>.png)`
+- Include before/after frames for state changes. Mobile (375x812) is
+  required when the change touches a responsive layout.
+- This is **separate** from the e2e snapshot baselines under
+  `apps/demo/e2e/__screenshots__/` — those still require human review of the
+  diff before they're overwritten.
+
 ## QA agent
 
 When asked to do a QA pass on the demo app:
@@ -32,8 +49,21 @@ When asked to do a QA pass on the demo app:
    URL/route where the defect occurs.
 5. Do not fix bugs during the same QA pass — file first, fix in a separate PR.
 
+## Staging-first deploys
+
+- Branch off `origin/staging`, not `origin/main`.
+- Open every PR with `base: staging`. Humans promote `staging` → `main`
+  after live UAT — agents never target `main` directly.
+- Every PR body must include a **UAT on live staging** section with
+  concrete steps a human or downstream agent can run against
+  `https://samsuffolksperoni.github.io/fhir-place/staging/` once the
+  change is merged and Pages has redeployed. If you cannot articulate
+  those steps, the change is not ready.
+- The Pages workflow rebuilds both branches on every push; staging's
+  build going green is part of "done."
+
 ## Safety rules (see docs/decisions/0003-agent-safety-rules.md)
 
 - Small, issue-scoped changes only.
-- Never delete production data, modify secrets, or force-push `main`.
+- Never delete production data, modify secrets, or force-push `main` or `staging`.
 - All code changes go through a PR; do not merge without human review.

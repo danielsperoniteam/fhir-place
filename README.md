@@ -7,6 +7,8 @@ This repo is two things:
 
 **Live demo:** <https://samsuffolksperoni.github.io/fhir-place/> — hits the public HAPI R4 server. Patient data is shared and reset periodically.
 
+> Not affiliated with Zus Health's FHIRplace, Drummond's FHIRplace Pilot, or any other product using a similar name.
+
 ## Packages
 
 | Path | What it is |

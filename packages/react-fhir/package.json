@@ -49,6 +49,10 @@
     "./components": {
       "types": "./dist/components/index.d.ts",
       "import": "./dist/components/index.js"
+    },
+    "./layout-hints": {
+      "types": "./dist/layout-hints/index.d.ts",
+      "import": "./dist/layout-hints/index.js"
     }
   },
   "files": [
