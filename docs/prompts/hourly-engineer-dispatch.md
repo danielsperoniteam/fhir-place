@@ -92,9 +92,11 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
    concurrent dispatch run cannot pick the same issue.
 
 2. **Announce:** comment on the issue:
-   "Picked up by hourly-engineer-dispatch. Branch: `bot/issue-<N>-<slug>`.
-   The agent will open a draft PR or post a `status: needs-human` comment
-   if it cannot complete the work."
+   "Picked up by hourly-engineer-dispatch. Branch: `bot/issue-<N>-<slug>`,
+   PR base: `staging`. The agent will open a draft PR (with UAT steps to run
+   against `https://samsuffolksperoni.github.io/fhir-place/staging/` once
+   merged) or post a `status: needs-human` comment if it cannot complete
+   the work."
 
 3. **Dispatch:** invoke the `engineer` subagent with worktree isolation,
    passing `{issue_number: <N>, acceptance_criteria: <restated>, branch_name: bot/issue-<N>-<slug>}`.

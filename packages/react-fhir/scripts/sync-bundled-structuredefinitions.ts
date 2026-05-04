@@ -7,16 +7,18 @@
  * while keeping each SD in its own bundler chunk so consumers only pay for
  * the types they actually render.
  *
- * Source: `fhir_spec/r4b_definitions.json/profiles-resources.json` — a copy
- * of the published FHIR Bundle of resource StructureDefinitions. Drop this
- * file in place yourself (the workspace ignores it from git); pointing at
- * R4B is fine for R4 consumers because the resource canonical URLs match.
+ * Source: `scripts/cache/r4-spec/profiles-resources.json` — extracted from
+ * the published FHIR R4 `definitions.json.zip`. Auto-downloaded on first
+ * run; the cache zip is gitignored. This is the same shared cache that
+ * `sync-bundled-valuesets.ts` populates, so the two scripts download once
+ * and reuse the bundle.
  *
  * Run: `pnpm --filter @fhir-place/react-fhir sync:sds`
  *
- * Output is gitignored. The package's `prepare` step re-runs this so a fresh
- * clone with the source bundle in place produces the modules during install.
+ * Per-type modules are gitignored; the published package's `prebuild` step
+ * re-runs this so the bundled `loaders` map ships populated.
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,14 +42,30 @@ interface Bundle {
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SOURCE_PATH = join(
-  HERE,
-  "..",
-  "fhir_spec",
-  "r4b_definitions.json",
-  "profiles-resources.json",
-);
+const CACHE_DIR = join(HERE, "cache", "r4-spec");
+const ZIP_PATH = join(CACHE_DIR, "definitions.json.zip");
+const SOURCE_PATH = join(CACHE_DIR, "profiles-resources.json");
+const SOURCE_URL = "https://hl7.org/fhir/R4/definitions.json.zip";
 const OUTPUT_DIR = join(HERE, "..", "src", "structure", "core", "sd");
+
+function ensureSpecData(): void {
+  if (existsSync(SOURCE_PATH)) return;
+  mkdirSync(CACHE_DIR, { recursive: true });
+  if (!existsSync(ZIP_PATH)) {
+    console.log(`[sync:sds] Downloading ${SOURCE_URL} ...`);
+    const buf = execFileSync("curl", ["-fsSL", SOURCE_URL], {
+      encoding: "buffer",
+      maxBuffer: 100 * 1024 * 1024,
+    });
+    writeFileSync(ZIP_PATH, buf);
+  }
+  console.log("[sync:sds] Extracting profiles-resources.json ...");
+  execFileSync(
+    "unzip",
+    ["-o", "-j", ZIP_PATH, "profiles-resources.json", "-d", CACHE_DIR],
+    { stdio: "inherit" },
+  );
+}
 
 function isCoreResourceSd(sd: StructureDefinition): boolean {
   return (
@@ -100,17 +118,7 @@ function clearOutputDir(): void {
 }
 
 function main(): void {
-  if (!existsSync(SOURCE_PATH)) {
-    // On a fresh clone / CI the FHIR spec bundle isn't checked in; the empty
-    // `index.generated.ts` stub committed alongside this script is what `tsc`
-    // resolves so the package still builds. Skip silently so `pnpm dev` (which
-    // runs this through `predev`) doesn't fail there.
-    console.warn(
-      `[sync:sds] Skipping — source bundle not found at ${SOURCE_PATH}.\n` +
-        `[sync:sds] Drop the FHIR R4(B) "profiles-resources.json" there to populate per-type SDs.`,
-    );
-    return;
-  }
+  ensureSpecData();
   mkdirSync(OUTPUT_DIR, { recursive: true });
   clearOutputDir();
 
@@ -122,6 +130,16 @@ function main(): void {
     const type = sd.type as string;
     writeFileSync(join(OUTPUT_DIR, `${type}.generated.ts`), renderTypeModule(sd));
     types.push(type);
+  }
+  // A non-empty loaders map is the whole point of this script — the
+  // bundled-fallback fetcher relies on it. If we generated zero modules
+  // (corrupt download, unexpected bundle shape) fail loudly rather than
+  // letting an empty stub ship to production.
+  if (types.length === 0) {
+    throw new Error(
+      `[sync:sds] No core resource StructureDefinitions found in ${SOURCE_PATH}. ` +
+        `Refusing to overwrite the index with an empty loaders map.`,
+    );
   }
   writeFileSync(join(OUTPUT_DIR, "index.generated.ts"), renderIndexModule(types));
   console.log(`Wrote ${types.length} StructureDefinition modules to ${OUTPUT_DIR}`);

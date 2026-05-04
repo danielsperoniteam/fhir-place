@@ -1,9 +1,20 @@
 name: Deploy demo to GitHub Pages
 
+# Builds main and (optionally) staging side-by-side and ships them as a single
+# Pages artifact:
+#   /              -> apps/demo from main
+#   /goals/        -> apps/goals-tasks from main
+#   /staging/      -> apps/demo from staging        (if branch exists)
+#   /staging/goals -> apps/goals-tasks from staging (if branch exists)
+#
+# Both branches are always rebuilt so the artifact is complete — pushing to
+# main would otherwise wipe /staging/.
+
 on:
   push:
     branches:
       - main
+      - staging
   workflow_dispatch:
 
 permissions:
@@ -19,38 +30,172 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-src
+
+      - name: Check whether staging branch exists
+        id: staging
+        run: |
+          if git ls-remote --exit-code --heads \
+              "https://github.com/${{ github.repository }}.git" staging >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out staging
+        if: steps.staging.outputs.exists == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          path: staging-src
+
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @fhir-place/react-fhir build
-      - name: Build demo for GitHub Pages (live HAPI R4)
-        # Intentionally no VITE_FHIR_BASE_URL: pinning it disables the in-app
-        # server picker / settings page (see SETTINGS_ENABLED in config.ts).
-        # HAPI remains the default via BUILTIN_SERVERS[0]; users can switch to
-        # SMART/Firely/etc. from the settings page and have it actually take
-        # effect after the localStorage-driven reload.
+          cache-dependency-path: main-src/pnpm-lock.yaml
+
+      # ---------- main ----------
+      - name: Install (main)
+        working-directory: main-src
+        run: pnpm install --frozen-lockfile
+
+      - name: Build react-fhir (main)
+        working-directory: main-src
+        run: pnpm --filter @fhir-place/react-fhir build
+
+      - name: Build demo (main)
+        working-directory: main-src
         run: pnpm --filter @fhir-place/demo build
         env:
           VITE_USE_MOCK: "false"
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/"
-      - name: Build goals-tasks for GitHub Pages (live HAPI R4)
+
+      - name: Build goals-tasks (main)
+        working-directory: main-src
         run: pnpm --filter @fhir-place/goals-tasks build
         env:
           VITE_USE_MOCK: "false"
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/goals/"
-      - name: Stage goals-tasks under /goals
+
+      - name: Stage goals-tasks under /goals (main)
         run: |
-          mkdir -p apps/demo/dist/goals
-          cp -R apps/goals-tasks/dist/. apps/demo/dist/goals/
-      - name: SPA 404 fallback
-        run: cp apps/demo/dist/index.html apps/demo/dist/404.html
+          mkdir -p main-src/apps/demo/dist/goals
+          cp -R main-src/apps/goals-tasks/dist/. main-src/apps/demo/dist/goals/
+
+      - name: Per-subapp 404 fallback (main)
+        # The per-subapp 404.html is a defensive copy — GitHub Pages only
+        # serves the root /404.html, never a per-directory one. The real
+        # cross-subapp routing lives in the root 404.html written below.
+        run: cp main-src/apps/demo/dist/index.html main-src/apps/demo/dist/404.html
+
+      # ---------- staging ----------
+      - name: Install (staging)
+        if: steps.staging.outputs.exists == 'true'
+        working-directory: staging-src
+        run: pnpm install --frozen-lockfile
+
+      - name: Build react-fhir (staging)
+        if: steps.staging.outputs.exists == 'true'
+        working-directory: staging-src
+        run: pnpm --filter @fhir-place/react-fhir build
+
+      - name: Build demo (staging)
+        if: steps.staging.outputs.exists == 'true'
+        working-directory: staging-src
+        run: pnpm --filter @fhir-place/demo build
+        env:
+          VITE_USE_MOCK: "false"
+          VITE_BASE_PATH: "/${{ github.event.repository.name }}/staging/"
+
+      - name: Build goals-tasks (staging)
+        if: steps.staging.outputs.exists == 'true'
+        working-directory: staging-src
+        run: pnpm --filter @fhir-place/goals-tasks build
+        env:
+          VITE_USE_MOCK: "false"
+          VITE_BASE_PATH: "/${{ github.event.repository.name }}/staging/goals/"
+
+      - name: Stage goals-tasks under /goals (staging)
+        if: steps.staging.outputs.exists == 'true'
+        run: |
+          mkdir -p staging-src/apps/demo/dist/goals
+          cp -R staging-src/apps/goals-tasks/dist/. staging-src/apps/demo/dist/goals/
+
+      - name: Per-subapp 404 fallback (staging)
+        if: steps.staging.outputs.exists == 'true'
+        # Defensive copy; see comment on the main step.
+        run: cp staging-src/apps/demo/dist/index.html staging-src/apps/demo/dist/404.html
+
+      # ---------- combine ----------
+      - name: Combine builds into a single Pages artifact
+        run: |
+          mkdir -p out
+          cp -R main-src/apps/demo/dist/. out/
+          if [ -d staging-src/apps/demo/dist ]; then
+            mkdir -p out/staging
+            cp -R staging-src/apps/demo/dist/. out/staging/
+          fi
+
+      - name: Write cross-subapp router as the root 404.html
+        # GitHub Pages serves /404.html (and only /404.html) for every
+        # unmatched path. With multiple sub-apps under one Pages site
+        # (/fhir-place/, /fhir-place/goals/, /fhir-place/staging/,
+        # /fhir-place/staging/goals/), we need the root 404 to detect which
+        # sub-app the URL belongs to and inline that sub-app's index.html so
+        # its SPA router takes over without losing the URL bar.
+        run: |
+          cat > out/404.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>fhir-place</title>
+            <script>
+              (function () {
+                var path = location.pathname;
+                var base;
+                if (path.indexOf('/fhir-place/staging/goals/') === 0) {
+                  base = '/fhir-place/staging/goals/';
+                } else if (path.indexOf('/fhir-place/staging/') === 0) {
+                  base = '/fhir-place/staging/';
+                } else if (path.indexOf('/fhir-place/goals/') === 0) {
+                  base = '/fhir-place/goals/';
+                } else {
+                  base = '/fhir-place/';
+                }
+                fetch(base + 'index.html', { cache: 'no-store' })
+                  .then(function (r) {
+                    // Pages serves this same /404.html for unmatched paths,
+                    // so a 404 response body IS this router. document.write-ing
+                    // it would recurse forever — bail to the fallback instead.
+                    if (!r.ok) throw new Error('sub-app index missing: ' + r.status);
+                    return r.text();
+                  })
+                  .then(function (html) {
+                    document.open();
+                    document.write(html);
+                    document.close();
+                  })
+                  .catch(function () {
+                    document.body.textContent = 'fhir-place — page not found.';
+                  });
+              })();
+            </script>
+          </head>
+          <body>Loading…</body>
+          </html>
+          HTML
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/demo/dist
+          path: out
 
   deploy:
     needs: build

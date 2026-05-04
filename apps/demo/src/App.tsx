@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { CCTopbar } from "./components/CCTopbar.js";
 import { CCSidebar } from "./components/CCSidebar.js";
@@ -13,13 +14,56 @@ import { ResourceTypePickerPage } from "./routes/fhir-ui/pages/ResourceTypePicke
 import { SettingsPage } from "./routes/fhir-ui/pages/SettingsPage.js";
 import { CqlRunnerPage } from "./routes/cql-runner/CqlRunnerPage.js";
 
+const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
+
 export function App() {
   return (
-    <ThemeProvider>
-      <TabsProvider>
-        <Shell />
-      </TabsProvider>
-    </ThemeProvider>
+    <Sentry.ErrorBoundary fallback={ErrorFallback}>
+      <ThemeProvider>
+        <TabsProvider>
+          <Shell />
+        </TabsProvider>
+      </ThemeProvider>
+    </Sentry.ErrorBoundary>
+  );
+}
+
+function ErrorFallback() {
+  return (
+    <div
+      data-testid="app-error-fallback"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        gap: 12,
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        color: "var(--text, #e2e8f0)",
+        background: "var(--bg, #0f1117)",
+      }}
+    >
+      <span style={{ fontSize: 32 }}>Something went wrong</span>
+      <span style={{ fontSize: 14, opacity: 0.6 }}>
+        The error has been reported. Reload the page to try again.
+      </span>
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          marginTop: 8,
+          padding: "8px 20px",
+          borderRadius: 6,
+          border: "1px solid var(--border, #334155)",
+          background: "var(--surface, #1e293b)",
+          color: "inherit",
+          cursor: "pointer",
+          fontSize: 13,
+        }}
+      >
+        Reload
+      </button>
+    </div>
   );
 }
 
@@ -49,7 +93,7 @@ function Shell() {
 
         {/* Page content */}
         <main style={{ flex: 1, overflow: "auto", background: "var(--bg)" }}>
-          <Routes>
+          <SentryRoutes>
             <Route path="/" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
             <Route path="/cql-runner" element={<CqlRunnerPage />} />
             <Route path="/fhir-ui" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
@@ -67,7 +111,7 @@ function Shell() {
             <Route path="/:resourceType/:id/edit" element={<RedirectToFhirUi suffix="/edit" includeId />} />
             <Route path="/:resourceType/:id" element={<RedirectToFhirUi includeId />} />
             <Route path="/:resourceType" element={<RedirectToFhirUi />} />
-          </Routes>
+          </SentryRoutes>
         </main>
 
         {/* Status bar */}
