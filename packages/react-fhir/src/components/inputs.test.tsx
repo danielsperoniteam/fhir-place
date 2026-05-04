@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { defaultTypeInputs } from "./inputs/index.js";
+import { DEFAULT_REFERENCE_TYPES } from "./inputs/Reference.js";
 
 const BASE = "https://fhir.example.test/fhir";
 const server = setupServer();
@@ -889,5 +890,123 @@ describe("CodingInput async combobox (large/partial ValueSets)", () => {
     await waitFor(() => expect(screen.getByText("System")).toBeInTheDocument());
     expect(screen.getByText("Code")).toBeInTheDocument();
     expect(screen.getByText("Display")).toBeInTheDocument();
+  });
+});
+
+const ReferenceInput = defaultTypeInputs.Reference!;
+
+describe("ReferenceInput", () => {
+  // MSW handlers for searches triggered by the picker.
+  const mockSearch = (resourceType: string) => {
+    server.use(
+      http.get(`${BASE}/${resourceType}`, () =>
+        HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: [],
+        }),
+      ),
+    );
+  };
+
+  it("renders the search picker (not the fallback) when targetProfile is absent", () => {
+    // Reproduces the Observation.subject / Observation.encounter regression:
+    // bundled core SDs declare `type: [{ code: "Reference" }]` with no
+    // `targetProfile`, which previously caused ReferencePickerFallback to
+    // render instead of the search picker.
+    const elementWithoutTargets: ElementDefinition = {
+      path: "Observation.subject",
+      type: [{ code: "Reference" }], // no targetProfile
+    };
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Observation.subject", typeCode: "Reference", element: elementWithoutTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    // Should render the search picker, not the raw-text fallback.
+    expect(screen.getByTestId("reference-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("reference-picker-fallback")).not.toBeInTheDocument();
+  });
+
+  it("shows a type switcher seeded with the default common types when targetProfile is absent", () => {
+    const elementWithoutTargets: ElementDefinition = {
+      path: "Observation.subject",
+      type: [{ code: "Reference" }],
+    };
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Observation.subject", typeCode: "Reference", element: elementWithoutTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    // More than one default type → the type switcher <select> must appear.
+    const typeSelect = screen.getByRole("combobox", { name: "target type" });
+    expect(typeSelect).toBeInTheDocument();
+    // All default types are present as options.
+    for (const t of DEFAULT_REFERENCE_TYPES) {
+      expect(screen.getByRole("option", { name: t })).toBeInTheDocument();
+    }
+  });
+
+  it("renders the search picker when targetProfile lists specific types (no regression)", () => {
+    // Resources whose SDs already carry targetProfile must keep using the
+    // explicitly-specified types, not the defaults.
+    const elementWithTargets: ElementDefinition = {
+      path: "DiagnosticReport.subject",
+      type: [
+        {
+          code: "Reference",
+          targetProfile: [
+            "http://hl7.org/fhir/StructureDefinition/Patient",
+            "http://hl7.org/fhir/StructureDefinition/Group",
+          ],
+        },
+      ],
+    };
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "DiagnosticReport.subject", typeCode: "Reference", element: elementWithTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    expect(screen.getByTestId("reference-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("reference-picker-fallback")).not.toBeInTheDocument();
+    // Only the explicitly-declared types, not the defaults.
+    const typeSelect = screen.getByRole("combobox", { name: "target type" });
+    expect(typeSelect).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Patient" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Group" })).toBeInTheDocument();
+    // Default-only types like Practitioner must NOT appear for this element.
+    expect(screen.queryByRole("option", { name: "Practitioner" })).not.toBeInTheDocument();
+  });
+
+  it("searches on the selected default type when the user types a query", async () => {
+    mockSearch("Patient");
+    const elementWithoutTargets: ElementDefinition = {
+      path: "Observation.subject",
+      type: [{ code: "Reference" }],
+    };
+    const user = userEvent.setup();
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Observation.subject", typeCode: "Reference", element: elementWithoutTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    // "Patient" is the first default type, so the search box label includes it.
+    const searchBox = screen.getByRole("searchbox", { name: /search patient/i });
+    await user.type(searchBox, "Ada");
+    // No matches returned by the mock, but the "No matches" empty-state
+    // confirms the search fired against the right type.
+    await waitFor(() => expect(screen.getByText(/no matches/i)).toBeInTheDocument());
   });
 });
