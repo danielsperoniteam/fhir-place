@@ -266,14 +266,7 @@ export function ResourceListPage() {
   })();
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        fontFamily: CC_FONT,
-      }}
-    >
+    <div style={{ fontFamily: CC_FONT }}>
       {/* Patient compartment back-link */}
       {patientId && (
         <div style={{ padding: "12px 24px 0" }}>
@@ -508,22 +501,14 @@ export function ResourceListPage() {
       )}
 
       {/* Results */}
-      <div
-        style={{
-          padding: "12px 24px",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 300,
-        }}
-      >
+      <div style={{ padding: "12px 24px" }}>
         {layout === "json" ? (
           <div
             style={{
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 10,
-              flex: 1,
+              maxHeight: "70vh",
               overflow: "auto",
               padding: 16,
             }}
