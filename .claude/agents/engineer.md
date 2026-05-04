@@ -47,8 +47,10 @@ in the issue and stop with `status: needs-human`.
    - 20 files touched
    - 1 `package.json` modified
    - 5 file deletions
-6. **Pre-push secret scan.** Before `git push`, run `git diff --staged` and
-   grep for these patterns. Any hit → stop, do **not** push:
+6. **Pre-push secret scan.** Before `git push`, run
+   `git diff origin/main...HEAD` (three-dot — the full diff of what's
+   about to be pushed, not just the index) and grep the output for these
+   patterns. Any hit → stop, do **not** push:
    - `AKIA[0-9A-Z]{16}` (AWS access key)
    - `xox[bp]-` (Slack)
    - `-----BEGIN .* PRIVATE KEY-----`
@@ -110,10 +112,11 @@ in the issue and stop with `status: needs-human`.
 8. **Wall-clock cap.** If more than 25 minutes have elapsed on this ticket
    alone, exit `needs-human`.
 
-9. **Pre-push gate.** Run the secret scan from rule 6 above. Run
-   `git diff --stat origin/main` and confirm the blast-radius caps from
-   rule 5 are not exceeded. If either fails, exit `needs-human` — do not
-   push.
+9. **Pre-push gate.** Run the secret scan from rule 6 above (against
+   `origin/main...HEAD`, not the index). Run
+   `git diff --stat origin/main...HEAD` and confirm the blast-radius
+   caps from rule 5 are not exceeded. If either fails, exit
+   `needs-human` — do not push.
 
 10. **Open the draft PR.**
     ```bash
