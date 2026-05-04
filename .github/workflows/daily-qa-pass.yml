@@ -1,0 +1,119 @@
+# Daily exploratory QA pass.
+#
+# Boots the demo dev server pointed at the SMART Health IT R4 sandbox
+# (VITE_USE_MOCK=false), then hands off to Claude Code which drives a
+# desktop browser through the routes listed in docs/qa-agent.md and
+# files GitHub issues for any bugs it finds. Complementary to
+# live-site-monitor.yml: that one runs the fixed Playwright suite
+# against the deployed Pages build; this one is exploratory and runs
+# against a local dev build pointed at a real server.
+#
+# See docs/prompts/daily-qa-pass.md for what the agent does.
+#
+# Setup required (one-time):
+#   1. ANTHROPIC_API_KEY already exists in repo secrets (used by the
+#      PM and engineer-dispatch workflows). No new secret to add.
+#   2. Trigger via Actions → "Daily QA pass" → "Run workflow" once to
+#      confirm the dev server boots, the agent reaches localhost:5173,
+#      and an issue gets filed (or zero, with a clean summary).
+
+name: Daily QA pass
+
+on:
+  schedule:
+    # 05:00 UTC daily — runs before live-site-monitor (06:30 UTC) and
+    # daily-pm-triage (07:00 UTC) so any bugs filed today are visible
+    # to both downstream workflows.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+  pull-requests: read
+  id-token: write
+
+concurrency:
+  group: daily-qa-pass
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        run: pnpm --filter @fhir-place/demo exec playwright install --with-deps chromium
+
+      - name: Start dev server against real FHIR
+        # Background the dev server, then wait for it to respond. Logs go
+        # to apps/demo/dev.log so the agent (and the run artifacts) can
+        # read them if needed.
+        run: |
+          mkdir -p apps/demo
+          (
+            cd apps/demo
+            VITE_USE_MOCK=false \
+            VITE_FHIR_BASE_URL=https://r4.smarthealthit.org \
+            pnpm dev > dev.log 2>&1 &
+            echo $! > dev.pid
+          )
+          # Wait up to 90s for the server to be ready.
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:5173 > /dev/null; then
+              echo "dev server up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "dev server failed to start within 90s"
+          tail -n 100 apps/demo/dev.log || true
+          exit 1
+
+      - name: Run Claude Code with the daily-qa-pass prompt
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Same idiom as daily-pm-triage: tell Claude to read the prompt
+          # file rather than slurping it into a workflow input. The prompt
+          # is the source of truth, version-controlled and reviewable.
+          prompt: |
+            Read the file at docs/prompts/daily-qa-pass.md and execute the
+            instructions in it. Do not modify the file. Do not open a
+            branch or PR. The MCP github tools are already configured.
+            The dev server is already running at http://localhost:5173
+            against https://r4.smarthealthit.org. Playwright chromium is
+            installed; use it from a temporary Node script in /tmp.
+          # Exploratory walk across ~10 routes + dedupe + filing — give
+          # plenty of headroom; the workflow timeout-minutes is the real
+          # wall-clock bound.
+          claude_args: "--max-turns 200"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Stop dev server
+        if: always()
+        run: |
+          if [ -f apps/demo/dev.pid ]; then
+            kill "$(cat apps/demo/dev.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload dev server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-pass-dev-log-${{ github.run_id }}
+          path: apps/demo/dev.log
+          if-no-files-found: ignore
