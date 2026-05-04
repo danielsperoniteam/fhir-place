@@ -34,8 +34,6 @@ See also:
   - At most 3 tickets per invocation.
   - At most 200 GitHub API calls. If close to the cap, finish the current
     ticket and skip the rest.
-  - Skip the whole run if there are already 10+ open `bot/*` PRs — drain
-    first.
 
 ---
 
@@ -147,7 +145,7 @@ _Last run: YYYY-MM-DD HH:MM UTC. Pause: add `status: agent-paused` to this issue
 - Ready (derived): N
 - status: in-progress: N
 - status: needs-human: N
-- Open `bot/*` PRs: N / 10 cap
+- Open `bot/*` PRs: N
 
 ## Kill switch
 
