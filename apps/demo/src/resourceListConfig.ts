@@ -45,27 +45,61 @@ export interface ResourceListConfig<T extends Resource = Resource> {
   formatMeta?: (resource: T) => Array<string | undefined | null>;
 }
 
-/** Display order in the FHIR UI sidebar: Patient first, then alphabetical. */
+/**
+ * Display order in the FHIR UI sidebar: Patient first, then alphabetical.
+ * Types without a hand-tuned `RESOURCE_LIST_CONFIG` entry still render — the
+ * list page derives columns from the bundled StructureDefinition snapshot.
+ */
 export const TOP_RESOURCE_TYPES = [
   "Patient",
   "AllergyIntolerance",
   "Appointment",
+  "Bundle",
   "CarePlan",
   "CareTeam",
+  "Claim",
+  "ClaimResponse",
+  "Communication",
+  "Composition",
   "Condition",
+  "Consent",
+  "Coverage",
+  "Device",
+  "DeviceRequest",
   "DiagnosticReport",
   "DocumentReference",
   "Encounter",
+  "Endpoint",
+  "ExplanationOfBenefit",
+  "FamilyMemberHistory",
   "Goal",
+  "Group",
+  "HealthcareService",
+  "ImagingStudy",
   "Immunization",
+  "List",
   "Location",
+  "Measure",
+  "MeasureReport",
   "Medication",
+  "MedicationAdministration",
+  "MedicationDispense",
   "MedicationRequest",
+  "MedicationStatement",
   "Observation",
+  "OperationOutcome",
   "Organization",
   "Practitioner",
+  "PractitionerRole",
   "Procedure",
+  "Provenance",
+  "Questionnaire",
+  "QuestionnaireResponse",
+  "RelatedPerson",
+  "Schedule",
   "ServiceRequest",
+  "Slot",
+  "Specimen",
   "Task",
 ] as const;
 
@@ -457,7 +491,7 @@ const TASK: ResourceListConfig<Task> = {
   formatMeta: (t) => [t.status, t.authoredOn],
 };
 
-export const RESOURCE_LIST_CONFIG: Record<TopResourceType, ResourceListConfig> = {
+export const RESOURCE_LIST_CONFIG: Partial<Record<TopResourceType, ResourceListConfig>> = {
   Patient: PATIENT as ResourceListConfig,
   AllergyIntolerance: ALLERGY_INTOLERANCE as ResourceListConfig,
   Appointment: APPOINTMENT as ResourceListConfig,
