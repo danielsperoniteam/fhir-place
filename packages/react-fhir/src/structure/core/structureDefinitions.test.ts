@@ -124,26 +124,50 @@ describe("coreStructureDefinition (runtime spec fetcher)", () => {
 });
 
 describe("createBundledSpecFetcher (in-package R4 SDs)", () => {
+  // Inject a fake loader map so the test exercises the contract regardless of
+  // whether `sync:sds` has been run locally. The published bundle's
+  // `loaders` map is wired up the same way; an integration test under
+  // `prepare` would catch divergence between this contract and the generated
+  // index module.
+  const fakeLoaders = {
+    MedicationRequest: async () => ({
+      sd: sd("MedicationRequest"),
+    }),
+  };
+
   beforeEach(() => {
     clearSpecFetcherCache();
-    setCoreStructureDefinitionFetcher(createBundledSpecFetcher());
+    setCoreStructureDefinitionFetcher(createBundledSpecFetcher(fakeLoaders));
   });
   afterEach(() => {
     setCoreStructureDefinitionFetcher(createDefaultSpecFetcher(TEST_BASE_URL));
     clearSpecFetcherCache();
   });
 
-  it("resolves a core resource type from the generated bundle without any network call", async () => {
+  it("resolves a type via its lazy loader without any network call", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const result = await coreStructureDefinition("MedicationRequest");
     expect(result?.resourceType).toBe("StructureDefinition");
     expect(result?.type).toBe("MedicationRequest");
-    expect(result?.snapshot?.element?.some((e) => e.path === "MedicationRequest.status")).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });
 
   it("returns undefined for types not in the bundle so the resolver throws its friendly error", async () => {
     expect(await coreStructureDefinition("NotARealResource")).toBeUndefined();
+  });
+
+  it("memoises successful loads", async () => {
+    const calls: string[] = [];
+    const tracked = {
+      MedicationRequest: async () => {
+        calls.push("MedicationRequest");
+        return { sd: sd("MedicationRequest") };
+      },
+    };
+    setCoreStructureDefinitionFetcher(createBundledSpecFetcher(tracked));
+    await coreStructureDefinition("MedicationRequest");
+    await coreStructureDefinition("MedicationRequest");
+    expect(calls).toHaveLength(1);
   });
 });

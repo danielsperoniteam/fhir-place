@@ -1,5 +1,8 @@
 import type { StructureDefinition } from "fhir/r4";
-import { loaders as bundledLoaders } from "./sd/index.generated.js";
+import {
+  loaders as bundledLoaders,
+  type StructureDefinitionLoader,
+} from "./sd/index.generated.js";
 
 /**
  * Strategy for resolving a core R4 StructureDefinition at runtime, used as the
@@ -32,13 +35,18 @@ export function clearSpecFetcherCache(): void {
  * This is the global default — no app-side configuration required to support
  * any core R4 resource type. Consumers who need profiles, custom SDs, or a
  * different spec version should override via `setCoreStructureDefinitionFetcher`.
+ *
+ * The `loaders` argument exists for tests; production callers pass nothing and
+ * get the published bundle.
  */
-export function createBundledSpecFetcher(): SpecFetcher {
+export function createBundledSpecFetcher(
+  loaders: Record<string, StructureDefinitionLoader> = bundledLoaders,
+): SpecFetcher {
   return async (type) => {
     const cacheKey = `bundled|${type}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
-    const loader = bundledLoaders[type];
+    const loader = loaders[type];
     if (!loader) return undefined;
     const promise = loader().then((m) => m.sd);
     promise.catch(() => cache.delete(cacheKey));
