@@ -111,7 +111,7 @@ jobs:
             }
 
             for (const g of grouped.values()) {
-              const issueTitle = `[demo] ${g.title}`;
+              const issueTitle = g.title;
               const body = [
                 `**Failed in run:** ${runUrl}`,
                 `**Affected projects:** ${g.projects.join(', ')}`,
@@ -127,9 +127,11 @@ jobs:
                 '_This issue was opened automatically by `.github/workflows/live-site-monitor.yml`. If the test passes on a future run, this issue will be commented on, not closed — close it manually once the underlying bug is fixed._',
               ].join('\n');
 
-              // Dedupe: search for an open issue with the same title.
+              // Dedupe: search for an open bot-filed issue with the same title.
+              // Scoping to the origin label prevents accidental collisions with
+              // human-filed issues that happen to share a title.
               const existing = await github.rest.search.issuesAndPullRequests({
-                q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${issueTitle}"`,
+                q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${issueTitle}" label:"origin: bot-filed"`,
                 per_page: 5,
               });
               const match = existing.data.items.find((i) => i.title === issueTitle);
@@ -149,7 +151,7 @@ jobs:
                   repo: context.repo.repo,
                   title: issueTitle,
                   body,
-                  labels: ['bug', 'live-monitor'],
+                  labels: ['type: bug', 'area: fhir-explorer', 'priority: high', 'origin: bot-filed'],
                 });
               }
             }

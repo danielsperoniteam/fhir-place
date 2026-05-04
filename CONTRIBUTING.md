@@ -65,6 +65,32 @@ Keep these in mind when making changes:
 - Integration tests target a real FHIR server and live in `packages/react-fhir/integration/`. Default target is public HAPI; override with `FHIR_BASE_URL`.
 - Playwright e2e lives in `apps/demo/e2e/`. Screenshots go in `screenshots/` and get committed.
 
+## Issue & label conventions
+
+GitHub Issues are the canonical backlog (see `docs/decisions/0001-use-github-issues-as-source-of-truth.md`). To keep them scannable, every open issue should carry one `type:`, at least one `area:`, and one `priority:` label. Other prefixes are optional.
+
+**Title convention:** plain, declarative, no `[bracket]` prefixes — labels carry the type / area signal.
+
+**Label vocabulary:**
+
+| Prefix | Cardinality | Values | Meaning |
+| --- | --- | --- | --- |
+| `type:` | exactly one | `bug`, `feature`, `tech-debt`, `docs`, `spike`, `epic` | What kind of work this is. `epic` = tracker for sub-issues. `spike` = time-boxed exploration. |
+| `area:` | one or more | `fhir-explorer`, `react-fhir`, `workbench`, `cql`, `mcp`, `infra`, `auth`, `security` | Which part of the codebase is touched. `fhir-explorer` is the demo app at `apps/demo/` (legacy names: "demo", "fhir-ui", "live-monitor"). `react-fhir` is the published library at `packages/react-fhir/`. |
+| `priority:` | exactly one | `high`, `medium`, `low` | Triage signal. Bugs default to `high`. Spikes / nice-to-haves default to `low`. Default `medium`. |
+| `status:` | optional | `blocked`, `needs-triage` | Workflow state. Use sparingly. |
+| `origin:` | optional | `bot-filed` | Filed by automation (e.g. `live-site-monitor.yml`). |
+| `phase-N` | optional | `phase-0`..`phase-3`, `fhir-workbench-phase-a` | Multi-phase epic tracking. Keep as plain (no prefix) for grep-ability. |
+
+**When you open an issue:**
+- Pick exactly one `type:`, at least one `area:`, exactly one `priority:`.
+- Skip `status:` / `origin:` unless they apply.
+- No `[bracket]` in the title — write it as a sentence.
+
+**Renaming `apps/demo/`:** the directory and package will move to `apps/fhir-explorer/` (`@fhir-place/fhir-explorer`). Until that lands, code paths still say `demo`; the label and conversational name is `fhir-explorer`.
+
+**Automation:** the canonical label set is managed by `scripts/sync-labels.mjs` and re-applied on every push to `main` via `.github/workflows/sync-labels.yml`. A daily cron (`.github/workflows/daily-pm-triage.yml`) runs the prompt at `docs/prompts/daily-pm-triage.md` to label new issues, strip bracket prefixes, dedup bot-filed bugs, close finished epics, and post a rolling daily report.
+
 ## Questions?
 
 Open an issue. We're pre-1.0, so preferences and defaults are still moving.

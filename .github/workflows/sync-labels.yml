@@ -1,0 +1,44 @@
+# Bootstrap and maintain the canonical label set defined in
+# scripts/sync-labels.mjs. Runs on push to main when the script changes,
+# and via manual workflow_dispatch (for the post-merge bootstrap).
+
+name: Sync labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/sync-labels.mjs'
+      - '.github/workflows/sync-labels.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (log only, no changes)'
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: sync-labels
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sync labels
+        run: node scripts/sync-labels.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
