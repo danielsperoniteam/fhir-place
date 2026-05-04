@@ -4,6 +4,7 @@ import { CCSidebar } from "./components/CCSidebar.js";
 import { CCTabs } from "./components/CCTabs.js";
 import { ThemeProvider } from "./context/ThemeContext.js";
 import { RouteTabSync, TabsProvider } from "./context/TabsContext.js";
+import { PinnedProvider } from "./state/pinned.js";
 import { AskPage } from "./routes/fhir-ui/pages/AskPage.js";
 import { ResourceCreatePage } from "./routes/fhir-ui/pages/ResourceCreatePage.js";
 import { ResourceDetailPage } from "./routes/fhir-ui/pages/ResourceDetailPage.js";
@@ -17,7 +18,9 @@ export function App() {
   return (
     <ThemeProvider>
       <TabsProvider>
-        <Shell />
+        <PinnedProvider>
+          <Shell />
+        </PinnedProvider>
       </TabsProvider>
     </ThemeProvider>
   );
