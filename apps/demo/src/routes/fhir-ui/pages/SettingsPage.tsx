@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -238,7 +239,59 @@ export function SettingsPage() {
           />
         </label>
       </section>
+
+      {/* Sentry diagnostics — only shown when a DSN is configured at build time. */}
+      {import.meta.env.VITE_SENTRY_DSN && <SentryDiagnostics />}
     </div>
+  );
+}
+
+function SentryDiagnostics() {
+  return (
+    <section
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 10,
+        padding: 20,
+        marginTop: 16,
+      }}
+      data-testid="sentry-diagnostics-section"
+    >
+      <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "var(--text)" }}>
+        Sentry diagnostics
+      </h2>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px", lineHeight: 1.5 }}>
+        Send a test event to verify the dashboard is wired up. Visible only when{" "}
+        <code style={{ fontFamily: CC_MONO, fontSize: 11 }}>VITE_SENTRY_DSN</code> is set at build time.
+      </p>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={() =>
+            Sentry.captureMessage("Sentry diagnostics: test message", "info")
+          }
+          style={ccBtn("ghost")}
+          data-testid="sentry-test-message"
+        >
+          Send test message
+        </button>
+        <button
+          onClick={() => {
+            Sentry.logger.info("User triggered test error", {
+              action: "settings_test_error_button",
+            });
+            // Thrown from an event handler — bypasses ErrorBoundary by design
+            // (React 16+ doesn't catch event-handler errors), reaches Sentry
+            // via window.onerror so the page stays usable.
+            throw new Error("Sentry diagnostics: this is your first error!");
+          }}
+          style={ccBtn("danger")}
+          data-testid="sentry-test-error"
+        >
+          Break the world
+        </button>
+      </div>
+    </section>
   );
 }
 

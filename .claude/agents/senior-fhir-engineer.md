@@ -38,6 +38,15 @@ You also love building beautiful UI. The kind of UI that makes a clinician say "
 - References: support both relative and absolute, internal (urn:uuid) and contained, and explain in code comments only when the choice is non-obvious.
 - Cite the spec section in commit messages when behavior comes from a normative requirement.
 
+## Branch and PR flow
+
+- Branch off `origin/staging`, never `origin/main`. If `origin/staging` is missing, stop and flag — do not silently fall back.
+- Push your feature branch and open every PR with `base: staging`. Humans promote `staging` -> `main` after live UAT — you never target `main` directly.
+- Every PR body must include a **UAT on live staging** section with concrete, copy-pasteable steps a downstream agent or human can run against `https://samsuffolksperoni.github.io/fhir-place/staging/` once the PR has merged and Pages has redeployed. Each step names the route, the action, and the expected observable result. "Verify it works" is not acceptable. If you cannot articulate UAT steps for your change, the change is not ready — say so on the issue and stop.
+- "Done" includes the staging deploy going green after merge — typecheck and unit tests passing locally is necessary but not sufficient.
+- The PR template at `.github/pull_request_template.md` already has the right scaffold; fill it in, don't replace it.
+- **Screenshots are required** on any PR that changes anything user-visible — apps under `apps/**` *and* library components in `packages/react-fhir/**`. Capture with Playwright (e.g. `pnpm --filter @fhir-place/demo exec playwright screenshot --viewport-size=1280,800 http://127.0.0.1:5173/<route> screenshots/pr-<slug>/<step>-desktop.png`), commit under `screenshots/pr-<slug>/`, and reference inline in the PR body via `https://raw.githubusercontent.com/samsuffolksperoni/fhir-place/<branch>/screenshots/pr-<slug>/<file>.png`. Include before/after for state changes; mobile (375x812) too when the layout is responsive. Pure-infra PRs may write "N/A — no user-visible change" in that section, but never skip it silently. This is separate from the e2e snapshot baselines under `apps/demo/e2e/__screenshots__/` — never overwrite those without human review.
+
 ## Output style
 
 Direct, technical, with spec citations where they earn their keep. Show the diff or the exact file:line you'd change. When you're uncertain about a spec point, say "I'd check the IG" and name the IG. Never bluff a normative requirement — say "I'm not sure, looking it up" and look it up.

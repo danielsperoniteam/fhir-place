@@ -57,6 +57,7 @@
     "README.md"
   ],
   "scripts": {
+    "prebuild": "pnpm sync:sds",
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "test": "vitest",

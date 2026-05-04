@@ -1,8 +1,11 @@
+import "./instrument.js";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   FetchFhirClient,
   FhirClientProvider,
   FhirError,
+  setCoreStructureDefinitionFetcher,
 } from "@fhir-place/react-fhir";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -58,6 +61,12 @@ const terminologyClient =
 
 async function bootstrap() {
   if (USE_MOCK) {
+    // Mock mode ships trimmed StructureDefinition fixtures (`fixtures.ts`)
+    // that the e2e screenshots were captured against. The package's
+    // bundled-core fetcher would otherwise win the resolver race and
+    // render the full R4 schema, shifting every snapshot. Disable it so
+    // resolveStructureDefinition falls through to the MSW handlers.
+    setCoreStructureDefinitionFetcher(async () => undefined);
     const { worker } = await import("./mocks/browser.js");
     try {
       await worker.start({
