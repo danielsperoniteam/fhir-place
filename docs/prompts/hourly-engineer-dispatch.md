@@ -5,14 +5,16 @@ from the backlog, hands each to the `engineer` subagent in an isolated
 worktree, opens draft PRs, and updates a rolling tracking issue.
 
 This prompt **orchestrates only** — it never edits source code itself.
-The `engineer` subagent (`.claude/agents/engineer.md`) does all editing,
-testing, and pushing under its own hard rules. Read both prompts together;
-defense-in-depth is the design.
+The engineer agent (system prompt: `docs/prompts/engineer-rules.md`;
+Claude Code wrapper: `.claude/agents/engineer.md`) does all editing,
+testing, and pushing under its own hard rules. Read both prompts
+together; defense-in-depth is the design.
 
 See also:
 
 - `docs/decisions/0003-agent-safety-rules.md` — the ADR this routine implements
-- `.claude/agents/engineer.md` — what the subagent is allowed to do
+- `docs/prompts/engineer-rules.md` — what the engineer agent is allowed to do (tool-neutral source of truth)
+- `.claude/agents/engineer.md` — Claude Code wrapper that registers the subagent
 - `CONTRIBUTING.md` "Issue & label conventions" — the label vocabulary
 - `docs/prompts/daily-pm-triage.md` — the analogue PM routine, same shape
 
@@ -96,9 +98,9 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
    The agent will open a draft PR or post a `status: needs-human` comment
    if it cannot complete the work."
 
-3. **Dispatch:** invoke the `engineer` subagent with worktree isolation,
+3. **Dispatch:** invoke the engineer agent with worktree isolation,
    passing `{issue_number: <N>, acceptance_criteria: <restated>, branch_name: bot/issue-<N>-<slug>}`.
-   The subagent's hard rules apply — see `.claude/agents/engineer.md`.
+   The agent's hard rules apply — see `docs/prompts/engineer-rules.md`.
 
 4. **Reconcile on return:**
 
@@ -170,5 +172,6 @@ section and note "Last 24h: rollup skipped this run (api budget)."
 - If your run is killed mid-ticket, Step 1 of the next run releases stuck
   `status: in-progress` claims.
 - If you find yourself wanting to fix something in this prompt, in
-  `.claude/agents/engineer.md`, or in `.github/workflows/`, **stop**. Open
-  a regular human-authored PR. Self-modifying agents are out of scope.
+  `docs/prompts/engineer-rules.md`, in `.claude/agents/engineer.md`, or
+  in `.github/workflows/`, **stop**. Open a regular human-authored PR.
+  Self-modifying agents are out of scope.
