@@ -1,0 +1,87 @@
+# Hourly engineer-dispatch routine.
+#
+# Picks up to 3 ready issues from the backlog, hands each to the engineer
+# subagent (.claude/agents/engineer.md), opens draft PRs, and updates a
+# rolling tracking issue. Mirrors the daily-pm-triage workflow's shape.
+#
+# Setup required (one-time):
+#   1. ANTHROPIC_API_KEY already exists in repo secrets (used by the PM
+#      workflow). No new secret to add.
+#   2. Branch protection on `main` must require:
+#        - PR before merge
+#        - Required status checks: test, e2e
+#        - Block force-push and deletion
+#      The agent only opens drafts; humans approve and merge.
+#   3. (Recommended) `.github/CODEOWNERS` so bot draft PRs auto-route
+#      to the right human reviewer.
+#   4. Open one tracking issue manually titled exactly
+#      `Engineer dispatch — hourly report`. The bot will populate it.
+#   5. Merge this workflow with cron commented out (manual-only). After
+#      5–10 successful manual runs, uncomment cron in a follow-up PR.
+
+name: Hourly engineer dispatch
+
+on:
+  # Cron is intentionally commented out for the first week — manual-only
+  # via workflow_dispatch. Enable in a follow-up PR after observing
+  # several manual runs.
+  # schedule:
+  #   - cron: "5 * * * *"   # :05 of every hour
+  workflow_dispatch:
+
+permissions:
+  contents: write       # push bot/* branches only — main is protected
+  issues: write         # claim labels, comment on issues
+  pull-requests: write  # open and comment on draft PRs (NOT merge — branch protection enforces)
+
+concurrency:
+  group: hourly-engineer-dispatch
+  cancel-in-progress: false   # never cancel mid-PR-creation
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90    # 3 tickets × ~25 min budget + overhead
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed for git worktree from inside the action
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Claude Code with the dispatcher prompt
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt_file: docs/prompts/hourly-engineer-dispatch.md
+          # The dispatcher orchestrates only; the engineer subagent does
+          # all editing. Both prompts share the same hard rules
+          # (defense in depth).
+          allowed_tools: |
+            Bash
+            Read
+            Edit
+            Write
+            Grep
+            Glob
+            mcp__github__list_issues
+            mcp__github__issue_read
+            mcp__github__issue_write
+            mcp__github__add_issue_comment
+            mcp__github__list_pull_requests
+            mcp__github__pull_request_read
+            mcp__github__create_pull_request
+            mcp__github__get_file_contents
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
