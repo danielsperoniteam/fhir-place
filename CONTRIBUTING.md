@@ -42,6 +42,20 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
    Pick the bump (`patch` / `minor` / `major`) and describe the change in human terms. Commit the generated `.changeset/*.md` alongside your code.
 4. Open the PR. CI runs typecheck + tests + build. The release workflow automatically opens / updates a "Version Packages" PR that bumps versions + CHANGELOG when your PR lands; merging that second PR triggers a fresh npm publish.
 
+## Staging deploys
+
+A long-lived `staging` branch deploys alongside `main` so we can confirm
+several PRs work together before they hit production.
+
+- `main` is published at `/fhir-place/` (and goals-tasks at `/fhir-place/goals/`).
+- `staging` is published at `/fhir-place/staging/` (and `/fhir-place/staging/goals/`).
+
+Flow: merge a PR into `staging` to preview it on the staging URL. When the
+combined state on staging looks right, fast-forward `main` to `staging` (or
+open a `staging -> main` PR). Pushes to either branch trigger
+`.github/workflows/pages.yml`, which always rebuilds **both** so the artifact
+is complete.
+
 ## Bump conventions
 
 - **patch** — bug fixes, docs, internal refactors, dependency tightening
