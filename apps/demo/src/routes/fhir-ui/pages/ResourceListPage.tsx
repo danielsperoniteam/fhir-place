@@ -18,13 +18,15 @@ import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { loadAnthropicApiKey } from "../../../config.js";
 import {
   RESOURCE_LIST_CONFIG,
+  genericFormatMeta,
+  genericFormatPrimary,
   isTopResourceType,
   type ResourceListColumn,
   type ResourceListConfig,
 } from "../../../resourceListConfig.js";
 
 type Layout = "list" | "table" | "json";
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const;
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500, 1000] as const;
 const DEFAULT_PAGE_SIZE = 20;
 const pageSizeStorageKey = "fhir-place-demo-page-size";
 
@@ -40,12 +42,12 @@ const readPageSize = (): number => {
     : DEFAULT_PAGE_SIZE;
 };
 
-const readLayout = (rt: string, hasListView: boolean, scoped: boolean): Layout => {
-  if (!hasListView) return "table";
+const readLayout = (rt: string, scoped: boolean): Layout => {
   if (scoped) return "table";
   if (typeof window === "undefined") return "list";
   const v = window.localStorage.getItem(layoutKey(rt));
-  return v === "table" ? "table" : "list";
+  if (v === "table" || v === "json" || v === "list") return v;
+  return "list";
 };
 
 const labelFromPath = (path: string): string => {
@@ -126,18 +128,19 @@ export function ResourceListPage() {
   const config: ResourceListConfig | undefined = isTopResourceType(resourceType)
     ? RESOURCE_LIST_CONFIG[resourceType]
     : undefined;
-  const hasListView = Boolean(config?.formatPrimary);
+  const formatPrimary = config?.formatPrimary ?? genericFormatPrimary;
+  const formatMeta = config?.formatMeta ?? genericFormatMeta;
 
   const [layout, setLayout] = useState<Layout>(() =>
-    readLayout(resourceType, hasListView, Boolean(patientId)),
+    readLayout(resourceType, Boolean(patientId)),
   );
   useEffect(() => {
-    setLayout(readLayout(resourceType, hasListView, Boolean(patientId)));
-  }, [resourceType, hasListView, patientId]);
+    setLayout(readLayout(resourceType, Boolean(patientId)));
+  }, [resourceType, patientId]);
   useEffect(() => {
-    if (typeof window === "undefined" || !hasListView || patientId) return;
+    if (typeof window === "undefined" || patientId) return;
     window.localStorage.setItem(layoutKey(resourceType), layout);
-  }, [layout, resourceType, hasListView, patientId]);
+  }, [layout, resourceType, patientId]);
 
   const [pageSize, setPageSize] = useState<number>(readPageSize);
   useEffect(() => {
@@ -419,15 +422,13 @@ export function ResourceListPage() {
         >
           {(["list", "table", "json"] as const).map((l) => {
             const labels: Record<string, string> = { list: "List", table: "Table", json: "JSON" };
-            const active = layout === l || (!hasListView && l === "table");
-            const disabled = l === "list" && !hasListView;
+            const active = layout === l;
             return (
               <button
                 key={l}
-                onClick={() => !disabled && setLayout(l)}
+                onClick={() => setLayout(l)}
                 aria-pressed={active}
                 data-testid={`layout-${l}`}
-                disabled={disabled}
                 style={{
                   ...ccBtn("ghost"),
                   padding: "4px 10px",
@@ -435,7 +436,6 @@ export function ResourceListPage() {
                   background: active ? "var(--surface)" : "transparent",
                   color: active ? "var(--text)" : "var(--text-muted)",
                   boxShadow: active ? "0 1px 2px rgba(0,0,0,.04)" : "none",
-                  opacity: disabled ? 0.4 : 1,
                 }}
               >
                 {labels[l]}
@@ -470,7 +470,7 @@ export function ResourceListPage() {
 
         <PageSizePicker value={pageSize} onChange={setPageSize} />
 
-        {(!hasListView || layout === "table") && (
+        {layout === "table" && (
           <ColumnPicker
             options={tableColumns}
             defaultSelected={defaultVisibleColumns}
@@ -541,12 +541,13 @@ export function ResourceListPage() {
               {JSON.stringify(resources, null, 2)}
             </pre>
           </div>
-        ) : hasListView && layout === "list" ? (
+        ) : layout === "list" ? (
           <ResourceList
             resources={resources}
             resourceType={resourceType}
             singular={singular}
-            config={config!}
+            formatPrimary={formatPrimary}
+            formatMeta={formatMeta}
             isLoading={isLoading}
           />
         ) : resources.length > 0 ? (
@@ -565,7 +566,7 @@ export function ResourceListPage() {
               cellRenderers={
                 resourceType === "Patient"
                   ? {
-                      name: (r) => <span>{config!.formatPrimary!(r)}</span>,
+                      name: (r) => <span>{formatPrimary(r)}</span>,
                       __counts: (patient) =>
                         patient.id ? (
                           <PatientRowCounts patientId={patient.id} />
@@ -726,13 +727,19 @@ interface ResourceListProps {
   resources: Resource[];
   resourceType: string;
   singular: string;
-  config: ResourceListConfig;
+  formatPrimary: (resource: Resource) => string;
+  formatMeta?: (resource: Resource) => Array<string | undefined | null>;
   isLoading: boolean;
 }
 
-function ResourceList({ resources, resourceType, singular, config, isLoading }: ResourceListProps) {
-  const formatPrimary = config.formatPrimary!;
-  const formatMeta = config.formatMeta;
+function ResourceList({
+  resources,
+  resourceType,
+  singular,
+  formatPrimary,
+  formatMeta,
+  isLoading,
+}: ResourceListProps) {
   const rowTestId = `${resourceType.toLowerCase()}-row`;
 
   return (

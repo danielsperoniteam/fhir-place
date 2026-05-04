@@ -121,6 +121,71 @@ const codeText = (c?: { text?: string; coding?: Array<{ display?: string; code?:
   return first?.display ?? first?.code;
 };
 
+const isHumanNameArray = (v: unknown): v is HumanName[] =>
+  Array.isArray(v) &&
+  v.length > 0 &&
+  typeof v[0] === "object" &&
+  v[0] !== null &&
+  ("family" in v[0] || "given" in v[0] || "text" in v[0]);
+
+/**
+ * Generic List-view title for any FHIR resource. Probes well-known
+ * "what is this?" fields in priority order so unconfigured resource types
+ * still render a meaningful row instead of just an opaque ID.
+ */
+export const genericFormatPrimary = (r: Resource): string => {
+  const any = r as unknown as Record<string, unknown>;
+  if (isHumanNameArray(any.name)) return formatHumanName(any.name);
+  if (typeof any.name === "string" && any.name) return any.name;
+  if (typeof any.title === "string" && any.title) return any.title;
+  const codes = [
+    any.code,
+    any.vaccineCode,
+    any.medicationCodeableConcept,
+    Array.isArray(any.type) ? any.type[0] : any.type,
+    Array.isArray(any.serviceType) ? any.serviceType[0] : undefined,
+    any.appointmentType,
+    Array.isArray(any.category) ? any.category[0] : any.category,
+  ];
+  for (const c of codes) {
+    const text = codeText(c as Parameters<typeof codeText>[0]);
+    if (text) return text;
+  }
+  if (typeof any.description === "string" && any.description) return any.description;
+  const subject = any.subject as { display?: string } | undefined;
+  if (subject?.display) return subject.display;
+  return `${r.resourceType}/${r.id ?? "(unknown)"}`;
+};
+
+const stringField = (v: unknown): string | undefined =>
+  typeof v === "string" && v ? v : undefined;
+
+/**
+ * Generic List-view metadata (status + date) for any FHIR resource. Returns
+ * a sparse array; the renderer joins truthy values with " · ".
+ */
+export const genericFormatMeta = (r: Resource): Array<string | undefined | null> => {
+  const any = r as unknown as Record<string, unknown>;
+  const status =
+    stringField(any.status) ??
+    codeText(any.clinicalStatus as Parameters<typeof codeText>[0]) ??
+    stringField(any.lifecycleStatus) ??
+    (any.active === true ? "active" : any.active === false ? "inactive" : undefined);
+  const period = any.period as { start?: string } | undefined;
+  const date =
+    stringField(any.effectiveDateTime) ??
+    stringField(any.occurrenceDateTime) ??
+    stringField(any.authoredOn) ??
+    stringField(any.recordedDate) ??
+    stringField(any.onsetDateTime) ??
+    stringField(any.performedDateTime) ??
+    stringField(period?.start) ??
+    stringField(any.date) ??
+    stringField(any.issued) ??
+    stringField(any.start);
+  return [status, date];
+};
+
 const PATIENT: ResourceListConfig<Patient> = {
   title: "Patients",
   singular: "patient",
