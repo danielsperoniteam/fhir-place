@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { fhirQueryKeys, useFhirClient, type SearchParams } from "@fhir-place/react-fhir";
+import { useQueries } from "@tanstack/react-query";
+import type { Bundle, Resource } from "fhir/r4";
 import { ACTIVE_SERVER_CONFIG, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
 import { TOP_RESOURCE_TYPES } from "../resourceListConfig.js";
 import { JumpDialog } from "./JumpDialog.js";
 import { CC_MONO } from "./ccStyles.js";
+
+const COUNT_PARAMS: SearchParams = { _summary: "count", _count: 0 };
+
+const formatCount = (n: number | undefined): string => {
+  if (n === undefined) return "";
+  return n.toLocaleString();
+};
 
 export function CCSidebar() {
   const location = useLocation();
@@ -52,6 +62,31 @@ export function CCSidebar() {
 
   const servers = loadServers();
   const activeServerId = loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id;
+
+  const client = useFhirClient();
+  const countQueries = useQueries({
+    queries: TOP_RESOURCE_TYPES.map((rt) => ({
+      queryKey: fhirQueryKeys.search(client.baseUrl, rt, COUNT_PARAMS),
+      queryFn: ({ signal }: { signal?: AbortSignal }) =>
+        client.search<Resource>(rt, COUNT_PARAMS, { signal }),
+      staleTime: 60_000,
+    })),
+  });
+
+  const counts = useMemo(() => {
+    const out: Partial<Record<(typeof TOP_RESOURCE_TYPES)[number], number>> = {};
+    TOP_RESOURCE_TYPES.forEach((rt, i) => {
+      const total = (countQueries[i]?.data as Bundle | undefined)?.total;
+      if (typeof total === "number") out[rt] = total;
+    });
+    return out;
+  }, [countQueries]);
+
+  const allResourcesTotal = useMemo(
+    () => Object.values(counts).reduce((sum: number, n) => sum + (n ?? 0), 0),
+    [counts],
+  );
+  const allResourcesLoading = countQueries.some((q) => q.isLoading);
 
   const switchServer = (id: string) => {
     saveActiveServerId(id);
@@ -253,6 +288,25 @@ export function CCSidebar() {
         >
           Resources
         </div>
+        <div
+          data-testid="sidebar-link-all"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "5px 10px",
+            borderRadius: 6,
+            color: "var(--text)",
+            marginBottom: 1,
+          }}
+        >
+          <span style={{ fontSize: 13, flex: 1, minWidth: 0 }}>All resources</span>
+          <SidebarCount
+            value={allResourcesLoading && allResourcesTotal === 0 ? undefined : allResourcesTotal}
+            isActive={false}
+            testId="sidebar-count-all"
+          />
+        </div>
         {TOP_RESOURCE_TYPES.map((rt) => {
           const isActive = rt === activeType;
           return (
@@ -286,6 +340,11 @@ export function CCSidebar() {
               >
                 {rt}
               </span>
+              <SidebarCount
+                value={counts[rt]}
+                isActive={isActive}
+                testId={`sidebar-count-${rt}`}
+              />
             </div>
           );
         })}
@@ -389,5 +448,28 @@ export function CCSidebar() {
         </button>
       </div>
     </div>
+  );
+}
+
+interface SidebarCountProps {
+  value: number | undefined;
+  isActive: boolean;
+  testId: string;
+}
+
+function SidebarCount({ value, isActive, testId }: SidebarCountProps) {
+  return (
+    <span
+      data-testid={testId}
+      style={{
+        fontSize: 11,
+        fontFamily: CC_MONO,
+        color: isActive ? "var(--accent-text)" : "var(--text-subtle)",
+        fontVariantNumeric: "tabular-nums",
+        flexShrink: 0,
+      }}
+    >
+      {formatCount(value)}
+    </span>
   );
 }
