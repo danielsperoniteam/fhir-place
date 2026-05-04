@@ -28,12 +28,22 @@ describe("searchBuilder runtime", () => {
     expect(url).toBe("Observation?subject=Patient%2F123");
   });
 
-  it("emits date prefix operators in given order", () => {
+  it("emits every date prefix operator in given order", () => {
     const url = searchBuilder("Patient")
-      .where("birthdate", { ge: "1990-01-01", lt: "2000-01-01" })
+      .where("birthdate", {
+        eq: "1990-01-01",
+        ne: "1991-01-01",
+        gt: "1992-01-01",
+        ge: "1993-01-01",
+        lt: "1994-01-01",
+        le: "1995-01-01",
+        sa: "1996-01-01",
+        eb: "1997-01-01",
+        ap: "1998-01-01",
+      })
       .build();
     expect(url).toBe(
-      "Patient?birthdate=ge1990-01-01&birthdate=lt2000-01-01",
+      "Patient?birthdate=eq1990-01-01&birthdate=ne1991-01-01&birthdate=gt1992-01-01&birthdate=ge1993-01-01&birthdate=lt1994-01-01&birthdate=le1995-01-01&birthdate=sa1996-01-01&birthdate=eb1997-01-01&birthdate=ap1998-01-01",
     );
   });
 
@@ -44,31 +54,39 @@ describe("searchBuilder runtime", () => {
     expect(url).toBe("Observation?date=2024-01-02T03%3A04%3A05.000Z");
   });
 
-  it("emits number operators", () => {
+  it("emits every number prefix operator", () => {
     const url = searchBuilder("Observation")
-      .where("value-quantity", { gt: 5, le: 10 })
+      .where("value-quantity", {
+        eq: 1,
+        ne: 2,
+        gt: 3,
+        ge: 4,
+        lt: 5,
+        le: 6,
+        ap: 7,
+      })
       .build();
     expect(url).toBe(
-      "Observation?value-quantity=gt5&value-quantity=le10",
+      "Observation?value-quantity=eq1&value-quantity=ne2&value-quantity=gt3&value-quantity=ge4&value-quantity=lt5&value-quantity=le6&value-quantity=ap7",
     );
   });
 
-  it("emits _include", () => {
-    const url = searchBuilder("Patient")
-      .include("Patient:general-practitioner")
-      .build();
-    expect(url).toBe(
-      "Patient?_include=Patient%3Ageneral-practitioner",
-    );
+  it("emits seeded _include specs", () => {
+    expect(
+      searchBuilder("Patient")
+        .include("Patient:general-practitioner")
+        .build(),
+    ).toBe("Patient?_include=Patient%3Ageneral-practitioner");
+    expect(
+      searchBuilder("Observation").include("Observation:subject").build(),
+    ).toBe("Observation?_include=Observation%3Asubject");
   });
 
   it("emits _revinclude", () => {
     const url = searchBuilder("Patient")
       .revInclude("Observation:subject")
       .build();
-    expect(url).toBe(
-      "Patient?_revinclude=Observation%3Asubject",
-    );
+    expect(url).toBe("Patient?_revinclude=Observation%3Asubject");
   });
 
   it("chains multiple wheres and include", () => {

@@ -555,11 +555,7 @@ export function ResourceListPage() {
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 10,
-              overflow: "visible",
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              minHeight: 100,
+              overflow: "hidden",
             }}
           >
             <ResourceTable<Resource>
@@ -746,7 +742,6 @@ function ResourceList({ resources, resourceType, singular, config, isLoading }: 
         border: "1px solid var(--border)",
         borderRadius: 10,
         overflow: "hidden",
-        flex: 1,
       }}
     >
       {resources.map((r, i) => {

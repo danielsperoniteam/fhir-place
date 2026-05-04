@@ -42,6 +42,34 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
    Pick the bump (`patch` / `minor` / `major`) and describe the change in human terms. Commit the generated `.changeset/*.md` alongside your code.
 4. Open the PR. CI runs typecheck + tests + build. The release workflow automatically opens / updates a "Version Packages" PR that bumps versions + CHANGELOG when your PR lands; merging that second PR triggers a fresh npm publish.
 
+## Staging deploys
+
+A long-lived `staging` branch deploys alongside `main` so we can confirm
+several PRs work together before they hit production.
+
+- `main` is published at <https://samsuffolksperoni.github.io/fhir-place/>
+  (goals-tasks at `/fhir-place/goals/`).
+- `staging` is published at <https://samsuffolksperoni.github.io/fhir-place/staging/>
+  (goals-tasks at `/fhir-place/staging/goals/`).
+
+**Flow:**
+
+1. Open every PR — human or agent — with `base: staging`. `staging` has no
+   branch protection so a human can merge as soon as CI is green and the
+   review is done.
+2. The Pages workflow rebuilds both branches on every push; wait for the
+   staging build to be green before declaring a change ready for UAT.
+3. Walk the PR's **UAT on live staging** steps against the live
+   `/fhir-place/staging/` URL. If anything is off, fix on a follow-up PR
+   (still targeting `staging`).
+4. When the combined state on staging looks right, fast-forward `main` to
+   `staging` (or open a `staging -> main` PR). That promotes everything
+   that's been UAT'd, together, to production.
+
+**Agents always target `staging`.** See `.claude/agents/engineer.md` and
+`AGENTS.md`. Every agent-authored PR must include a UAT section with
+concrete copy-pasteable steps for the live staging URL.
+
 ## Bump conventions
 
 - **patch** — bug fixes, docs, internal refactors, dependency tightening
@@ -78,7 +106,7 @@ GitHub Issues are the canonical backlog (see `docs/decisions/0001-use-github-iss
 | `type:` | exactly one | `bug`, `feature`, `tech-debt`, `docs`, `spike`, `epic` | What kind of work this is. `epic` = tracker for sub-issues. `spike` = time-boxed exploration. |
 | `area:` | one or more | `fhir-explorer`, `react-fhir`, `workbench`, `cql`, `mcp`, `infra`, `auth`, `security` | Which part of the codebase is touched. `fhir-explorer` is the demo app at `apps/demo/` (legacy names: "demo", "fhir-ui", "live-monitor"). `react-fhir` is the published library at `packages/react-fhir/`. |
 | `priority:` | exactly one | `high`, `medium`, `low` | Triage signal. Bugs default to `high`. Spikes / nice-to-haves default to `low`. Default `medium`. |
-| `status:` | optional | `blocked`, `needs-triage` | Workflow state. Use sparingly. |
+| `status:` | optional | `blocked`, `needs-triage`, `in-progress`, `needs-human`, `agent-paused` | Workflow state. Use sparingly. `in-progress` / `needs-human` are bot-managed by the engineer-dispatch routine; `agent-paused` on the dispatch tracking issue is the kill switch. |
 | `origin:` | optional | `bot-filed` | Filed by automation (e.g. `live-site-monitor.yml`). |
 | `phase-N` | optional | `phase-0`..`phase-3`, `fhir-workbench-phase-a` | Multi-phase epic tracking. Keep as plain (no prefix) for grep-ability. |
 
