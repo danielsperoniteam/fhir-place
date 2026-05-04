@@ -1,0 +1,105 @@
+name: File issue on CI failure
+
+# Watches every other workflow on main/staging. When one fails, opens (or
+# comments on) a GitHub issue so the engineer-dispatch agent can pick it up.
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Deploy demo to GitHub Pages
+      - Daily PM triage
+      - Daily QA pass
+      - Hourly engineer dispatch
+      - Hourly UAT validation
+      - Integration tests (live FHIR)
+      - Live site monitor
+      - Release
+      - Sync labels
+      - Discover test patients
+    types: [completed]
+    branches: [main, staging]
+
+permissions:
+  issues: write
+
+jobs:
+  file-issue:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const shortSha = run.head_sha.slice(0, 7);
+            const commitMsg = (run.head_commit?.message ?? '').split('\n')[0].slice(0, 120);
+            const title = `[CI] ${run.name} failed on ${run.head_branch}`;
+
+            const body = [
+              `## Problem`,
+              ``,
+              `The **${run.name}** workflow failed on \`${run.head_branch}\`.`,
+              ``,
+              `| Field | Value |`,
+              `|---|---|`,
+              `| Workflow | ${run.name} |`,
+              `| Branch | \`${run.head_branch}\` |`,
+              `| Commit | [\`${shortSha}\`](${run.repository.html_url}/commit/${run.head_sha}) — ${commitMsg} |`,
+              `| Failed run | ${run.html_url} |`,
+              ``,
+              `## User impact`,
+              ``,
+              `CI is broken on \`${run.head_branch}\`. Merges may be blocked or deployments may fail.`,
+              ``,
+              `## Desired behavior`,
+              ``,
+              `The workflow passes on \`${run.head_branch}\` without errors.`,
+              ``,
+              `## Acceptance criteria`,
+              ``,
+              `- [ ] The failing workflow run passes on a subsequent run`,
+              `- [ ] Root cause is identified and fixed (not just retried)`,
+              ``,
+              `## Relevant files`,
+              ``,
+              `- \`.github/workflows/\``,
+              ``,
+              `## Constraints`,
+              ``,
+              `Do not force-push \`main\` or bypass branch protection.`,
+              ``,
+              `## Test plan`,
+              ``,
+              `- [ ] Trigger the workflow manually via \`workflow_dispatch\` or push a fix commit`,
+              `- [ ] Confirm the run completes with \`success\``,
+              ``,
+              `---`,
+              `_Opened automatically by \`.github/workflows/on-failure-issue.yml\`. Close once the underlying issue is fixed._`,
+            ].join('\n');
+
+            // Deduplicate: look for an existing open bot-filed issue with this exact title.
+            const search = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}" label:"origin: bot-filed"`,
+              per_page: 5,
+            });
+            const match = search.data.items.find(i => i.title === title);
+
+            if (match) {
+              core.info(`Commenting on existing issue #${match.number}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: match.number,
+                body: `Failed again in [\`${shortSha}\`](${run.repository.html_url}/commit/${run.head_sha}): ${run.html_url}`,
+              });
+            } else {
+              core.info(`Creating issue: ${title}`);
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['type: bug', 'area: infra', 'priority: high', 'origin: bot-filed'],
+              });
+            }
