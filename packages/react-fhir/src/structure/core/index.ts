@@ -8,6 +8,7 @@ export {
   lookupCoreDisplay,
   lookupCoreDefinition,
   lookupCoreConcept,
+  preloadCoreLookups,
 } from "./valuesets.js";
 export { bundledTypes } from "./sd/index.generated.js";
 export {

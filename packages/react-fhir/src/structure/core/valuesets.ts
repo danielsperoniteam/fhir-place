@@ -1,6 +1,4 @@
 import type { ValueSet } from "fhir/r4";
-import { generatedCoreValueSets } from "./valuesets.generated.js";
-import { generatedCoreConcepts } from "./codesystems.generated.js";
 
 /**
  * Bundled R4 core ValueSets — served from memory when the target FHIR server
@@ -11,6 +9,43 @@ import { generatedCoreConcepts } from "./codesystems.generated.js";
  * look them up in one step. Each entry is already in "expanded" form so
  * `codesFromValueSet` reads them without further transformation.
  */
+
+// Large generated data modules are lazy-loaded to keep the initial bundle
+// under the Vite 500 kB chunk-size warning threshold.  Call
+// `preloadCoreLookups()` at app boot to populate them before first render.
+// Functions that depend on them gracefully degrade (return undefined / only
+// use hand-curated data) until the preload resolves.
+type GeneratedValueSets = Map<string, ValueSet>;
+type GeneratedConcepts = Record<string, Record<string, { d?: string; x?: string }>>;
+
+let _generatedCoreValueSets: GeneratedValueSets | null = null;
+let _generatedCoreConcepts: GeneratedConcepts | null = null;
+
+/**
+ * Eagerly loads `valuesets.generated` and `codesystems.generated` in parallel.
+ * Safe to call multiple times — subsequent calls are no-ops once the data has
+ * resolved. Apps should call this once during bootstrap (before the first
+ * render) so code-display lookups and bundled-ValueSet fallbacks are fully
+ * populated on first paint.
+ */
+export async function preloadCoreLookups(): Promise<void> {
+  if (_generatedCoreValueSets && _generatedCoreConcepts) return;
+  const [vsModule, csModule] = await Promise.all([
+    import("./valuesets.generated.js"),
+    import("./codesystems.generated.js"),
+  ]);
+  _generatedCoreValueSets = vsModule.generatedCoreValueSets;
+  _generatedCoreConcepts = csModule.generatedCoreConcepts;
+  // Extend the mutable bundledValueSetUrls array so consumers that hold a
+  // reference to it see the full generated set after preload.
+  const existing = new Set(bundledValueSetUrls);
+  for (const url of _generatedCoreValueSets.keys()) {
+    if (!existing.has(url)) bundledValueSetUrls.push(url);
+  }
+  // Invalidate the display index so it rebuilds with the full data set on
+  // next access.
+  codeDisplayIndex = undefined;
+}
 
 const mk = (
   url: string,
@@ -339,17 +374,24 @@ export const coreValueSets: Map<string, ValueSet> = new Map(
  * Returns the library's bundled copy of a R4 core ValueSet by canonical URL,
  * or `undefined` if we don't ship one. Used by `useValueSet` as a last-resort
  * fallback when the server can't resolve it.
+ *
+ * The hand-curated entries in `coreValueSets` are always available. The much
+ * larger generated set is only consulted after `preloadCoreLookups()` resolves.
  */
 export function coreValueSet(canonical: string | undefined): ValueSet | undefined {
   if (!canonical) return undefined;
-  return coreValueSets.get(canonical) ?? generatedCoreValueSets.get(canonical);
+  return coreValueSets.get(canonical) ?? _generatedCoreValueSets?.get(canonical);
 }
 
-/** Canonical URLs the library ships bundled ValueSets for. */
-export const bundledValueSetUrls = Array.from(new Set([
-  ...coreValueSets.keys(),
-  ...generatedCoreValueSets.keys(),
-]));
+/**
+ * Canonical URLs for every bundled ValueSet.
+ *
+ * Starts with only the hand-curated entries. After `preloadCoreLookups()`
+ * resolves, the generated URLs are appended to the end of this array in place.
+ * Consumers that hold a reference to this array will automatically see the
+ * full list once the preload is complete.
+ */
+export const bundledValueSetUrls: string[] = Array.from(coreValueSets.keys());
 
 /**
  * Lazy index of (system → code → display) built once on first access from
@@ -377,14 +419,18 @@ function buildCodeDisplayIndex(): Map<string, Map<string, string>> {
       if (c.system && c.code && c.display) set(c.system, c.code, c.display);
     }
   }
-  for (const vs of generatedCoreValueSets.values()) {
-    for (const c of vs.expansion?.contains ?? []) {
-      if (c.system && c.code && c.display) set(c.system, c.code, c.display);
+  if (_generatedCoreValueSets) {
+    for (const vs of _generatedCoreValueSets.values()) {
+      for (const c of vs.expansion?.contains ?? []) {
+        if (c.system && c.code && c.display) set(c.system, c.code, c.display);
+      }
     }
   }
-  for (const [system, codes] of Object.entries(generatedCoreConcepts)) {
-    for (const [code, info] of Object.entries(codes)) {
-      if (info.d) set(system, code, info.d);
+  if (_generatedCoreConcepts) {
+    for (const [system, codes] of Object.entries(_generatedCoreConcepts)) {
+      for (const [code, info] of Object.entries(codes)) {
+        if (info.d) set(system, code, info.d);
+      }
     }
   }
   return index;
@@ -419,7 +465,7 @@ export function lookupCoreDefinition(
   code: string | undefined,
 ): string | undefined {
   if (!system || !code) return undefined;
-  return generatedCoreConcepts[system]?.[code]?.x;
+  return _generatedCoreConcepts?.[system]?.[code]?.x;
 }
 
 /**

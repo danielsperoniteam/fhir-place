@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/react";
+import React, { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { CCTopbar } from "./components/CCTopbar.js";
 import { CCSidebar } from "./components/CCSidebar.js";
@@ -6,14 +7,27 @@ import { CCTabs } from "./components/CCTabs.js";
 import { ThemeProvider } from "./context/ThemeContext.js";
 import { RouteTabSync, TabsProvider } from "./context/TabsContext.js";
 import { PinnedProvider } from "./state/pinned.js";
-import { AskPage } from "./routes/fhir-ui/pages/AskPage.js";
 import { ResourceCreatePage } from "./routes/fhir-ui/pages/ResourceCreatePage.js";
 import { ResourceDetailPage } from "./routes/fhir-ui/pages/ResourceDetailPage.js";
 import { ResourceEditPage } from "./routes/fhir-ui/pages/ResourceEditPage.js";
 import { ResourceListPage } from "./routes/fhir-ui/pages/ResourceListPage.js";
 import { ResourceTypePickerPage } from "./routes/fhir-ui/pages/ResourceTypePickerPage.js";
 import { SettingsPage } from "./routes/fhir-ui/pages/SettingsPage.js";
-import { CqlRunnerPage } from "./routes/cql-runner/CqlRunnerPage.js";
+
+// CqlRunnerPage pulls in cql-execution + cql-translator (~2 MB). Lazy-load it
+// so those deps stay out of the initial bundle.
+const CqlRunnerPage = lazy(() =>
+  import("./routes/cql-runner/CqlRunnerPage.js").then((m) => ({
+    default: m.CqlRunnerPage,
+  })),
+);
+
+// AskPage pulls in the Anthropic SDK. Lazy-load it for the same reason.
+const AskPage = lazy(() =>
+  import("./routes/fhir-ui/pages/AskPage.js").then((m) => ({
+    default: m.AskPage,
+  })),
+);
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -96,25 +110,31 @@ function Shell() {
 
         {/* Page content */}
         <main style={{ flex: 1, overflow: "auto", background: "var(--bg)" }}>
-          <SentryRoutes>
-            <Route path="/" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
-            <Route path="/cql-runner" element={<CqlRunnerPage />} />
-            <Route path="/fhir-ui" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
-            <Route path="/fhir-ui/ask" element={<AskPage />} />
-            <Route path="/fhir-ui/settings" element={<SettingsPage />} />
-            <Route path="/fhir-ui/types" element={<ResourceTypePickerPage />} />
-            <Route path="/fhir-ui/:resourceType/new" element={<ResourceCreatePage />} />
-            <Route path="/fhir-ui/:resourceType/:id/edit" element={<ResourceEditPage />} />
-            <Route path="/fhir-ui/:resourceType/:id" element={<ResourceDetailPage />} />
-            <Route path="/fhir-ui/:resourceType" element={<ResourceListPage />} />
-            {/* Backwards-compat redirects */}
-            <Route path="/ask" element={<RedirectWithQuery to="/fhir-ui/ask" />} />
-            <Route path="/settings" element={<RedirectWithQuery to="/fhir-ui/settings" />} />
-            <Route path="/Patient/new" element={<RedirectWithQuery to="/fhir-ui/Patient/new" />} />
-            <Route path="/:resourceType/:id/edit" element={<RedirectToFhirUi suffix="/edit" includeId />} />
-            <Route path="/:resourceType/:id" element={<RedirectToFhirUi includeId />} />
-            <Route path="/:resourceType" element={<RedirectToFhirUi />} />
-          </SentryRoutes>
+          {/* Suspense boundary covers the two lazy-loaded heavy routes
+              (CqlRunnerPage and AskPage). The null fallback avoids a
+              flash-of-empty-content on routes that are already eagerly
+              bundled — those resolve synchronously and never suspend. */}
+          <Suspense fallback={null}>
+            <SentryRoutes>
+              <Route path="/" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
+              <Route path="/cql-runner" element={<CqlRunnerPage />} />
+              <Route path="/fhir-ui" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
+              <Route path="/fhir-ui/ask" element={<AskPage />} />
+              <Route path="/fhir-ui/settings" element={<SettingsPage />} />
+              <Route path="/fhir-ui/types" element={<ResourceTypePickerPage />} />
+              <Route path="/fhir-ui/:resourceType/new" element={<ResourceCreatePage />} />
+              <Route path="/fhir-ui/:resourceType/:id/edit" element={<ResourceEditPage />} />
+              <Route path="/fhir-ui/:resourceType/:id" element={<ResourceDetailPage />} />
+              <Route path="/fhir-ui/:resourceType" element={<ResourceListPage />} />
+              {/* Backwards-compat redirects */}
+              <Route path="/ask" element={<RedirectWithQuery to="/fhir-ui/ask" />} />
+              <Route path="/settings" element={<RedirectWithQuery to="/fhir-ui/settings" />} />
+              <Route path="/Patient/new" element={<RedirectWithQuery to="/fhir-ui/Patient/new" />} />
+              <Route path="/:resourceType/:id/edit" element={<RedirectToFhirUi suffix="/edit" includeId />} />
+              <Route path="/:resourceType/:id" element={<RedirectToFhirUi includeId />} />
+              <Route path="/:resourceType" element={<RedirectToFhirUi />} />
+            </SentryRoutes>
+          </Suspense>
         </main>
 
         {/* Status bar */}

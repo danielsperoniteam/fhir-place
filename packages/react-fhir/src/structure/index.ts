@@ -9,6 +9,7 @@ export {
   lookupCoreDisplay,
   lookupCoreDefinition,
   lookupCoreConcept,
+  preloadCoreLookups,
   bundledTypes,
   type SpecFetcher,
   createDefaultSpecFetcher,

@@ -11,7 +11,6 @@ import type { Reference, Resource } from "fhir/r4";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
-import { naturalLanguageToFhirQuery } from "../../../ask/anthropicQuery.js";
 import { PatientRowCounts } from "../../../components/PatientRowCounts.js";
 import { SearchRequestPreview } from "../../../components/SearchRequestPreview.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
@@ -221,6 +220,9 @@ export function ResourceListPage() {
     async (question: string): Promise<Record<string, string> | null> => {
       const apiKey = loadAnthropicApiKey();
       if (!apiKey) throw new Error("No Anthropic API key — add one in Settings first.");
+      // Dynamic import keeps @anthropic-ai/sdk out of the initial bundle;
+      // it only loads when the user actually triggers an AI search.
+      const { naturalLanguageToFhirQuery } = await import("../../../ask/anthropicQuery.js");
       const plan = await naturalLanguageToFhirQuery(question, apiKey);
       const { _count, ...rest } = plan.params;
       void _count;

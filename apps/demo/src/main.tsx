@@ -5,6 +5,7 @@ import {
   FetchFhirClient,
   FhirClientProvider,
   FhirError,
+  preloadCoreLookups,
   setCoreStructureDefinitionFetcher,
 } from "@fhir-place/react-fhir";
 import React from "react";
@@ -60,6 +61,12 @@ const terminologyClient =
     : undefined;
 
 async function bootstrap() {
+  // Kick off the lazy load of the large generated FHIR value-set and
+  // code-system data in the background.  We don't await it here so the
+  // app renders immediately; the data is available well before the user
+  // interacts with any dropdown or code-display field.
+  void preloadCoreLookups();
+
   if (USE_MOCK) {
     // Mock mode ships trimmed StructureDefinition fixtures (`fixtures.ts`)
     // that the e2e screenshots were captured against. The package's

@@ -6,13 +6,14 @@ import {
   type RenderOptions,
 } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   codeSystemLabel,
   DEFAULT_CODING_PRIORITY,
   defaultTypeRenderers,
   preferredCoding,
 } from "./renderers.js";
+import { preloadCoreLookups } from "../structure/core/valuesets.js";
 
 // CodeChip uses useCodeLookup → useQuery, so every renderer that may emit a
 // chip needs to render inside a QueryClientProvider. Tests don't configure a
@@ -125,6 +126,10 @@ describe("preferredCoding", () => {
 });
 
 describe("CodeableConcept renderer", () => {
+  // The definition tooltip test relies on codesystems.generated which is now
+  // lazy-loaded.  Preload before the suite so lookupCoreDefinition works.
+  beforeAll(() => preloadCoreLookups());
+
   const renderer = defaultTypeRenderers.CodeableConcept!;
   const ctx = { path: "Observation.code", typeCode: "CodeableConcept" };
 

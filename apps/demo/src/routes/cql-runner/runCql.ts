@@ -1,7 +1,4 @@
 import type { FhirClient } from "@fhir-place/react-fhir";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import * as cqlExecution from "cql-execution";
-import { buildFhirDataSource } from "./fhirDataSource.js";
 import { translateCql, type TranslationError } from "./translator.js";
 
 /**
@@ -42,6 +39,14 @@ export async function runCql({
   if (!translation.ok) {
     return { ok: false, failure: { kind: "translation", errors: translation.errors } };
   }
+
+  // Dynamic imports keep cql-execution and cql-exec-fhir (combined ~3 MB)
+  // out of the CqlRunnerPage lazy chunk.  They load only when the user
+  // actually presses Run — not on first visit to /cql-runner.
+  const [cqlExecution, { buildFhirDataSource }] = await Promise.all([
+    import("cql-execution"),
+    import("./fhirDataSource.js"),
+  ]);
 
   let dataSource;
   try {

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { naturalLanguageToFhirQuery } from "../ask/anthropicQuery.js";
 import { loadAnthropicApiKey } from "../config.js";
 import { CC_MONO } from "./ccStyles.js";
 
@@ -43,6 +42,8 @@ export function JumpDialog({ open, onClose }: JumpDialogProps) {
     setLoading(true);
     setError(null);
     try {
+      // Dynamic import keeps @anthropic-ai/sdk out of the initial bundle.
+      const { naturalLanguageToFhirQuery } = await import("../ask/anthropicQuery.js");
       const plan = await naturalLanguageToFhirQuery(question, apiKey);
       const qs = new URLSearchParams();
       for (const [k, v] of Object.entries(plan.params)) {
