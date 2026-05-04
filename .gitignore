@@ -40,6 +40,9 @@ packages/react-fhir/fhir_spec/
 # JSON files under apps/demo/public/fhir-r4/ ARE committed.
 apps/demo/scripts/cache/
 
-# Claude editor metadata (ignore everything except shared subagent definitions)
+# Claude editor metadata (ignore everything except shared subagent definitions,
+# the session-start hook, and project settings)
 .claude/*
 !.claude/agents/
+!.claude/hooks/
+!.claude/settings.json
