@@ -4,6 +4,7 @@ import { useValueSet } from "../../hooks/queries.js";
 import {
   bindingFor,
   codesFromValueSet,
+  isOpenBinding,
   type ResolvedCode,
 } from "../../structure/binding.js";
 import { AsyncCodeCombobox } from "./AsyncCodeCombobox.js";
@@ -87,7 +88,7 @@ export const CodingInput: FhirTypeInput<Coding> = ({
   const { data: vs, isLoading, isError } = useValueSet(valueSet);
   const boundCodes = codesFromValueSet(vs);
   const fieldName = context.element.path?.split(".").pop() ?? "coding";
-  const allowFreeText = strength !== "required";
+  const allowFreeText = isOpenBinding(strength);
   // Hooks must be called in the same order on every render — keep useState
   // above any early returns.
   const [otherToggled, setOtherToggled] = useState(false);

@@ -1,6 +1,6 @@
 import type { ValueSet } from "fhir/r4";
 import { describe, expect, it } from "vitest";
-import { bindingFor, codesFromValueSet } from "./binding.js";
+import { bindingFor, codesFromValueSet, isOpenBinding } from "./binding.js";
 
 describe("bindingFor", () => {
   it("returns empty fields when element has no binding", () => {
@@ -34,6 +34,28 @@ describe("bindingFor", () => {
       valueSet: "http://hl7.org/fhir/ValueSet/administrative-gender",
       description: "The gender of a person used for administrative purposes.",
     });
+  });
+});
+
+describe("isOpenBinding", () => {
+  it("returns false for required — hard enumeration, no free-text escape", () => {
+    expect(isOpenBinding("required")).toBe(false);
+  });
+
+  it("returns false for extensible — closed enumeration per FHIR spec", () => {
+    expect(isOpenBinding("extensible")).toBe(false);
+  });
+
+  it("returns true for preferred — FHIR spec allows implementers to use any code", () => {
+    expect(isOpenBinding("preferred")).toBe(true);
+  });
+
+  it("returns true for example — non-normative binding, implementers MAY use any code", () => {
+    expect(isOpenBinding("example")).toBe(true);
+  });
+
+  it("returns false when strength is undefined (no binding)", () => {
+    expect(isOpenBinding(undefined)).toBe(false);
   });
 });
 

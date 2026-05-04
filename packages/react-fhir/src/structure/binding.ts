@@ -21,6 +21,19 @@ export function bindingFor(element: ElementDefinition | undefined): ElementBindi
   };
 }
 
+/**
+ * Returns true when the binding strength is "open" — i.e. the FHIR spec
+ * allows implementers to use codes outside the bound ValueSet.
+ *
+ * - "required" and "extensible" are closed: the dropdown is normative and no
+ *   free-text escape is offered.
+ * - "preferred" and "example" are open: the dropdown is a convenience but the
+ *   user MUST be able to enter any (system, code, display) they choose.
+ */
+export function isOpenBinding(strength: BindingStrength | undefined): boolean {
+  return strength === "preferred" || strength === "example";
+}
+
 export interface ResolvedCode {
   system?: string;
   code: string;
