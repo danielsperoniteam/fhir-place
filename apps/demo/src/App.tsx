@@ -9,6 +9,7 @@ import { ResourceCreatePage } from "./routes/fhir-ui/pages/ResourceCreatePage.js
 import { ResourceDetailPage } from "./routes/fhir-ui/pages/ResourceDetailPage.js";
 import { ResourceEditPage } from "./routes/fhir-ui/pages/ResourceEditPage.js";
 import { ResourceListPage } from "./routes/fhir-ui/pages/ResourceListPage.js";
+import { ResourceTypePickerPage } from "./routes/fhir-ui/pages/ResourceTypePickerPage.js";
 import { SettingsPage } from "./routes/fhir-ui/pages/SettingsPage.js";
 import { CqlRunnerPage } from "./routes/cql-runner/CqlRunnerPage.js";
 
@@ -54,6 +55,7 @@ function Shell() {
             <Route path="/fhir-ui" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
             <Route path="/fhir-ui/ask" element={<AskPage />} />
             <Route path="/fhir-ui/settings" element={<SettingsPage />} />
+            <Route path="/fhir-ui/types" element={<ResourceTypePickerPage />} />
             <Route path="/fhir-ui/:resourceType/new" element={<ResourceCreatePage />} />
             <Route path="/fhir-ui/:resourceType/:id/edit" element={<ResourceEditPage />} />
             <Route path="/fhir-ui/:resourceType/:id" element={<ResourceDetailPage />} />

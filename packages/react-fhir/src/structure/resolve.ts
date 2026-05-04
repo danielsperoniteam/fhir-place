@@ -17,14 +17,22 @@ const canonicalFor = (type: string) =>
   `http://hl7.org/fhir/StructureDefinition/${type}`;
 
 /**
- * Resolves a StructureDefinition against any FHIR server using a three-step
- * fallback:
+ * Resolves a StructureDefinition.
  *
- *   1. Instance read at `StructureDefinition/{type}` (cheap when stored).
- *   2. Search by canonical URL (`StructureDefinition?url=...`) — picks first hit.
- *   3. Library-bundled core SD if one ships for this type.
+ * For unprofiled core resource types we prefer the in-package bundled SD —
+ * core SDs are stable per FHIR version and most servers (public HAPI, the
+ * SMART sandboxes, Aidbox without a license) don't expose them at the REST
+ * layer anyway, so trying the network first wastes round-trips on the common
+ * path. Profiled requests still go to the server because profiles are
+ * server-defined.
  *
- * Throws only when all three fail, with a message that names the type and
+ * Resolution order:
+ *
+ *   1. Bundled core SD (no profile + bundled copy available) — zero network.
+ *   2. Instance read at `StructureDefinition/{id}`.
+ *   3. Search by canonical URL (`StructureDefinition?url=...`) — first hit.
+ *
+ * Throws only when every step fails, with a message that names the type and
  * hints at the workaround (supplying an SD explicitly).
  */
 export async function resolveStructureDefinition(
@@ -36,9 +44,16 @@ export async function resolveStructureDefinition(
   const canonical = options.canonical ?? options.profile ?? canonicalFor(type);
   const canonicalType = canonicalFor(type);
   const useProfile = Boolean(options.profile);
-  const canUseBundledFallback = canonical === canonicalType;
+  const canUseBundled =
+    options.useBundledFallback !== false && !useProfile && canonical === canonicalType;
 
-  // 1. Instance read. For profiled canonicals, attempt an ID read only when inferable.
+  // 1. Bundled core SD (skip the server entirely for the common path).
+  if (canUseBundled) {
+    const bundled = await coreStructureDefinition(type, signal);
+    if (bundled) return bundled;
+  }
+
+  // 2. Instance read. For profiled canonicals, attempt an ID read only when inferable.
   const readId = useProfile ? inferIdFromCanonical(canonical) : type;
   if (readId) {
     try {
@@ -50,7 +65,7 @@ export async function resolveStructureDefinition(
     }
   }
 
-  // 2. Search by canonical URL.
+  // 3. Search by canonical URL.
   try {
     const bundle = await client.search<StructureDefinition>(
       "StructureDefinition",
@@ -65,29 +80,26 @@ export async function resolveStructureDefinition(
     if (!shouldFallback(err)) throw err;
   }
 
-  // 3. Bundled core fallback.
-  if (options.useBundledFallback !== false && canUseBundledFallback) {
-    const bundled = await coreStructureDefinition(type);
-    if (bundled) return bundled;
-  }
-
   throw new Error(
     `Could not resolve StructureDefinition for "${type}". ` +
-      `Server does not store it at /StructureDefinition/${type}, ` +
-      `does not return it via ?url=${canonical}, ` +
-      `and the library does not ship a bundled copy for this type. ` +
+      `No bundled copy ships for this type, ` +
+      `the server does not store it at /StructureDefinition/${type}, ` +
+      `and it does not return one via ?url=${canonical}. ` +
       `Supply one explicitly via the structureDefinition prop.`,
   );
 }
 
 /**
- * We only fall back on 404 / 410 / 501 / 405 errors (server says it doesn't
- * have it). Other errors (auth, network abort, 500) bubble up so callers can
+ * We fall back on the response codes a server uses to say "I don't have this
+ * resource / I don't support this query" — 400/404/405/410/501. Public HAPI
+ * returns 400 for `StructureDefinition?url=...` because it doesn't index the
+ * SD canonical, and that's the exact case where the bundled fallback should
+ * kick in. Other errors (auth, network abort, 500) bubble up so callers can
  * surface the real problem instead of silently masking it with a bundled SD.
  */
 function shouldFallback(err: unknown): boolean {
   if (err instanceof FhirError) {
-    return [404, 410, 405, 501].includes(err.status);
+    return [400, 404, 405, 410, 501].includes(err.status);
   }
   // Treat non-FhirError exceptions (TypeError, AbortError, etc.) as bubbling.
   return false;

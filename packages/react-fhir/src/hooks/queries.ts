@@ -16,7 +16,7 @@ import type {
   ValueSet,
 } from "fhir/r4";
 import type { FhirClient, SearchParams } from "../client/types.js";
-import { coreValueSet } from "../structure/core/valuesets.js";
+import { coreValueSet, lookupCoreConcept } from "../structure/core/valuesets.js";
 import { resolveStructureDefinition } from "../structure/resolve.js";
 import { useFhirClient, useOptionalTerminologyClient, useTerminologyClient } from "./FhirClientProvider.js";
 
@@ -34,6 +34,8 @@ export const fhirQueryKeys = {
     [...fhirQueryKeys.all(baseUrl), "ValueSet", canonical] as const,
   valueSetExpansion: (baseUrl: string, canonical: string, filter: string, count: number) =>
     [...fhirQueryKeys.all(baseUrl), "ValueSet", canonical, "expand", filter, count] as const,
+  codeLookup: (baseUrl: string, system: string, code: string) =>
+    [...fhirQueryKeys.all(baseUrl), "CodeSystem", system, "lookup", code] as const,
   reference: (baseUrl: string, ref: string) =>
     [...fhirQueryKeys.all(baseUrl), "ref", ref] as const,
   searchParameter: (baseUrl: string, base: string, code: string) =>
@@ -263,6 +265,94 @@ export function useValueSetExpansion(
     // Filter results are short-lived — server may cap counts and we want fresh
     // matches as the user keeps typing past previously-seen prefixes.
     staleTime: 30_000,
+    ...options,
+  });
+}
+
+export interface CodeLookupResult {
+  display?: string;
+  definition?: string;
+  /** Where the result came from — "bundle" means no network call was made. */
+  source: "bundle" | "server";
+}
+
+export interface UseCodeLookupOptions
+  extends ReadQueryOpts<CodeLookupResult | null> {
+  /** When false, skips the server fallback even if the local bundle misses. */
+  enabled?: boolean;
+}
+
+/**
+ * Resolves the human-readable display + definition for a `(system, code)`
+ * pair. Synchronously returns a bundled hit when one exists; otherwise calls
+ * `CodeSystem/$lookup` against the configured terminology server.
+ *
+ * Useful for tooltip/hover UIs that want to surface concept metadata for
+ * codes whose `Coding.display` is missing — particularly licensed/large
+ * systems like SNOMED, LOINC, ICD-10 which we don't bundle.
+ *
+ * Returns `null` for the "looked up but found nothing" case so consumers can
+ * distinguish it from "still loading" (`undefined`).
+ */
+export function useCodeLookup(
+  system: string | undefined,
+  code: string | undefined,
+  options?: UseCodeLookupOptions,
+) {
+  const client = useOptionalTerminologyClient();
+  const local = lookupCoreConcept(system, code);
+  const enabled =
+    (options?.enabled ?? true) &&
+    Boolean(system) &&
+    Boolean(code) &&
+    !local &&
+    Boolean(client);
+  return useQuery<CodeLookupResult | null>({
+    queryKey: fhirQueryKeys.codeLookup(
+      client?.baseUrl ?? "",
+      system ?? "",
+      code ?? "",
+    ),
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({ system: system!, code: code! });
+      try {
+        const res = await client!.request<{
+          parameter?: Array<{
+            name: string;
+            valueString?: string;
+            part?: Array<{ name: string; valueString?: string }>;
+          }>;
+        }>({
+          path: `/CodeSystem/$lookup?${params.toString()}`,
+          signal,
+        });
+        const display = res.parameter?.find(
+          (p) => p.name === "display",
+        )?.valueString;
+        // Definitions live under either a top-level "definition" parameter
+        // (rare but spec-compliant) or inside a "designation" with a part of
+        // type definition. We pick whichever the server returned.
+        const topDefinition = res.parameter?.find(
+          (p) => p.name === "definition",
+        )?.valueString;
+        const designationDefinition = res.parameter
+          ?.filter((p) => p.name === "designation")
+          .map((p) => p.part?.find((q) => q.name === "value")?.valueString)
+          .find(Boolean);
+        const definition = topDefinition ?? designationDefinition;
+        if (!display && !definition) return null;
+        return { display, definition, source: "server" };
+      } catch {
+        return null;
+      }
+    },
+    enabled,
+    initialData: local
+      ? { display: local.display, definition: local.definition, source: "bundle" }
+      : undefined,
+    // Concept metadata is effectively immutable — cache aggressively.
+    staleTime: 24 * 60 * 60_000,
+    gcTime: 7 * 24 * 60 * 60_000,
     ...options,
   });
 }

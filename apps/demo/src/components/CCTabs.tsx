@@ -139,9 +139,12 @@ export function CCTabs() {
         );
       })}
 
-      {/* Add tab */}
+      {/* Add tab — opens the resource-type picker so users can reach any
+          R4 type, not just the curated set in the sidebar. ⌘K still opens
+          the natural-language jump dialog. */}
       <div
-        onClick={() => window.dispatchEvent(new Event("fhir-place:open-jump"))}
+        data-testid="new-tab-button"
+        onClick={() => navigate("/fhir-ui/types")}
         style={{
           display: "flex",
           alignItems: "center",
@@ -153,7 +156,7 @@ export function CCTabs() {
           flexShrink: 0,
           userSelect: "none",
         }}
-        title="New tab"
+        title="New tab — choose resource type"
       >
         +
       </div>

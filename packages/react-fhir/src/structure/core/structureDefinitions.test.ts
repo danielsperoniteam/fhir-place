@@ -1,40 +1,173 @@
-import { describe, expect, it } from "vitest";
-import { bundledCoreTypes, coreStructureDefinition } from "./index.js";
+import type { StructureDefinition } from "fhir/r4";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import {
+  clearSpecFetcherCache,
+  coreStructureDefinition,
+  createBundledSpecFetcher,
+  createDefaultSpecFetcher,
+  setCoreStructureDefinitionFetcher,
+} from "./index.js";
 
-describe("bundled core StructureDefinitions", () => {
-  it("exposes all declared types via coreStructureDefinition", async () => {
-    for (const type of bundledCoreTypes) {
-      const sd = await coreStructureDefinition(type);
-      expect(sd, `${type} should be bundled`).toBeDefined();
-      expect(sd!.type).toBe(type);
-      expect(sd!.kind).toBe("resource");
-      expect(sd!.snapshot?.element?.length ?? 0).toBeGreaterThan(0);
-    }
+const TEST_BASE_URL = "https://spec.example.test/fhir/R4";
+
+const sd = (type: string): StructureDefinition => ({
+  resourceType: "StructureDefinition",
+  id: type,
+  url: `http://hl7.org/fhir/StructureDefinition/${type}`,
+  name: type,
+  status: "active",
+  kind: "resource",
+  abstract: false,
+  type,
+  snapshot: { element: [{ id: type, path: type }] },
+});
+
+describe("coreStructureDefinition (runtime spec fetcher)", () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+
+  beforeEach(() => {
+    clearSpecFetcherCache();
+    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher(TEST_BASE_URL));
+    fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
-  it("returns undefined for unknown types", async () => {
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher(TEST_BASE_URL));
+    clearSpecFetcherCache();
+  });
+
+  it("fetches the per-type profile JSON from the configured base URL", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify(sd("Patient")), { status: 200 }),
+    );
+    const result = await coreStructureDefinition("Patient");
+    expect(result?.type).toBe("Patient");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = fetchSpy.mock.calls[0]![0] as string;
+    expect(url).toBe(`${TEST_BASE_URL}/patient.profile.json`);
+  });
+
+  it("lower-cases the type segment so URL casing matches the published files", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify(sd("AdverseEvent")), { status: 200 }),
+    );
+    await coreStructureDefinition("AdverseEvent");
+    const url = fetchSpy.mock.calls[0]![0] as string;
+    expect(url).toBe(`${TEST_BASE_URL}/adverseevent.profile.json`);
+  });
+
+  it("returns undefined for 404 (unknown resource type)", async () => {
+    fetchSpy.mockResolvedValue(new Response("not found", { status: 404 }));
     expect(await coreStructureDefinition("MadeUpThing")).toBeUndefined();
   });
 
-  it("includes status for the 6 compartment types so token status fields render correctly", async () => {
-    const compartmentTypes = [
-      "Condition",
-      "MedicationRequest",
-      "AllergyIntolerance",
-      "Procedure",
-      "Encounter",
-      "Immunization",
-    ];
-    for (const type of compartmentTypes) {
-      const sd = await coreStructureDefinition(type);
-      const statusEl = sd!.snapshot!.element!.find(
-        (e) =>
-          e.path === `${type}.status` || e.path === `${type}.clinicalStatus`,
+  it("memoises successful results so each type costs at most one fetch", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify(sd("Observation")), { status: 200 }),
+    );
+    await coreStructureDefinition("Observation");
+    await coreStructureDefinition("Observation");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not cache failures (a transient 5xx can be retried)", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response("boom", { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(sd("Patient")), { status: 200 }),
       );
-      expect(
-        statusEl,
-        `${type} should include status or clinicalStatus`,
-      ).toBeDefined();
-    }
+    await expect(coreStructureDefinition("Patient")).rejects.toThrow(/503/);
+    const second = await coreStructureDefinition("Patient");
+    expect(second?.type).toBe("Patient");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects responses whose body isn't a StructureDefinition", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ resourceType: "OperationOutcome" }), { status: 200 }),
+    );
+    await expect(coreStructureDefinition("Patient")).rejects.toThrow(
+      /Expected a StructureDefinition/,
+    );
+  });
+
+  it("honours setCoreStructureDefinitionFetcher overrides (e.g. local mirror)", async () => {
+    const custom = vi.fn(async (type: string) => sd(type));
+    setCoreStructureDefinitionFetcher(custom);
+    const result = await coreStructureDefinition("ServiceRequest");
+    expect(result?.type).toBe("ServiceRequest");
+    expect(custom).toHaveBeenCalledWith("ServiceRequest", undefined);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("createDefaultSpecFetcher accepts a custom base URL", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify(sd("Patient")), { status: 200 }),
+    );
+    const local = createDefaultSpecFetcher("/fhir-r4");
+    setCoreStructureDefinitionFetcher(local);
+    await coreStructureDefinition("Patient");
+    const url = fetchSpy.mock.calls[0]![0] as string;
+    expect(url).toBe("/fhir-r4/patient.profile.json");
+  });
+
+  it("propagates AbortSignal to the fetch", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify(sd("Patient")), { status: 200 }),
+    );
+    const ctrl = new AbortController();
+    await coreStructureDefinition("Patient", ctrl.signal);
+    const opts = fetchSpy.mock.calls[0]![1] as RequestInit | undefined;
+    expect(opts?.signal).toBe(ctrl.signal);
+  });
+});
+
+describe("createBundledSpecFetcher (in-package R4 SDs)", () => {
+  // Inject a fake loader map so the test exercises the contract regardless of
+  // whether `sync:sds` has been run locally. The published bundle's
+  // `loaders` map is wired up the same way; an integration test under
+  // `prepare` would catch divergence between this contract and the generated
+  // index module.
+  const fakeLoaders = {
+    MedicationRequest: async () => ({
+      sd: sd("MedicationRequest"),
+    }),
+  };
+
+  beforeEach(() => {
+    clearSpecFetcherCache();
+    setCoreStructureDefinitionFetcher(createBundledSpecFetcher(fakeLoaders));
+  });
+  afterEach(() => {
+    setCoreStructureDefinitionFetcher(createDefaultSpecFetcher(TEST_BASE_URL));
+    clearSpecFetcherCache();
+  });
+
+  it("resolves a type via its lazy loader without any network call", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const result = await coreStructureDefinition("MedicationRequest");
+    expect(result?.resourceType).toBe("StructureDefinition");
+    expect(result?.type).toBe("MedicationRequest");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("returns undefined for types not in the bundle so the resolver throws its friendly error", async () => {
+    expect(await coreStructureDefinition("NotARealResource")).toBeUndefined();
+  });
+
+  it("memoises successful loads", async () => {
+    const calls: string[] = [];
+    const tracked = {
+      MedicationRequest: async () => {
+        calls.push("MedicationRequest");
+        return { sd: sd("MedicationRequest") };
+      },
+    };
+    setCoreStructureDefinitionFetcher(createBundledSpecFetcher(tracked));
+    await coreStructureDefinition("MedicationRequest");
+    await coreStructureDefinition("MedicationRequest");
+    expect(calls).toHaveLength(1);
   });
 });

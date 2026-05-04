@@ -172,8 +172,8 @@ describe("ResourceView", () => {
         onReferenceClick={onRef}
       />,
     );
-    const btn = screen.getByRole("button", { name: "Dr Smith" });
-    btn.click();
+    const [btn] = screen.getAllByRole("button", { name: "Dr Smith" });
+    btn!.click();
     expect(onRef).toHaveBeenCalledWith({
       reference: "Practitioner/gp-1",
       display: "Dr Smith",

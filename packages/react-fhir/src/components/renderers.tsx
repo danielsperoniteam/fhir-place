@@ -23,7 +23,8 @@ import {
   formatHumanName,
   formatReferenceLabel,
 } from "../structure/format.js";
-import { useReadReference } from "../hooks/queries.js";
+import { lookupCoreDisplay } from "../structure/core/valuesets.js";
+import { useCodeLookup, useReadReference } from "../hooks/queries.js";
 
 /** Context passed to every renderer. */
 export interface RendererContext {
@@ -137,26 +138,27 @@ const ContactPointRenderer: FhirTypeRenderer = (value) => {
   );
 };
 
+const KNOWN_CODE_SYSTEM_LABELS: Record<string, string> = {
+  "http://snomed.info/sct": "SNOMED",
+  "http://loinc.org": "LOINC",
+  "http://hl7.org/fhir/sid/icd-10": "ICD-10",
+  "http://hl7.org/fhir/sid/icd-10-cm": "ICD-10-CM",
+  "http://hl7.org/fhir/sid/icd-9-cm": "ICD-9-CM",
+  "http://www.cms.gov/Medicare/Coding/ICD10": "ICD-10-PCS",
+  "http://www.ama-assn.org/go/cpt": "CPT",
+  "http://www.nlm.nih.gov/research/umls/rxnorm": "RxNorm",
+  "http://hl7.org/fhir/sid/ndc": "NDC",
+  "http://hl7.org/fhir/sid/cvx": "CVX",
+  "http://unitsofmeasure.org": "UCUM",
+};
+
 /**
  * Short, human-friendly label for a FHIR code-system URI.
  * Falls back to the last path segment of the URL when unknown.
  */
 export function codeSystemLabel(system: string | undefined): string {
   if (!system) return "";
-  const known: Record<string, string> = {
-    "http://snomed.info/sct": "SNOMED",
-    "http://loinc.org": "LOINC",
-    "http://hl7.org/fhir/sid/icd-10": "ICD-10",
-    "http://hl7.org/fhir/sid/icd-10-cm": "ICD-10-CM",
-    "http://hl7.org/fhir/sid/icd-9-cm": "ICD-9-CM",
-    "http://www.cms.gov/Medicare/Coding/ICD10": "ICD-10-PCS",
-    "http://www.ama-assn.org/go/cpt": "CPT",
-    "http://www.nlm.nih.gov/research/umls/rxnorm": "RxNorm",
-    "http://hl7.org/fhir/sid/ndc": "NDC",
-    "http://hl7.org/fhir/sid/cvx": "CVX",
-    "http://unitsofmeasure.org": "UCUM",
-  };
-  if (known[system]) return known[system]!;
+  if (KNOWN_CODE_SYSTEM_LABELS[system]) return KNOWN_CODE_SYSTEM_LABELS[system]!;
   // Heuristic: last non-empty segment capitalised.
   return system.split(/[#/]/).filter(Boolean).pop() ?? system;
 }
@@ -226,13 +228,27 @@ export function preferredCoding(
 }
 
 function CodeChip({ coding }: { coding: Coding }) {
-  const sys = codeSystemLabel(coding.system);
+  const knownLabel = coding.system
+    ? KNOWN_CODE_SYSTEM_LABELS[coding.system]
+    : undefined;
+  // Bundled hits return synchronously via initialData; unbundled systems
+  // (SNOMED, LOINC, etc.) fire a CodeSystem/$lookup against the configured
+  // terminology server and update the tooltip when it lands.
+  const { data: lookup } = useCodeLookup(coding.system, coding.code);
+  const baseTitle = coding.system
+    ? `${coding.system}#${coding.code}`
+    : coding.code ?? "";
+  const lines: string[] = [baseTitle];
+  if (lookup?.display && lookup.display !== coding.display) {
+    lines.push(lookup.display);
+  }
+  if (lookup?.definition) lines.push(lookup.definition);
   return (
     <code
       className="rounded bg-slate-100 px-1 py-0.5 text-xs"
-      title={coding.system ? `${coding.system}#${coding.code}` : coding.code}
+      title={lines.join("\n")}
     >
-      {sys ? `${sys} ` : ""}
+      {knownLabel ? `${knownLabel} ` : ""}
       {coding.code}
     </code>
   );
@@ -267,10 +283,11 @@ function ExtraCodings({ codings }: { codings: readonly Coding[] }) {
 
 const CodingRenderer: FhirTypeRenderer = (value) => {
   const c = value as Coding;
-  if (c.display) {
+  const display = c.display ?? lookupCoreDisplay(c.system, c.code);
+  if (display) {
     return (
       <span>
-        {c.display} <CodeChip coding={c} />
+        {display} <CodeChip coding={c} />
       </span>
     );
   }
@@ -302,9 +319,11 @@ const CodeableConceptRenderer: FhirTypeRenderer = (value, ctx) => {
     );
   }
   if (chosen) {
+    const display =
+      chosen.display ?? lookupCoreDisplay(chosen.system, chosen.code);
     return (
       <span>
-        {chosen.display ? <>{chosen.display} </> : null}
+        {display ? <>{display} </> : null}
         <CodeChip coding={chosen} />
         <ExtraCodings codings={extras} />
       </span>

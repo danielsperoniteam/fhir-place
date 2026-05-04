@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
-import { ObservationStructureDefinition } from "../structure/core/Observation.js";
+import { ObservationStructureDefinition } from "../../test/fixtures/StructureDefinition-Observation.js";
 import { ResourceEditor } from "./ResourceEditor.js";
 
 const wrap = (ui: React.ReactElement) => {

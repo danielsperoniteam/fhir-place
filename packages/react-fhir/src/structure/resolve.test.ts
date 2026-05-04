@@ -11,14 +11,36 @@ import {
   vi,
 } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
+import { ObservationStructureDefinition } from "../../test/fixtures/StructureDefinition-Observation.js";
+import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
+import {
+  clearSpecFetcherCache,
+  createBundledSpecFetcher,
+  setCoreStructureDefinitionFetcher,
+} from "./core/index.js";
 import { resolveStructureDefinition } from "./resolve.js";
 
 const BASE = "https://fhir.example.test/fhir";
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+const FIXTURES: Record<string, StructureDefinition> = {
+  Patient: PatientStructureDefinition,
+  Observation: ObservationStructureDefinition,
+};
+
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  // Stub the spec fetcher so step 3 doesn't try to hit hl7.org from tests.
+  setCoreStructureDefinitionFetcher(async (type) => FIXTURES[type]);
+});
+afterEach(() => {
+  server.resetHandlers();
+  clearSpecFetcherCache();
+});
+afterAll(() => {
+  server.close();
+  setCoreStructureDefinitionFetcher(createBundledSpecFetcher());
+});
 
 const mkClient = () => new FetchFhirClient({ baseUrl: BASE });
 
@@ -34,6 +56,30 @@ const sd = (type: string, id = type): StructureDefinition => ({
 });
 
 describe("resolveStructureDefinition", () => {
+  it("returns the bundled core SD without hitting the server (default path for core types)", async () => {
+    const instanceHit = vi.fn();
+    const searchHit = vi.fn();
+    server.use(
+      http.get(`${BASE}/StructureDefinition/Patient`, () => {
+        instanceHit();
+        return HttpResponse.json(sd("Patient", "should-not-be-returned"));
+      }),
+      http.get(`${BASE}/StructureDefinition`, () => {
+        searchHit();
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: [],
+        });
+      }),
+    );
+    const result = await resolveStructureDefinition(mkClient(), "Patient");
+    expect(result.type).toBe("Patient");
+    expect(result.id).toBe("Patient"); // from the FIXTURES bundled fixture
+    expect(instanceHit).not.toHaveBeenCalled();
+    expect(searchHit).not.toHaveBeenCalled();
+  });
+
   it("returns the instance read when the server stores the SD at /StructureDefinition/{type}", async () => {
     const searchHit = vi.fn();
     server.use(
@@ -54,7 +100,9 @@ describe("resolveStructureDefinition", () => {
     expect(searchHit).not.toHaveBeenCalled();
   });
 
-  it("falls back to search-by-canonical when the instance read 404s", async () => {
+  it("falls back to search-by-canonical when the instance read 404s (no bundled SD available)", async () => {
+    // Patient is bundled, so we'd skip the server entirely; opt out to exercise
+    // the server-side instance-read → search-by-canonical fallback path.
     server.use(
       http.get(`${BASE}/StructureDefinition/Patient`, () =>
         HttpResponse.json(
@@ -75,7 +123,9 @@ describe("resolveStructureDefinition", () => {
         });
       }),
     );
-    const result = await resolveStructureDefinition(mkClient(), "Patient");
+    const result = await resolveStructureDefinition(mkClient(), "Patient", {
+      useBundledFallback: false,
+    });
     expect(result.type).toBe("Patient");
     expect(result.id).toBe("generated-id");
   });
@@ -123,6 +173,30 @@ describe("resolveStructureDefinition", () => {
 
 
 
+  it("falls back to the bundled core SD when canonical search returns 400 (servers that don't index _url)", async () => {
+    server.use(
+      http.get(`${BASE}/StructureDefinition/MedicationRequest`, () =>
+        new HttpResponse(null, { status: 404 }),
+      ),
+      http.get(`${BASE}/StructureDefinition`, () =>
+        HttpResponse.json(
+          {
+            resourceType: "OperationOutcome",
+            issue: [{ severity: "error", code: "invalid", diagnostics: "_url not supported" }],
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    setCoreStructureDefinitionFetcher(async (type) =>
+      type === "MedicationRequest" ? sd("MedicationRequest", "core-mr") : undefined,
+    );
+    const result = await resolveStructureDefinition(mkClient(), "MedicationRequest");
+    expect(result.type).toBe("MedicationRequest");
+    expect(result.id).toBe("core-mr");
+    setCoreStructureDefinitionFetcher(async (type) => FIXTURES[type]);
+  });
+
   it("resolves profiled canonicals via url search", async () => {
     const profile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient";
     server.use(
@@ -159,6 +233,9 @@ describe("resolveStructureDefinition", () => {
   });
 
   it("does not mask genuine errors (500) with the bundled fallback", async () => {
+    // The bundled-first path returns immediately for core types, so trigger
+    // the server path with useBundledFallback:false to verify a 500 still
+    // bubbles up with its FhirError status.
     server.use(
       http.get(`${BASE}/StructureDefinition/Patient`, () =>
         HttpResponse.json(
@@ -168,7 +245,7 @@ describe("resolveStructureDefinition", () => {
       ),
     );
     await expect(
-      resolveStructureDefinition(mkClient(), "Patient"),
+      resolveStructureDefinition(mkClient(), "Patient", { useBundledFallback: false }),
     ).rejects.toMatchObject({ status: 500 });
   });
 

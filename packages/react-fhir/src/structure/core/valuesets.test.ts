@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { bindingFor, codesFromValueSet } from "../binding.js";
 import { findElement } from "../walker.js";
-import { AllergyIntoleranceStructureDefinition } from "./AllergyIntolerance.js";
-import { EncounterStructureDefinition } from "./Encounter.js";
-import { ImmunizationStructureDefinition } from "./Immunization.js";
-import { MedicationRequestStructureDefinition } from "./MedicationRequest.js";
-import { PatientStructureDefinition } from "./Patient.js";
-import { ProcedureStructureDefinition } from "./Procedure.js";
+import { AllergyIntoleranceStructureDefinition } from "../../../test/fixtures/StructureDefinition-AllergyIntolerance.js";
+import { EncounterStructureDefinition } from "../../../test/fixtures/StructureDefinition-Encounter.js";
+import { ImmunizationStructureDefinition } from "../../../test/fixtures/StructureDefinition-Immunization.js";
+import { MedicationRequestStructureDefinition } from "../../../test/fixtures/StructureDefinition-MedicationRequest.js";
+import { PatientStructureDefinition } from "../../../test/fixtures/StructureDefinition-Patient.js";
+import { ProcedureStructureDefinition } from "../../../test/fixtures/StructureDefinition-Procedure.js";
 import { bundledValueSetUrls, coreValueSet, coreValueSets } from "./valuesets.js";
 
 describe("bundled core ValueSets", () => {

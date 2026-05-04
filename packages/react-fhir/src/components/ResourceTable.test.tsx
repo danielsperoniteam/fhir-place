@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Observation, Patient, StructureDefinition } from "fhir/r4";
 import { describe, expect, it, vi } from "vitest";
-import { ObservationStructureDefinition } from "../structure/core/Observation.js";
+import { ObservationStructureDefinition } from "../../test/fixtures/StructureDefinition-Observation.js";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { getByPath, ResourceTable } from "./ResourceTable.js";
