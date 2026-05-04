@@ -27,6 +27,25 @@ test.describe("Patient index pagination (#15)", () => {
     });
   });
 
+  test("Newly loaded rows are reachable (not clipped)", async ({ page }) => {
+    // Regression: list/table wrappers used `flex: 1` with `overflow: hidden`,
+    // which clipped rows past the flex-allocated height — so rows from a
+    // second page were invisible and the inner area couldn't scroll.
+    await page.goto("/Patient");
+    const rows = page.getByTestId("patient-row");
+    await expect(rows).toHaveCount(20);
+
+    await page.getByTestId("load-more").click();
+    await expect(rows).toHaveCount(36);
+
+    // The last row must be reachable — scrollIntoView would throw if the
+    // element were detached, and isVisible asserts it's actually rendered
+    // (not hidden behind an overflow: hidden ancestor).
+    const last = rows.last();
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeVisible();
+  });
+
   test("Search filter resets pagination", async ({ page }) => {
     await page.goto("/Patient");
     const search = page.getByTestId("resource-search");
