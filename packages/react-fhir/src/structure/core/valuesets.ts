@@ -1,5 +1,6 @@
 import type { ValueSet } from "fhir/r4";
 import { generatedCoreValueSets } from "./valuesets.generated.js";
+import { generatedCoreConcepts } from "./codesystems.generated.js";
 
 /**
  * Bundled R4 core ValueSets — served from memory when the target FHIR server
@@ -349,3 +350,89 @@ export const bundledValueSetUrls = Array.from(new Set([
   ...coreValueSets.keys(),
   ...generatedCoreValueSets.keys(),
 ]));
+
+/**
+ * Lazy index of (system → code → display) built once on first access from
+ * every bundled ValueSet expansion AND CodeSystem concept list. Lets
+ * renderers surface a friendly label (e.g. "Active") for
+ * `(http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical, active)`
+ * even when the resource omits `Coding.display`.
+ */
+let codeDisplayIndex: Map<string, Map<string, string>> | undefined;
+
+function buildCodeDisplayIndex(): Map<string, Map<string, string>> {
+  const index = new Map<string, Map<string, string>>();
+  const set = (system: string, code: string, display: string) => {
+    let bySystem = index.get(system);
+    if (!bySystem) {
+      bySystem = new Map();
+      index.set(system, bySystem);
+    }
+    // First write wins — hand-curated `coreValueSets` are visited first
+    // and tend to have the canonical, title-cased displays.
+    if (!bySystem.has(code)) bySystem.set(code, display);
+  };
+  for (const vs of coreValueSets.values()) {
+    for (const c of vs.expansion?.contains ?? []) {
+      if (c.system && c.code && c.display) set(c.system, c.code, c.display);
+    }
+  }
+  for (const vs of generatedCoreValueSets.values()) {
+    for (const c of vs.expansion?.contains ?? []) {
+      if (c.system && c.code && c.display) set(c.system, c.code, c.display);
+    }
+  }
+  for (const [system, codes] of Object.entries(generatedCoreConcepts)) {
+    for (const [code, info] of Object.entries(codes)) {
+      if (info.d) set(system, code, info.d);
+    }
+  }
+  return index;
+}
+
+/**
+ * Look up a human-readable display for a `(system, code)` pair using the
+ * library's bundled ValueSets and CodeSystems. Returns `undefined` if we
+ * don't have one.
+ *
+ * Designed for renderers that want to surface a friendly label when the
+ * source `Coding` lacks `.display` — e.g. servers that only return
+ * `{ system, code }` for status fields like AllergyIntolerance.clinicalStatus.
+ */
+export function lookupCoreDisplay(
+  system: string | undefined,
+  code: string | undefined,
+): string | undefined {
+  if (!system || !code) return undefined;
+  if (!codeDisplayIndex) codeDisplayIndex = buildCodeDisplayIndex();
+  return codeDisplayIndex.get(system)?.get(code);
+}
+
+/**
+ * Look up the long-form definition for a `(system, code)` pair from the
+ * library's bundled CodeSystems. Returns `undefined` for systems we don't
+ * bundle (SNOMED, LOINC, etc.) — for those, use `useCodeLookup` to fetch
+ * via a configured terminology server.
+ */
+export function lookupCoreDefinition(
+  system: string | undefined,
+  code: string | undefined,
+): string | undefined {
+  if (!system || !code) return undefined;
+  return generatedCoreConcepts[system]?.[code]?.x;
+}
+
+/**
+ * Combined display + definition lookup. Convenience for tooltip-style UI
+ * that wants both at once without two map lookups.
+ */
+export function lookupCoreConcept(
+  system: string | undefined,
+  code: string | undefined,
+): { display?: string; definition?: string } | undefined {
+  if (!system || !code) return undefined;
+  const display = lookupCoreDisplay(system, code);
+  const definition = lookupCoreDefinition(system, code);
+  if (display === undefined && definition === undefined) return undefined;
+  return { display, definition };
+}

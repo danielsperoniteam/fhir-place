@@ -1,5 +1,11 @@
 import type { CodeableConcept, Meta } from "fhir/r4";
-import { fireEvent, render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render as rtlRender,
+  type RenderOptions,
+} from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import {
   codeSystemLabel,
@@ -7,6 +13,19 @@ import {
   defaultTypeRenderers,
   preferredCoding,
 } from "./renderers.js";
+
+// CodeChip uses useCodeLookup → useQuery, so every renderer that may emit a
+// chip needs to render inside a QueryClientProvider. Tests don't configure a
+// FhirClientProvider so the lookup query is automatically disabled.
+function render(ui: ReactElement, options?: RenderOptions) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  return rtlRender(ui, { wrapper: Wrapper, ...options });
+}
 
 describe("codeSystemLabel", () => {
   it("returns a short label for well-known code systems", () => {
@@ -161,6 +180,63 @@ describe("CodeableConcept renderer", () => {
     expect(container.textContent).toContain("271650006");
     expect(container.textContent).toContain("DBP-9");
     expect(toggle.textContent).toBe("hide");
+  });
+
+  it("falls back to the bundled display when Coding.display is missing", () => {
+    const cc: CodeableConcept = {
+      coding: [
+        {
+          system:
+            "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+          code: "active",
+        },
+      ],
+    };
+    const { container } = render(
+      <>{renderer(cc, { ...ctx, path: "AllergyIntolerance.clinicalStatus" })}</>,
+    );
+    expect(container.textContent).toContain("Active");
+    expect(container.querySelector("code")?.textContent).toBe("active");
+  });
+
+  it("surfaces the bundled CodeSystem definition in the chip tooltip", () => {
+    const cc: CodeableConcept = {
+      coding: [
+        {
+          system:
+            "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+          code: "active",
+        },
+      ],
+    };
+    const { container } = render(
+      <>{renderer(cc, { ...ctx, path: "AllergyIntolerance.clinicalStatus" })}</>,
+    );
+    const title = container.querySelector("code")?.getAttribute("title") ?? "";
+    expect(title).toContain(
+      "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical#active",
+    );
+    expect(title).toContain(
+      "The subject is currently experiencing, or is at risk of, a reaction to the identified substance.",
+    );
+  });
+
+  it("omits the system label in the pill for unknown code systems", () => {
+    const cc: CodeableConcept = {
+      coding: [
+        {
+          system:
+            "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+          code: "active",
+        },
+      ],
+    };
+    const { container } = render(<>{renderer(cc, { ...ctx, path: "AllergyIntolerance.clinicalStatus" })}</>);
+    const chip = container.querySelector("code");
+    expect(chip?.textContent).toBe("active");
+    expect(chip?.getAttribute("title")).toContain(
+      "allergyintolerance-clinical",
+    );
   });
 
   it("does not render the toggle when there is only one coding", () => {

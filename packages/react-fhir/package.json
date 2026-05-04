@@ -67,7 +67,8 @@
     "lint": "eslint src --max-warnings 0",
     "prepare": "tsc -p tsconfig.build.json",
     "sync:valuesets": "node --experimental-strip-types scripts/sync-bundled-valuesets.ts",
-    "sync:sds": "node --experimental-strip-types scripts/sync-bundled-structuredefinitions.ts"
+    "sync:sds": "node --experimental-strip-types scripts/sync-bundled-structuredefinitions.ts",
+    "sync:csys": "node --experimental-strip-types scripts/sync-bundled-codesystems.ts"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5.0.0",

@@ -6,6 +6,9 @@ export * from "./searchBinding.js";
 export * from "./format.js";
 export {
   coreStructureDefinition,
+  lookupCoreDisplay,
+  lookupCoreDefinition,
+  lookupCoreConcept,
   type SpecFetcher,
   createDefaultSpecFetcher,
   setCoreStructureDefinitionFetcher,

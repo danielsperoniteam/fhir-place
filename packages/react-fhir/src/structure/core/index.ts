@@ -1,7 +1,14 @@
 import type { StructureDefinition } from "fhir/r4";
 import { getCoreStructureDefinitionFetcher } from "./specFetcher.js";
 
-export { coreValueSet, coreValueSets, bundledValueSetUrls } from "./valuesets.js";
+export {
+  coreValueSet,
+  coreValueSets,
+  bundledValueSetUrls,
+  lookupCoreDisplay,
+  lookupCoreDefinition,
+  lookupCoreConcept,
+} from "./valuesets.js";
 export {
   type SpecFetcher,
   createBundledSpecFetcher,
