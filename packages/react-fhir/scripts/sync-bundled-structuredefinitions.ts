@@ -9,14 +9,16 @@
  *
  * Source: `scripts/cache/r4-spec/profiles-resources.json` — extracted from
  * the published FHIR R4 `definitions.json.zip`. Auto-downloaded on first
- * run; the cache zip is gitignored. This is the same shared cache that
+ * run if not already cached; the zip is gitignored but profiles-resources.json
+ * can be committed to avoid the download. This is the same shared cache that
  * `sync-bundled-valuesets.ts` populates, so the two scripts download once
  * and reuse the bundle.
  *
  * Run: `pnpm --filter @fhir-place/react-fhir sync:sds`
  *
- * Per-type modules are gitignored; the published package's `prebuild` step
- * re-runs this so the bundled `loaders` map ships populated.
+ * The per-type modules are committed when present. The build does NOT run
+ * this script automatically — the committed files are the source of truth,
+ * and the empty-loaders stub (index.generated.ts) is the fallback.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
