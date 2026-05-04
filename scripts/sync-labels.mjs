@@ -49,7 +49,7 @@ const CANONICAL = [
   { name: 'status: needs-triage', color: 'cccccc', description: 'No type/area/priority set, or PM agent unsure — needs human review.' },
   { name: 'status: in-progress', color: 'fbca04', description: 'Engineer-dispatch agent has claimed this issue. Bot-managed; humans should not edit.' },
   { name: 'status: needs-human', color: 'd93f0b', description: 'Engineer-dispatch agent stopped — see latest comment for the failure.' },
-  { name: 'status: agent-paused', color: '000000', description: 'Kill switch — applied to the engineer-dispatch tracking issue, all dispatchers skip their run while present.' },
+  { name: 'status: agent-paused', color: '000000', description: 'Kill switch on the dispatch tracking issue — dispatchers skip while present.' },
   // origin:
   { name: 'origin: bot-filed', color: 'ededed', description: 'Auto-filed by automation (e.g. live-site-monitor.yml).' },
   // phase tracking — preserved as-is, no prefix (project-tracking convention).
