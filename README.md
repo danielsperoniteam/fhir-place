@@ -5,7 +5,7 @@ This repo is two things:
 - **[`@fhir-place/react-fhir`](packages/react-fhir/README.md)** — a spec-driven React library for FHIR, published on npm. Backend-agnostic; UI derives from `StructureDefinition`, `SearchParameter`, and `CapabilityStatement` so it works against any FHIR REST API.
 - **[fhir-ui](apps/demo/README.md)** — a FHIR browser and editor built on react-fhir. Browse, search, create, edit, and delete FHIR resources across a tab-based shell with NLP search, CQL runner, dark mode, and a configurable server target.
 
-**Live demo:** <https://samsuffolksperoni.github.io/fhir-place/> — hits the public HAPI R4 server. Patient data is shared and reset periodically.
+**Live demo:** <https://danielsperoniteam.github.io/fhir-place/> — hits the public HAPI R4 server. Patient data is shared and reset periodically.
 
 > Not affiliated with Zus Health's FHIRplace, Drummond's FHIRplace Pilot, or any other product using a similar name.
 
@@ -70,7 +70,7 @@ See [`apps/goals-tasks/README.md`](apps/goals-tasks/README.md) for the full brea
 | [`apps/demo/README.md`](apps/demo/README.md) | fhir-ui features, app structure, how it uses react-fhir, how to run |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | PR workflow, testing, changesets, bump conventions |
 | [`docs/decisions/`](docs/decisions/) | Architecture Decision Records |
-| [Open issues](https://github.com/samsuffolksperoni/fhir-place/issues) | Tracked gaps and roadmap items |
+| [Open issues](https://github.com/danielsperoniteam/fhir-place/issues) | Tracked gaps and roadmap items |
 
 ## License
 

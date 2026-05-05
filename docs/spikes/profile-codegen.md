@@ -1,6 +1,6 @@
 # Spike: profile-aware type narrowing from `StructureDefinition`
 
-**Issue:** [#123](https://github.com/samsuffolksperoni/fhir-place/issues/123)
+**Issue:** [#123](https://github.com/danielsperoniteam/fhir-place/issues/123)
 **ADR:** [0004 — Library Positioning and Wedge](../decisions/0004-positioning.md)
 **Status:** Spike complete. Output is experimental and not part of the public API.
 **Scope frozen at:** US Core 7.0 Patient + Laboratory Result Observation.

@@ -9,7 +9,7 @@ sections for style.
 
 ## Your task
 
-You are running a daily documentation freshness check on the `samsuffolksperoni/fhir-place`
+You are running a daily documentation freshness check on the `danielsperoniteam/fhir-place`
 repository. Work on a short-lived branch named `docs/auto-sync-<YYYY-MM-DD>`. If you make
 any changes, commit them with the message
 `docs(auto-sync): <brief description of what changed>` and push the branch.

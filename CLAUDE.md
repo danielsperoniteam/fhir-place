@@ -29,7 +29,7 @@
 - Commit the PNGs under `screenshots/pr-<branch-slug>/` in the same PR.
 - Reference each one inline using the raw URL pattern so it renders in the
   PR description:
-  `![desktop](https://raw.githubusercontent.com/samsuffolksperoni/fhir-place/<branch>/screenshots/pr-<slug>/<file>.png)`
+  `![desktop](https://raw.githubusercontent.com/danielsperoniteam/fhir-place/<branch>/screenshots/pr-<slug>/<file>.png)`
 - Include before/after frames for state changes. Mobile (375x812) is
   required when the change touches a responsive layout.
 - This is **separate** from the e2e snapshot baselines under

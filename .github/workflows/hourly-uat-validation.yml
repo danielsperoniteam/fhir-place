@@ -73,7 +73,7 @@ jobs:
         # Cheap up-front check. The prompt also checks but failing here
         # surfaces network-side outages in the workflow log directly.
         run: |
-          if ! curl -fsS https://samsuffolksperoni.github.io/fhir-place/staging/ > /dev/null; then
+          if ! curl -fsS https://danielsperoniteam.github.io/fhir-place/staging/ > /dev/null; then
             echo "::warning::Staging unreachable from runner — Claude will note this and exit cleanly."
           fi
 
@@ -91,7 +91,7 @@ jobs:
             not open a branch or PR. The MCP github tools are already
             configured. Playwright chromium is installed; use it from a
             temporary Node script in /tmp. The staging site is at
-            https://samsuffolksperoni.github.io/fhir-place/staging/#/fhir-ui/
+            https://danielsperoniteam.github.io/fhir-place/staging/#/fhir-ui/
             (served from the `staging` branch by pages.yml) and is
             reachable over the public network — there is no local dev
             server in this workflow. The `staging` branch has already

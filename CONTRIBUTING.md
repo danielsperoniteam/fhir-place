@@ -47,9 +47,9 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 A long-lived `staging` branch deploys alongside `main` so we can confirm
 several PRs work together before they hit production.
 
-- `main` is published at <https://samsuffolksperoni.github.io/fhir-place/>
+- `main` is published at <https://danielsperoniteam.github.io/fhir-place/>
   (goals-tasks at `/fhir-place/goals/`).
-- `staging` is published at <https://samsuffolksperoni.github.io/fhir-place/staging/>
+- `staging` is published at <https://danielsperoniteam.github.io/fhir-place/staging/>
   (goals-tasks at `/fhir-place/staging/goals/`).
 
 **Flow:**

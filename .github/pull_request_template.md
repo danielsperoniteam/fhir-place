@@ -22,7 +22,7 @@ Closes #
 ## UAT on live staging
 
 After this PR is merged into `staging`, Pages redeploys at
-<https://samsuffolksperoni.github.io/fhir-place/staging/>. Walk these steps
+<https://danielsperoniteam.github.io/fhir-place/staging/>. Walk these steps
 against that URL before promoting `staging` -> `main`:
 
 1. <route> — <action> — <expected observable result>
@@ -49,7 +49,7 @@ Convention:
 - Commit screenshots under `screenshots/pr-<branch-slug>/` in the same PR.
 - Reference each one inline below using the raw GitHub URL so it renders
   in the PR description:
-  `![before](https://raw.githubusercontent.com/samsuffolksperoni/fhir-place/<branch>/screenshots/pr-<slug>/<file>.png)`
+  `![before](https://raw.githubusercontent.com/danielsperoniteam/fhir-place/<branch>/screenshots/pr-<slug>/<file>.png)`
 - For state changes, include both **before** and **after**. For new flows,
   include the entry point and one or two intermediate steps.
 - Mobile (375x812) screenshots are required when the change affects a

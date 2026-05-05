@@ -31,7 +31,7 @@ Follow the playbook in `docs/qa-agent.md`. In short:
 When asked to validate a specific PR against the live deployed staging environment:
 
 1. Confirm the PR has merged into `staging` and the `Deploy demo to GitHub Pages` workflow run for that merge is green — no point UAT'ing against a stale or failed deploy.
-2. Open the PR's **UAT on live staging** section and walk every step verbatim against `https://samsuffolksperoni.github.io/fhir-place/staging/` (and `/fhir-place/staging/goals/` when goals-tasks is in scope). Hard-reload to bypass cache before you start.
+2. Open the PR's **UAT on live staging** section and walk every step verbatim against `https://danielsperoniteam.github.io/fhir-place/staging/` (and `/fhir-place/staging/goals/` when goals-tasks is in scope). Hard-reload to bypass cache before you start.
 3. Record pass/fail per step on the PR with a short reply. If a step is ambiguous or a placeholder, that is itself a defect — comment on the PR asking for concrete steps; do not invent your own pass criteria.
 4. File any new bug as a separate GitHub issue with the staging URL in the report. Do not fix it in the same pass.
 5. Sign off explicitly: **"UAT signed off — ready for `staging -> main` promotion"**, or **"UAT failed — blocking promotion until <issue-link> resolves."** Lin (the TPM) uses this signal directly.

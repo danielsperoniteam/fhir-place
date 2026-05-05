@@ -14,7 +14,7 @@ issue is your audit trail.
 
 ## Your task
 
-You are the PM for `samsuffolksperoni/fhir-place`. Use the GitHub MCP
+You are the PM for `danielsperoniteam/fhir-place`. Use the GitHub MCP
 tools (`mcp__github__*`) to read and write issues. Do **not** open a
 git branch or PR — this prompt is GitHub-state-only. Touch no files.
 

@@ -239,15 +239,15 @@ Tracked items (comment / upvote on the issue, or pick one up — each has a conc
 
 | # | Item |
 | --- | --- |
-| [#4](https://github.com/samsuffolksperoni/fhir-place/issues/4) | ValueSet resolution + binding-aware code input |
-| [#121](https://github.com/samsuffolksperoni/fhir-place/issues/121) | Typed search builder v0 — core API |
-| [#123](https://github.com/samsuffolksperoni/fhir-place/issues/123) | Profile-aware codegen spike (US Core 7 seed) |
-| [#124](https://github.com/samsuffolksperoni/fhir-place/issues/124) | Experimental Zod schema generation from `StructureDefinition` |
-| [#125](https://github.com/samsuffolksperoni/fhir-place/issues/125) | Interop demo matrix (HAPI + Medplum + Aidbox) |
-| [#127](https://github.com/samsuffolksperoni/fhir-place/issues/127) | Inferno (g)(10) CI badge |
-| [#128](https://github.com/samsuffolksperoni/fhir-place/issues/128) | Optional `@fhir-place/mcp` package |
+| [#4](https://github.com/danielsperoniteam/fhir-place/issues/4) | ValueSet resolution + binding-aware code input |
+| [#121](https://github.com/danielsperoniteam/fhir-place/issues/121) | Typed search builder v0 — core API |
+| [#123](https://github.com/danielsperoniteam/fhir-place/issues/123) | Profile-aware codegen spike (US Core 7 seed) |
+| [#124](https://github.com/danielsperoniteam/fhir-place/issues/124) | Experimental Zod schema generation from `StructureDefinition` |
+| [#125](https://github.com/danielsperoniteam/fhir-place/issues/125) | Interop demo matrix (HAPI + Medplum + Aidbox) |
+| [#127](https://github.com/danielsperoniteam/fhir-place/issues/127) | Inferno (g)(10) CI badge |
+| [#128](https://github.com/danielsperoniteam/fhir-place/issues/128) | Optional `@fhir-place/mcp` package |
 
-See the [full issue list](https://github.com/samsuffolksperoni/fhir-place/issues) for the current state — issues are the source of truth and stay up to date as work lands.
+See the [full issue list](https://github.com/danielsperoniteam/fhir-place/issues) for the current state — issues are the source of truth and stay up to date as work lands.
 
 Deferred (open an issue if you need it): Extensions in the editor, profile-URL support in `useStructureDefinition`, SMART on FHIR v2 auth, R4B / R5, Subscriptions / realtime.
 
@@ -263,4 +263,4 @@ Coverage thresholds are enforced in `vitest.config.ts`; `test:ci` is what CI run
 
 ## License
 
-MIT — see [LICENSE](https://github.com/samsuffolksperoni/fhir-place/blob/main/LICENSE).
+MIT — see [LICENSE](https://github.com/danielsperoniteam/fhir-place/blob/main/LICENSE).

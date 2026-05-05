@@ -42,7 +42,7 @@ See also:
   - At most **200** GitHub API calls. Finish the current PR if close to
     the cap and skip the rest.
 - Staging URL is fixed:
-  `https://samsuffolksperoni.github.io/fhir-place/staging/#/fhir-ui/`,
+  `https://danielsperoniteam.github.io/fhir-place/staging/#/fhir-ui/`,
   served from the `staging` branch by `pages.yml`. Every Playwright
   navigation must be a sub-route of this base. Treat staging as shared
   infrastructure: do not write data unless a PR's UAT explicitly
@@ -74,7 +74,7 @@ See also:
 ## Step 1 — confirm staging is alive
 
 ```
-curl -fsS https://samsuffolksperoni.github.io/fhir-place/staging/ | head -c 200
+curl -fsS https://danielsperoniteam.github.io/fhir-place/staging/ | head -c 200
 ```
 
 If this fails, write a one-line note to stdout, update the tracking
@@ -191,7 +191,7 @@ API). The comment must start with the marker so future runs can dedupe:
 
 ## UAT validation — <YYYY-MM-DD HH:MM UTC>
 
-Checked against staging: https://samsuffolksperoni.github.io/fhir-place/staging/#/fhir-ui/
+Checked against staging: https://danielsperoniteam.github.io/fhir-place/staging/#/fhir-ui/
 Run: <workflow run URL>
 
 ### PR description
@@ -262,7 +262,7 @@ After all PRs have been walked, collect the deduped list of out-of-scope
 bug observations from Step 3c. For each one (cap 5):
 
 1. Search for an existing open issue:
-   `repo:samsuffolksperoni/fhir-place is:issue is:open in:title "<keyword>" label:"origin: bot-filed"`.
+   `repo:danielsperoniteam/fhir-place is:issue is:open in:title "<keyword>" label:"origin: bot-filed"`.
 2. If a near-match exists, comment on it with the new run URL, route,
    and console error. Do not re-open closed issues.
 3. If no match, file a new issue via `mcp__github__issue_write`:
@@ -277,7 +277,7 @@ bug observations from Step 3c. For each one (cap 5):
      ```
      **Route:** <hash route>
      **Run:** <workflow run URL>
-     **Staging:** https://samsuffolksperoni.github.io/fhir-place/staging/#/fhir-ui/
+     **Staging:** https://danielsperoniteam.github.io/fhir-place/staging/#/fhir-ui/
      **Spotted while validating:** PR #<n> (out of scope of that PR)
      **Viewport:** 1280×800
 
