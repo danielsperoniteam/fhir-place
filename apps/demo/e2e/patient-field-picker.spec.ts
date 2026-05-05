@@ -46,6 +46,31 @@ test.describe("patient field-picker options", () => {
     ).toBeVisible();
   });
 
+  test("Saved column selection is honoured on the table's first paint, before any toggle", async ({
+    page,
+  }) => {
+    // Regression: the page state used to initialise from defaults while
+    // <ColumnPicker> read localStorage internally, so the table briefly
+    // disagreed with the picker until the user toggled a checkbox.
+    await resetPrefs(page);
+    await page.goto("/");
+    await page.evaluate(
+      ([colKey]) => {
+        localStorage.setItem(colKey, JSON.stringify(["identifier", "name", "id"]));
+        localStorage.setItem("fhir-place-demo-patient-layout", "table");
+      },
+      [COLUMN_KEY],
+    );
+
+    await page.goto("/Patient");
+    await expect(page.getByTestId("resource-table")).toBeVisible();
+
+    // Saved columns should appear without opening the picker or toggling anything.
+    await expect(page.getByRole("columnheader", { name: /identifier/i })).toBeVisible();
+    // Default-but-unselected columns must not render on first paint.
+    await expect(page.getByRole("columnheader", { name: /^gender$/i })).toHaveCount(0);
+  });
+
   test("Fields picker on the patient detail page filters rendered top-level elements", async ({
     page,
   }) => {

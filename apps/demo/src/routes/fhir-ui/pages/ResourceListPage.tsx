@@ -42,6 +42,24 @@ const readPageSize = (): number => {
     : DEFAULT_PAGE_SIZE;
 };
 
+// Read a previously-saved column selection so the table's first paint
+// matches what `<ColumnPicker>` will display, instead of falling back to
+// defaults until the user toggles a checkbox.
+const readPersistedColumns = (rt: string): string[] | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(columnKey(rt));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
+      return parsed;
+    }
+  } catch {
+    // localStorage unavailable or value malformed — treat as missing.
+  }
+  return null;
+};
+
 const readLayout = (rt: string, scoped: boolean): Layout => {
   if (scoped) return "table";
   if (typeof window === "undefined") return "list";
@@ -204,10 +222,16 @@ export function ResourceListPage() {
     [config?.defaultVisibleColumns, derivedDefaults],
   );
 
-  const [columns, setColumns] = useState<string[]>(defaultVisibleColumns);
+  // Single source of truth for column visibility. Reading localStorage in the
+  // lazy initializer means the table's first paint already reflects the
+  // user's saved selection, so it cannot disagree with `<ColumnPicker>`.
+  const [columns, setColumns] = useState<string[]>(
+    () => readPersistedColumns(resourceType) ?? defaultVisibleColumns,
+  );
   useEffect(() => {
     const available = new Set(tableColumns.map((c) => c.path));
-    setColumns(defaultVisibleColumns.filter((path) => available.has(path)));
+    const base = readPersistedColumns(resourceType) ?? defaultVisibleColumns;
+    setColumns(base.filter((path) => available.has(path)));
   }, [resourceType, tableColumns, defaultVisibleColumns]);
 
   const askAI = useCallback(
@@ -456,6 +480,7 @@ export function ResourceListPage() {
         {layout === "table" && (
           <ColumnPicker
             options={tableColumns}
+            selected={columns}
             defaultSelected={defaultVisibleColumns}
             onChange={setColumns}
             storageKey={columnKey(resourceType)}
