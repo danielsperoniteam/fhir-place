@@ -53,7 +53,11 @@ test("Patient detail page renders without an error wall", async ({ page }) => {
 
 test("Patient detail shows compartment chips", async ({ page }) => {
   await page.goto("./#/Patient");
-  await page.getByTestId("patient-row").first().click();
+  // Wait for the list to load before navigating — HAPI can be slow on cold
+  // starts and the click would otherwise race the patient-row appearing.
+  const firstRow = page.getByTestId("patient-row").first();
+  await expect(firstRow).toBeVisible({ timeout: 30_000 });
+  await firstRow.click();
   // The chip nav is rendered for every Patient detail page (counts may be 0).
   await expect(page.getByTestId("compartment-links")).toBeVisible({
     timeout: 30_000,
