@@ -27,7 +27,9 @@ test.describe("Patient compartment links + index pages", () => {
     // Click a chip → lands on the index page scoped to the patient.
     await page.getByTestId("compartment-chip-Condition").click();
     await expect(page).toHaveURL(/\/Condition\?patient=ada$/);
-    await expect(page.getByRole("heading", { name: "Condition" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Condition", exact: true }),
+    ).toBeVisible();
     // New CC UI shows the patient scope as a back-link "← Back to Patient/ada".
     await expect(page.getByRole("link", { name: /back to patient/i })).toBeVisible();
     // ResourceTable renders both desktop and mobile layouts in the DOM

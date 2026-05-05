@@ -206,19 +206,9 @@ export function ResourceListPage() {
 
   const [columns, setColumns] = useState<string[]>(defaultVisibleColumns);
   useEffect(() => {
-    setColumns((current) => {
-      const available = new Set(tableColumns.map((c) => c.path));
-      const kept = current.filter((path) => available.has(path));
-      const next =
-        kept.length > 0
-          ? kept
-          : defaultVisibleColumns.filter((path) => available.has(path));
-      if (next.length === current.length && next.every((p, i) => p === current[i])) {
-        return current;
-      }
-      return next;
-    });
-  }, [tableColumns, defaultVisibleColumns]);
+    const available = new Set(tableColumns.map((c) => c.path));
+    setColumns(defaultVisibleColumns.filter((path) => available.has(path)));
+  }, [resourceType, tableColumns, defaultVisibleColumns]);
 
   const askAI = useCallback(
     async (question: string): Promise<Record<string, string> | null> => {
@@ -266,14 +256,7 @@ export function ResourceListPage() {
   })();
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        fontFamily: CC_FONT,
-      }}
-    >
+    <div style={{ fontFamily: CC_FONT }}>
       {/* Patient compartment back-link */}
       {patientId && (
         <div style={{ padding: "12px 24px 0" }}>
@@ -508,22 +491,14 @@ export function ResourceListPage() {
       )}
 
       {/* Results */}
-      <div
-        style={{
-          padding: "12px 24px",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 300,
-        }}
-      >
+      <div style={{ padding: "12px 24px" }}>
         {layout === "json" ? (
           <div
             style={{
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 10,
-              flex: 1,
+              maxHeight: "70vh",
               overflow: "auto",
               padding: 16,
             }}
