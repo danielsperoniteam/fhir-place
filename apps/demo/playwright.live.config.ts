@@ -11,7 +11,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const baseURL =
   process.env.LIVE_SITE_BASE_URL ??
-  "https://samsuffolksperoni.github.io/fhir-place/";
+  "https://danielsperoniteam.github.io/fhir-place/";
 
 export default defineConfig({
   testDir: "./e2e-live",

@@ -92,7 +92,7 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
 2. **Announce:** comment on the issue:
    "Picked up by hourly-engineer-dispatch. Branch: `bot/issue-<N>-<slug>`,
    PR base: `staging`. The agent will open a draft PR (with UAT steps to run
-   against `https://samsuffolksperoni.github.io/fhir-place/staging/` once
+   against `https://danielsperoniteam.github.io/fhir-place/staging/` once
    merged) or post a `status: needs-human` comment if it cannot complete
    the work."
 

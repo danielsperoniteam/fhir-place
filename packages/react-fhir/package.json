@@ -5,11 +5,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/samsuffolksperoni/fhir-place.git",
+    "url": "git+https://github.com/danielsperoniteam/fhir-place.git",
     "directory": "packages/react-fhir"
   },
-  "homepage": "https://github.com/samsuffolksperoni/fhir-place#readme",
-  "bugs": "https://github.com/samsuffolksperoni/fhir-place/issues",
+  "homepage": "https://github.com/danielsperoniteam/fhir-place#readme",
+  "bugs": "https://github.com/danielsperoniteam/fhir-place/issues",
   "keywords": [
     "fhir",
     "fhir-r4",

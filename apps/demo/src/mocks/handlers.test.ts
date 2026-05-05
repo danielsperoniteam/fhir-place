@@ -11,7 +11,7 @@ import {
 } from "vitest";
 
 /**
- * Regression: see https://github.com/samsuffolksperoni/fhir-place/issues/8.
+ * Regression: see https://github.com/danielsperoniteam/fhir-place/issues/8.
  *
  * The MSW handlers previously hardcoded `const BASE = "/fhir"` so the app
  * silently 404'd on GH Pages (served under /fhir-place/). This suite proves
