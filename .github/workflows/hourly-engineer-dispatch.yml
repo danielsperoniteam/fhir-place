@@ -79,6 +79,21 @@ jobs:
           # subagent invocation needs more turns than the PM routine. Cap
           # at 300 — the workflow timeout-minutes is the real wall-clock
           # bound; this just prevents pathological loops from racing it.
-          claude_args: "--max-turns 300"
+          #
+          # --allowedTools: the action's default tool set is conservative
+          # and excludes Bash, Edit, Write, and Agent. Without this flag
+          # the dispatcher cannot spawn the engineer subagent or do any
+          # of its git/PR work — every call returns a permission denial
+          # (run 25584355918 hit 8 denials and accomplished nothing).
+          # Mirrors the local driver at scripts/dispatch-engineer.sh
+          # (line 68). Verified flag spelling against the action's docs
+          # at docs/configuration.md (camelCase, not --allowed-tools).
+          # Defense in depth: the engineer subagent enforces its own
+          # hard rules; this just bounds what a prompt-injected
+          # dispatcher can call.
+          claude_args: "--max-turns 300 --allowedTools Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*"
+          # Temporary: show full output until 5–10 successful manual runs
+          # (per workflow's own setup notes). Remove once cron is enabled.
+          show_full_output: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
