@@ -1,0 +1,112 @@
+# Resolves merge conflicts on a PR when a maintainer comments /resolve-conflicts.
+#
+# Trigger:       PR comment containing "/resolve-conflicts" on its own line
+# Security gate: commenter must have OWNER, MEMBER, or COLLABORATOR association
+#
+# Setup required (one-time):
+#   1. ANTHROPIC_API_KEY must already exist in repo secrets (shared with other
+#      Claude workflows — no new secret needed).
+#   2. Branch protection on the target branch is respected; the agent pushes
+#      only to the PR head branch, never to main directly.
+
+name: PR — resolve merge conflicts
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write       # push resolved branch
+  pull-requests: write  # post acknowledgment and summary comments
+  issues: read          # read PR metadata
+  id-token: write       # required by claude-code-action@v1
+
+concurrency:
+  group: pr-resolve-conflicts-${{ github.event.issue.number }}
+  cancel-in-progress: false  # never kill a mid-resolution run
+
+jobs:
+  resolve:
+    # Only run on PR comments (not plain issue comments) from trusted authors
+    # containing the slash command.
+    if: >-
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/resolve-conflicts') &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Get PR details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('head_ref', pr.data.head.ref);
+            core.setOutput('base_ref', pr.data.base.ref);
+
+      - name: Acknowledge request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                'Conflict resolution started on branch `${{ steps.pr.outputs.head_ref }}`.',
+                "I'll reply here when done, or if I hit something that needs a human decision."
+              ].join('\n')
+            });
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_ref }}
+          fetch-depth: 0   # full history required for merge
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Claude Code to resolve conflicts
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            PR #${{ github.event.issue.number }} needs its merge conflicts resolved.
+
+            Context:
+            - PR number:    ${{ github.event.issue.number }}
+            - Head branch:  ${{ steps.pr.outputs.head_ref }}
+            - Base branch:  ${{ steps.pr.outputs.base_ref }}
+            - Working directory is already checked out on `${{ steps.pr.outputs.head_ref }}`
+              with full git history.
+
+            Read the file at docs/prompts/pr-resolve-conflicts.md and execute the
+            instructions in it. Do not modify the prompt file itself.
+          claude_args: "--max-turns 100"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

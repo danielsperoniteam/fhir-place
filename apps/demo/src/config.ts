@@ -28,16 +28,16 @@ export interface ServerConfig {
  */
 export const BUILTIN_SERVERS: ReadonlyArray<ServerConfig> = [
   {
-    id: "builtin-hapi",
-    label: "HAPI Public Test Server",
-    baseUrl: "https://hapi.fhir.org/baseR4",
+    id: "builtin-smart",
+    label: "SMART Health IT (R4)",
+    baseUrl: "https://r4.smarthealthit.org",
     authMode: "none",
     builtin: true,
   },
   {
-    id: "builtin-smart",
-    label: "SMART Health IT (R4)",
-    baseUrl: "https://r4.smarthealthit.org",
+    id: "builtin-hapi",
+    label: "HAPI Public Test Server",
+    baseUrl: "https://hapi.fhir.org/baseR4",
     authMode: "none",
     builtin: true,
   },
@@ -173,9 +173,9 @@ export const saveActiveServerId = (id: string): void => {
 };
 
 const FALLBACK_SERVER: ServerConfig = {
-  id: "builtin-hapi",
-  label: "HAPI Public Test Server",
-  baseUrl: "https://hapi.fhir.org/baseR4",
+  id: "builtin-smart",
+  label: "SMART Health IT (R4)",
+  baseUrl: "https://r4.smarthealthit.org",
   authMode: "none",
   builtin: true,
 };

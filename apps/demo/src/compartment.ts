@@ -17,20 +17,20 @@ export const PATIENT_COMPARTMENT: Array<
   {
     resourceType: "Condition",
     title: "Conditions",
-    columns: ["clinicalStatus", "code", "onsetDateTime"],
+    columns: ["clinicalStatus", "code", "onset[x]"],
     columnLabels: {
       clinicalStatus: "Status",
       code: "Condition",
-      onsetDateTime: "Onset",
+      "onset[x]": "Onset",
     },
   },
   {
     resourceType: "MedicationRequest",
     title: "Medication requests",
-    columns: ["status", "medicationCodeableConcept", "authoredOn"],
+    columns: ["status", "medication[x]", "authoredOn"],
     columnLabels: {
       status: "Status",
-      medicationCodeableConcept: "Medication",
+      "medication[x]": "Medication",
       authoredOn: "Ordered",
     },
   },
@@ -58,11 +58,11 @@ export const PATIENT_COMPARTMENT: Array<
   {
     resourceType: "Procedure",
     title: "Procedures",
-    columns: ["status", "code", "performedDateTime"],
+    columns: ["status", "code", "performed[x]"],
     columnLabels: {
       status: "Status",
       code: "Procedure",
-      performedDateTime: "Performed",
+      "performed[x]": "Performed",
     },
   },
   {
@@ -78,11 +78,11 @@ export const PATIENT_COMPARTMENT: Array<
   {
     resourceType: "Immunization",
     title: "Immunizations",
-    columns: ["status", "vaccineCode", "occurrenceDateTime"],
+    columns: ["status", "vaccineCode", "occurrence[x]"],
     columnLabels: {
       status: "Status",
       vaccineCode: "Vaccine",
-      occurrenceDateTime: "Administered",
+      "occurrence[x]": "Administered",
     },
   },
   {

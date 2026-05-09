@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { defaultTypeInputs } from "./inputs/index.js";
+import { DEFAULT_REFERENCE_TYPES } from "./inputs/Reference.js";
 
 const BASE = "https://fhir.example.test/fhir";
 const server = setupServer();
@@ -102,7 +103,7 @@ describe("CodeInput (ValueSet-driven)", () => {
     expect(screen.queryByRole("option", { name: /other…/i })).not.toBeInTheDocument();
   });
 
-  it("extensible binding → shows an 'Other…' option", async () => {
+  it("extensible binding → no 'Other…' escape hatch (extensible is closed)", async () => {
     mockValueSet([{ code: "yes" }, { code: "no" }]);
     const extensibleEl: ElementDefinition = {
       ...genderElement,
@@ -116,6 +117,51 @@ describe("CodeInput (ValueSet-driven)", () => {
         value={undefined}
         onChange={() => {}}
         context={{ path: "Patient.gender", typeCode: "code", element: extensibleEl }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /yes/ })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("option", { name: /other…/i })).not.toBeInTheDocument();
+  });
+
+  it("preferred binding → shows an 'Other…' option", async () => {
+    mockValueSet([{ code: "yes" }, { code: "no" }]);
+    const preferredEl: ElementDefinition = {
+      ...genderElement,
+      binding: {
+        strength: "preferred",
+        valueSet: "http://hl7.org/fhir/ValueSet/administrative-gender",
+      },
+    };
+    render(
+      <CodeInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Patient.gender", typeCode: "code", element: preferredEl }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /other…/i })).toBeInTheDocument(),
+    );
+  });
+
+  it("example binding → shows an 'Other…' option", async () => {
+    mockValueSet([{ code: "yes" }, { code: "no" }]);
+    const exampleEl: ElementDefinition = {
+      ...genderElement,
+      binding: {
+        strength: "example",
+        valueSet: "http://hl7.org/fhir/ValueSet/administrative-gender",
+      },
+    };
+    render(
+      <CodeInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Patient.gender", typeCode: "code", element: exampleEl }}
       />,
       { wrapper: mkWrapper() },
     );
@@ -271,7 +317,7 @@ describe("CodingInput (ValueSet-driven)", () => {
     expect(screen.queryByRole("option", { name: /other…/i })).not.toBeInTheDocument();
   });
 
-  it("preserves a non-enumerated value via 'Other…' and exposes the free-form editor (extensible)", async () => {
+  it("extensible binding hides 'Other…' — a non-enumerated value is not editable free-form", async () => {
     mockMaritalVs([{ code: "M" }, { code: "S" }]);
     render(
       <CodingInput
@@ -286,11 +332,61 @@ describe("CodingInput (ValueSet-driven)", () => {
       { wrapper: mkWrapper() },
     );
     await waitFor(() =>
+      expect(screen.getByRole("option", { name: /M/ })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("option", { name: /other…/i })).not.toBeInTheDocument();
+  });
+
+  it("preferred binding preserves a non-enumerated value via 'Other…' and exposes the free-form editor", async () => {
+    mockMaritalVs([{ code: "M" }, { code: "S" }]);
+    const preferredElement: ElementDefinition = {
+      ...maritalElement,
+      binding: { strength: "preferred", valueSet: maritalStatusVsUrl },
+    };
+    render(
+      <CodingInput
+        value={{ system: "urn:custom", code: "weird", display: "Weird" }}
+        onChange={() => {}}
+        context={{
+          path: "Patient.maritalStatus.coding",
+          typeCode: "Coding",
+          element: preferredElement,
+        }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
       expect(screen.getByRole("option", { name: /other…/i })).toBeInTheDocument(),
     );
     expect(screen.getByDisplayValue("urn:custom")).toBeInTheDocument();
     expect(screen.getByDisplayValue("weird")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Weird")).toBeInTheDocument();
+  });
+
+  it("example binding preserves a non-enumerated value via 'Other…' and exposes the free-form editor", async () => {
+    mockMaritalVs([{ code: "M" }, { code: "S" }]);
+    const exampleElement: ElementDefinition = {
+      ...maritalElement,
+      binding: { strength: "example", valueSet: maritalStatusVsUrl },
+    };
+    render(
+      <CodingInput
+        value={{ system: "urn:local", code: "local-code", display: "Local" }}
+        onChange={() => {}}
+        context={{
+          path: "Patient.maritalStatus.coding",
+          typeCode: "Coding",
+          element: exampleElement,
+        }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /other…/i })).toBeInTheDocument(),
+    );
+    expect(screen.getByDisplayValue("urn:local")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("local-code")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Local")).toBeInTheDocument();
   });
 
   it("falls back to the free-form 3-input editor when the element has no binding", () => {
@@ -363,10 +459,121 @@ describe("CodeableConceptInput (binding propagation)", () => {
       coding: [{ system, code: "active", display: "Active" }],
     });
   });
+
+  const mockVs = (codes: Array<{ code: string; display?: string }>) => {
+    server.use(
+      http.get(`${BASE}/ValueSet/$expand`, () =>
+        HttpResponse.json({
+          resourceType: "ValueSet",
+          status: "active",
+          url: vsUrl,
+          expansion: {
+            identifier: "x",
+            timestamp: "2024-01-01T00:00:00Z",
+            contains: codes.map((c) => ({ system, ...c })),
+          },
+        }),
+      ),
+    );
+  };
+
+  it("required binding: renders dropdown, no 'Other…' escape", async () => {
+    mockVs([{ code: "active", display: "Active" }, { code: "resolved", display: "Resolved" }]);
+    const element: ElementDefinition = {
+      path: "Condition.clinicalStatus",
+      type: [{ code: "CodeableConcept" }],
+      binding: { strength: "required", valueSet: vsUrl },
+    };
+    render(
+      <CodeableConceptInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Condition.clinicalStatus", typeCode: "CodeableConcept", element }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /Active \(active\)/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("option", { name: /other…/i })).not.toBeInTheDocument();
+  });
+
+  it("extensible binding: renders dropdown, no 'Other…' escape", async () => {
+    mockVs([{ code: "active", display: "Active" }, { code: "resolved", display: "Resolved" }]);
+    const element: ElementDefinition = {
+      path: "Condition.clinicalStatus",
+      type: [{ code: "CodeableConcept" }],
+      binding: { strength: "extensible", valueSet: vsUrl },
+    };
+    render(
+      <CodeableConceptInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Condition.clinicalStatus", typeCode: "CodeableConcept", element }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /Active \(active\)/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("option", { name: /other…/i })).not.toBeInTheDocument();
+  });
+
+  it("preferred binding: renders dropdown with 'Other…' escape that exposes free-form Coding editor", async () => {
+    mockVs([{ code: "active", display: "Active" }, { code: "resolved", display: "Resolved" }]);
+    const element: ElementDefinition = {
+      path: "Condition.clinicalStatus",
+      type: [{ code: "CodeableConcept" }],
+      binding: { strength: "preferred", valueSet: vsUrl },
+    };
+    render(
+      <CodeableConceptInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Condition.clinicalStatus", typeCode: "CodeableConcept", element }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /other…/i })).toBeInTheDocument(),
+    );
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "clinicalStatus" }),
+      "__other__",
+    );
+    expect(screen.getByText("System")).toBeInTheDocument();
+    expect(screen.getByText("Code")).toBeInTheDocument();
+    expect(screen.getByText("Display")).toBeInTheDocument();
+  });
+
+  it("example binding: renders dropdown with 'Other…' escape and round-trips a custom coding", async () => {
+    mockVs([{ code: "active", display: "Active" }, { code: "resolved", display: "Resolved" }]);
+    const element: ElementDefinition = {
+      path: "Procedure.outcome",
+      type: [{ code: "CodeableConcept" }],
+      binding: { strength: "example", valueSet: vsUrl },
+    };
+    const onChange = vi.fn();
+    render(
+      <CodeableConceptInput
+        value={{ coding: [{ system: "urn:local", code: "local-01", display: "Local Code" }] }}
+        onChange={onChange}
+        context={{ path: "Procedure.outcome", typeCode: "CodeableConcept", element }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /other…/i })).toBeInTheDocument(),
+    );
+    // custom value should auto-select Other… and show free-form inputs
+    expect(screen.getByDisplayValue("urn:local")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("local-01")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Local Code")).toBeInTheDocument();
+  });
 });
 
 describe("Other… UX from empty value", () => {
-  it("CodeInput: picking 'Other…' on an empty extensible binding surfaces a free-text input", async () => {
+  it("CodeInput: picking 'Other…' on an empty preferred binding surfaces a free-text input", async () => {
     server.use(
       http.get(`${BASE}/ValueSet/$expand`, () =>
         HttpResponse.json({
@@ -387,7 +594,7 @@ describe("Other… UX from empty value", () => {
       path: "Patient.gender",
       type: [{ code: "code" }],
       binding: {
-        strength: "extensible",
+        strength: "preferred",
         valueSet: "http://hl7.org/fhir/ValueSet/administrative-gender",
       },
     };
@@ -412,7 +619,60 @@ describe("Other… UX from empty value", () => {
     ).toBeInTheDocument();
   });
 
-  it("CodingInput: picking 'Other…' on an empty extensible binding surfaces the free-form editor", async () => {
+  it("CodingInput: picking 'Other…' on an empty preferred binding surfaces the free-form editor", async () => {
+    server.use(
+      http.get(`${BASE}/ValueSet/$expand`, () =>
+        HttpResponse.json({
+          resourceType: "ValueSet",
+          status: "active",
+          url: "http://hl7.org/fhir/ValueSet/marital-status",
+          expansion: {
+            identifier: "x",
+            timestamp: "2024-01-01T00:00:00Z",
+            contains: [
+              {
+                system: "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+                code: "M",
+                display: "Married",
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    const el: ElementDefinition = {
+      path: "Patient.maritalStatus.coding",
+      type: [{ code: "Coding" }],
+      binding: {
+        strength: "preferred",
+        valueSet: "http://hl7.org/fhir/ValueSet/marital-status",
+      },
+    };
+    render(
+      <CodingInput
+        value={undefined}
+        onChange={() => {}}
+        context={{
+          path: "Patient.maritalStatus.coding",
+          typeCode: "Coding",
+          element: el,
+        }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /other…/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("System")).not.toBeInTheDocument();
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "coding" }),
+      "__other__",
+    );
+    expect(screen.getByText("System")).toBeInTheDocument();
+    expect(screen.getByText("Code")).toBeInTheDocument();
+  });
+
+  it("CodingInput: extensible binding does NOT surface 'Other…'", async () => {
     server.use(
       http.get(`${BASE}/ValueSet/$expand`, () =>
         HttpResponse.json({
@@ -454,15 +714,9 @@ describe("Other… UX from empty value", () => {
       { wrapper: mkWrapper() },
     );
     await waitFor(() =>
-      expect(screen.getByRole("option", { name: /other…/i })).toBeInTheDocument(),
+      expect(screen.getByRole("option", { name: /Married/i })).toBeInTheDocument(),
     );
-    expect(screen.queryByText("System")).not.toBeInTheDocument();
-    await userEvent.selectOptions(
-      screen.getByRole("combobox", { name: "coding" }),
-      "__other__",
-    );
-    expect(screen.getByText("System")).toBeInTheDocument();
-    expect(screen.getByText("Code")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /other…/i })).not.toBeInTheDocument();
   });
 });
 
@@ -572,13 +826,17 @@ describe("CodingInput async combobox (large/partial ValueSets)", () => {
     });
   });
 
-  it("exposes a 'Enter a custom code…' details escape on extensible bindings", async () => {
+  it("exposes a 'Enter a custom code…' details escape on example bindings", async () => {
     installSnomedHandler();
+    const exampleElement: ElementDefinition = {
+      ...conditionCodeElement,
+      binding: { strength: "example", valueSet: snomedVs },
+    };
     render(
       <CodingInput
         value={undefined}
         onChange={() => {}}
-        context={{ path: "Condition.code", typeCode: "Coding", element: conditionCodeElement }}
+        context={{ path: "Condition.code", typeCode: "Coding", element: exampleElement }}
       />,
       { wrapper: mkWrapper() },
     );
@@ -632,5 +890,123 @@ describe("CodingInput async combobox (large/partial ValueSets)", () => {
     await waitFor(() => expect(screen.getByText("System")).toBeInTheDocument());
     expect(screen.getByText("Code")).toBeInTheDocument();
     expect(screen.getByText("Display")).toBeInTheDocument();
+  });
+});
+
+const ReferenceInput = defaultTypeInputs.Reference!;
+
+describe("ReferenceInput", () => {
+  // MSW handlers for searches triggered by the picker.
+  const mockSearch = (resourceType: string) => {
+    server.use(
+      http.get(`${BASE}/${resourceType}`, () =>
+        HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          entry: [],
+        }),
+      ),
+    );
+  };
+
+  it("renders the search picker (not the fallback) when targetProfile is absent", () => {
+    // Reproduces the Observation.subject / Observation.encounter regression:
+    // bundled core SDs declare `type: [{ code: "Reference" }]` with no
+    // `targetProfile`, which previously caused ReferencePickerFallback to
+    // render instead of the search picker.
+    const elementWithoutTargets: ElementDefinition = {
+      path: "Observation.subject",
+      type: [{ code: "Reference" }], // no targetProfile
+    };
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Observation.subject", typeCode: "Reference", element: elementWithoutTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    // Should render the search picker, not the raw-text fallback.
+    expect(screen.getByTestId("reference-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("reference-picker-fallback")).not.toBeInTheDocument();
+  });
+
+  it("shows a type switcher seeded with the default common types when targetProfile is absent", () => {
+    const elementWithoutTargets: ElementDefinition = {
+      path: "Observation.subject",
+      type: [{ code: "Reference" }],
+    };
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Observation.subject", typeCode: "Reference", element: elementWithoutTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    // More than one default type → the type switcher <select> must appear.
+    const typeSelect = screen.getByRole("combobox", { name: "target type" });
+    expect(typeSelect).toBeInTheDocument();
+    // All default types are present as options.
+    for (const t of DEFAULT_REFERENCE_TYPES) {
+      expect(screen.getByRole("option", { name: t })).toBeInTheDocument();
+    }
+  });
+
+  it("renders the search picker when targetProfile lists specific types (no regression)", () => {
+    // Resources whose SDs already carry targetProfile must keep using the
+    // explicitly-specified types, not the defaults.
+    const elementWithTargets: ElementDefinition = {
+      path: "DiagnosticReport.subject",
+      type: [
+        {
+          code: "Reference",
+          targetProfile: [
+            "http://hl7.org/fhir/StructureDefinition/Patient",
+            "http://hl7.org/fhir/StructureDefinition/Group",
+          ],
+        },
+      ],
+    };
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "DiagnosticReport.subject", typeCode: "Reference", element: elementWithTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    expect(screen.getByTestId("reference-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("reference-picker-fallback")).not.toBeInTheDocument();
+    // Only the explicitly-declared types, not the defaults.
+    const typeSelect = screen.getByRole("combobox", { name: "target type" });
+    expect(typeSelect).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Patient" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Group" })).toBeInTheDocument();
+    // Default-only types like Practitioner must NOT appear for this element.
+    expect(screen.queryByRole("option", { name: "Practitioner" })).not.toBeInTheDocument();
+  });
+
+  it("searches on the selected default type when the user types a query", async () => {
+    mockSearch("Patient");
+    const elementWithoutTargets: ElementDefinition = {
+      path: "Observation.subject",
+      type: [{ code: "Reference" }],
+    };
+    const user = userEvent.setup();
+    render(
+      <ReferenceInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Observation.subject", typeCode: "Reference", element: elementWithoutTargets }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    // "Patient" is the first default type, so the search box label includes it.
+    const searchBox = screen.getByRole("searchbox", { name: /search patient/i });
+    await user.type(searchBox, "Ada");
+    // No matches returned by the mock, but the "No matches" empty-state
+    // confirms the search fired against the right type.
+    await waitFor(() => expect(screen.getByText(/no matches/i)).toBeInTheDocument());
   });
 });

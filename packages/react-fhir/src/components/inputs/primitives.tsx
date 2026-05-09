@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useValueSet } from "../../hooks/queries.js";
-import { bindingFor, codesFromValueSet } from "../../structure/binding.js";
+import { bindingFor, codesFromValueSet, isOpenBinding } from "../../structure/binding.js";
 import { baseField, type FhirInputProps, type FhirTypeInput } from "./types.js";
 
 export const TextInput: FhirTypeInput<string> = ({ value, onChange }) => (
@@ -143,7 +143,7 @@ export const CodeInput: FhirTypeInput<string> = (props) => {
     return <TextInput {...(props as FhirInputProps<string>)} />;
   }
 
-  const allowFreeText = strength !== "required";
+  const allowFreeText = isOpenBinding(strength);
   const currentValue = props.value ?? "";
   const valueMatches = options.some((o) => o.value === currentValue);
   const valueIsCustom = !valueMatches && currentValue !== "";

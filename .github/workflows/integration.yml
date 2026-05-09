@@ -100,9 +100,9 @@ jobs:
                   issue_number: match.number,
                   body: `Failed again in ${runUrl}
 
-\`\`\`
-${failureText}
-\`\`\``,
+            \`\`\`
+            ${failureText}
+            \`\`\``,
                 });
               } else {
                 await github.rest.issues.create({

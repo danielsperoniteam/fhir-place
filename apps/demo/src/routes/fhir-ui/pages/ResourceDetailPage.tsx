@@ -1,7 +1,9 @@
 import {
   ColumnPicker,
   FhirError,
+  HintedDetail,
   ResourceView,
+  getLayoutHint,
   useDeleteResource,
   useResource,
   useStructureDefinition,
@@ -48,6 +50,12 @@ export function ResourceDetailPage() {
   const [rightPane, setRightPane] = useState<"formatted" | "json" | "refs">("formatted");
 
   const isPatient = resourceType === "Patient";
+  // Tier 1 reference implementation: AllergyIntolerance renders via
+  // <HintedDetail>. Other Tier 1 resources keep the generic walker until #250
+  // / #259 wire the rest of the renderer; this PR only ships the schema +
+  // reference renderer so it doesn't regress existing detail screenshots.
+  const hintedDetailHint =
+    resourceType === "AllergyIntolerance" ? getLayoutHint(resourceType) : undefined;
   const patientSdQuery = useStructureDefinition("Patient", { enabled: isPatient });
   const patientFields = useMemo(
     () => (patientSdQuery.data ? patientFieldOptions(patientSdQuery.data) : []),
@@ -299,20 +307,31 @@ export function ResourceDetailPage() {
               </div>
             </div>
 
-            {/* Structured view using existing ResourceView */}
+            {/* Structured view: HintedDetail when a Tier 1 hint is registered
+                AND we want the reference implementation (AllergyIntolerance);
+                generic ResourceView otherwise. */}
             <div
               style={{
                 background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderRadius: 10,
                 overflow: "hidden",
+                padding: hintedDetailHint ? 16 : 0,
               }}
             >
-              <ResourceView
-                resource={data}
-                onReferenceClick={onReferenceClick}
-                visibleFields={isPatient && visibleFields ? visibleFields : undefined}
-              />
+              {hintedDetailHint ? (
+                <HintedDetail
+                  resource={data}
+                  hint={hintedDetailHint}
+                  onReferenceClick={onReferenceClick}
+                />
+              ) : (
+                <ResourceView
+                  resource={data}
+                  onReferenceClick={onReferenceClick}
+                  visibleFields={isPatient && visibleFields ? visibleFields : undefined}
+                />
+              )}
             </div>
 
             {/* Patient compartment */}

@@ -33,7 +33,8 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 
 ## Shipping a PR
 
-1. Branch off `main`.
+1. Branch off `main`. (See "Staging deploys" below for the staging-promote
+   step you do before review.)
 2. Write the code + tests. Match the existing style (`tsc --strict`, Vitest, MSW for HTTP mocking). Every library-level change should have unit-test coverage; behaviour that touches real servers should also have an integration test in `packages/react-fhir/integration/`.
 3. **Add a changeset** if your PR changes `@fhir-place/react-fhir`:
    ```bash
@@ -47,28 +48,42 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 A long-lived `staging` branch deploys alongside `main` so we can confirm
 several PRs work together before they hit production.
 
-- `main` is published at <https://samsuffolksperoni.github.io/fhir-place/>
+- `main` is published at <https://danielsperoniteam.github.io/fhir-place/>
   (goals-tasks at `/fhir-place/goals/`).
-- `staging` is published at <https://samsuffolksperoni.github.io/fhir-place/staging/>
+- `staging` is published at <https://danielsperoniteam.github.io/fhir-place/staging/>
   (goals-tasks at `/fhir-place/staging/goals/`).
 
 **Flow:**
 
-1. Open every PR — human or agent — with `base: staging`. `staging` has no
-   branch protection so a human can merge as soon as CI is green and the
-   review is done.
-2. The Pages workflow rebuilds both branches on every push; wait for the
-   staging build to be green before declaring a change ready for UAT.
-3. Walk the PR's **UAT on live staging** steps against the live
-   `/fhir-place/staging/` URL. If anything is off, fix on a follow-up PR
-   (still targeting `staging`).
-4. When the combined state on staging looks right, fast-forward `main` to
-   `staging` (or open a `staging -> main` PR). That promotes everything
-   that's been UAT'd, together, to production.
+1. Open every PR — human or agent — with `base: main`. The PR diff is
+   reviewed against main; merging to main is the final step.
+2. **Promote the PR branch to `staging` before review.** Agents do this
+   automatically (see `.claude/agents/engineer.md` step 11). Humans
+   should do it by hand:
+   ```bash
+   git fetch origin staging
+   git checkout -B staging-promote origin/staging
+   git merge --no-ff --no-edit <your-branch>
+   git push origin staging-promote:staging
+   ```
+   The push to `staging` must be fast-forward or a no-ff merge —
+   never force-push. If it conflicts, resolve on staging by hand or
+   leave staging alone and note it on the PR.
+3. The Pages workflow rebuilds both branches on every push; wait for
+   the staging build to be green before declaring a change ready for
+   UAT.
+4. Walk the PR's **UAT on live staging** steps against the live
+   `/fhir-place/staging/` URL. If anything is off, fix on a follow-up
+   PR and re-promote.
+5. When UAT passes, merge the PR to `main`. The change is already on
+   staging from step 2, so /staging/ stays in sync; periodically
+   fast-forward `staging` back to `main` once the queue of in-flight
+   PRs has drained, to keep the two branches from diverging long-term.
 
-**Agents always target `staging`.** See `.claude/agents/engineer.md` and
-`AGENTS.md`. Every agent-authored PR must include a UAT section with
-concrete copy-pasteable steps for the live staging URL.
+**Agents always promote to staging themselves.** See
+`.claude/agents/engineer.md` and `AGENTS.md`. Every agent-authored PR
+must include a UAT section with concrete copy-pasteable steps for the
+live staging URL.
 
 ## Bump conventions
 

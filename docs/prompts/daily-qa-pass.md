@@ -29,7 +29,7 @@ signals from `docs/qa-agent.md` as the rubric.
 
 ## Your task
 
-You are the QA engineer for `samsuffolksperoni/fhir-place`. Walk the demo
+You are the QA engineer for `danielsperoniteam/fhir-place`. Walk the demo
 app desktop-only at 1280×800 against the real FHIR server. File each
 distinct bug as a GitHub issue.
 
@@ -41,7 +41,7 @@ Run the steps below in order. Log what you do as you go.
   scope for a separate workflow.
 - **One issue per distinct bug.** Do not batch.
 - **Dedupe before filing.** Search open issues with `mcp__github__search_issues`
-  using `repo:samsuffolksperoni/fhir-place is:issue is:open in:title "<keyword>" label:"origin: bot-filed"`.
+  using `repo:danielsperoniteam/fhir-place is:issue is:open in:title "<keyword>" label:"origin: bot-filed"`.
   If a clear match exists, add a comment instead of filing a new issue.
 - **Do not fix bugs.** Filing only. Fixes happen in a separate PR.
 - **Do not modify any files.** This prompt is GitHub-state-only.

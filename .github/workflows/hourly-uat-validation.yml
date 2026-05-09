@@ -1,0 +1,116 @@
+# Hourly UAT-validation routine.
+#
+# Walks the deployed GitHub Pages staging build with Playwright, validates
+# open and recently-merged PRs against the UAT they describe, leaves a
+# checklist comment on each PR, files out-of-scope bugs as new issues,
+# and gives the PM agent supervised time on the live app to surface
+# improvement ideas.
+#
+# Mirrors the shape of hourly-engineer-dispatch.yml and daily-qa-pass.yml.
+# Pure GitHub-state work — no source edits, no branches, no PRs.
+#
+# See docs/prompts/hourly-uat-validation.md for what the agent does.
+#
+# Setup required (one-time):
+#   1. ANTHROPIC_API_KEY already exists in repo secrets (used by other
+#      Claude routines). No new secret to add.
+#   2. Open one tracking issue manually titled exactly
+#      `UAT validation — hourly report`. The bot will populate it.
+#      (Or let the prompt create it on first run.)
+#   3. Merge with cron commented out (manual-only). After 5–10
+#      successful manual runs, uncomment cron in a follow-up PR.
+
+name: Hourly UAT validation
+
+on:
+  # Cron is intentionally commented out for the first week — manual-only
+  # via workflow_dispatch. Enable in a follow-up PR after observing
+  # several manual runs.
+  # schedule:
+  #   - cron: "15 * * * *"   # :15 of every hour, offset from engineer-dispatch (:05)
+  workflow_dispatch:
+
+permissions:
+  contents: read         # read prompt file from the checkout
+  issues: write          # file out-of-scope bugs and PM ideas
+  pull-requests: write   # post the checklist comment on each PR
+  id-token: write        # required by claude-code-action@v1
+
+concurrency:
+  group: hourly-uat-validation
+  cancel-in-progress: false   # never cancel mid-comment
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45    # 8 PRs × short walk + PM time + buffer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The prompt uses `git merge-base --is-ancestor <pr-head>
+          # origin/staging` to decide whether each open PR is live on
+          # /staging/. fetch-depth: 0 gives us the full history both
+          # branches need; staging is then refreshed in a separate step.
+          fetch-depth: 0
+
+      - name: Fetch staging branch
+        run: git fetch origin staging --quiet || echo "::warning::staging branch not found — all PRs will be reported as not-on-staging"
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        run: pnpm --filter @fhir-place/demo exec playwright install --with-deps chromium
+
+      - name: Confirm staging is reachable
+        # Cheap up-front check. The prompt also checks but failing here
+        # surfaces network-side outages in the workflow log directly.
+        run: |
+          if ! curl -fsS https://danielsperoniteam.github.io/fhir-place/staging/ > /dev/null; then
+            echo "::warning::Staging unreachable from runner — Claude will note this and exit cleanly."
+          fi
+
+      - name: Run Claude Code with the UAT-validation prompt
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Same idiom as the other routines: tell Claude to read the
+          # prompt file rather than slurping it into a workflow input.
+          # The prompt is the source of truth, version-controlled and
+          # reviewable.
+          prompt: |
+            Read the file at docs/prompts/hourly-uat-validation.md and
+            execute the instructions in it. Do not modify the file. Do
+            not open a branch or PR. The MCP github tools are already
+            configured. Playwright chromium is installed; use it from a
+            temporary Node script in /tmp. The staging site is at
+            https://danielsperoniteam.github.io/fhir-place/staging/#/fhir-ui/
+            (served from the `staging` branch by pages.yml) and is
+            reachable over the public network — there is no local dev
+            server in this workflow. The `staging` branch has already
+            been fetched, so `git merge-base --is-ancestor <pr-head-sha>
+            origin/staging` is the on-staging precondition check.
+          # Up to 8 PRs × walk + dedupe + PM time. The workflow's
+          # timeout-minutes is the real wall-clock bound; this prevents
+          # pathological loops from racing it.
+          claude_args: "--max-turns 200"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Playwright traces / screenshots if any
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uat-validation-${{ github.run_id }}
+          path: |
+            /tmp/uat-*.mjs
+            apps/demo/test-results
+            apps/demo/playwright-report
+          if-no-files-found: ignore

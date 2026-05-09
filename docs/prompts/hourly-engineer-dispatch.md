@@ -34,8 +34,6 @@ See also:
   - At most 3 tickets per invocation.
   - At most 200 GitHub API calls. If close to the cap, finish the current
     ticket and skip the rest.
-  - Skip the whole run if there are already 10+ open `bot/*` PRs — drain
-    first.
 
 ---
 
@@ -93,10 +91,10 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
 
 2. **Announce:** comment on the issue:
    "Picked up by hourly-engineer-dispatch. Branch: `bot/issue-<N>-<slug>`,
-   PR base: `staging`. The agent will open a draft PR (with UAT steps to run
-   against `https://samsuffolksperoni.github.io/fhir-place/staging/` once
-   merged) or post a `status: needs-human` comment if it cannot complete
-   the work."
+   PR base: `main`. The agent will open a draft PR, promote the branch
+   into `staging` for live UAT against
+   `https://danielsperoniteam.github.io/fhir-place/staging/`, or post a
+   `status: needs-human` comment if it cannot complete the work."
 
 3. **Dispatch:** invoke the `engineer` subagent with worktree isolation,
    passing `{issue_number: <N>, acceptance_criteria: <restated>, branch_name: bot/issue-<N>-<slug>}`.
@@ -147,7 +145,7 @@ _Last run: YYYY-MM-DD HH:MM UTC. Pause: add `status: agent-paused` to this issue
 - Ready (derived): N
 - status: in-progress: N
 - status: needs-human: N
-- Open `bot/*` PRs: N / 10 cap
+- Open `bot/*` PRs: N
 
 ## Kill switch
 

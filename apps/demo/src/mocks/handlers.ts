@@ -3,8 +3,10 @@ import type { Patient, Resource } from "fhir/r4";
 import { FHIR_BASE_URL } from "../config.js";
 import {
   allergiesFor,
+  carePlansFor,
   compartmentStructureDefinitions,
   conditionsFor,
+  diagnosticReportsFor,
   encountersFor,
   immunizationsFor,
   medicationRequestsFor,
@@ -35,6 +37,16 @@ const okJson = (data: any, init?: ResponseInit) =>
       ...init?.headers,
     },
   });
+
+const readSearch = [{ code: "read" }, { code: "search-type" }];
+const capabilityResource = (
+  type: string,
+  searchParam: Array<{ name: string; type: "token" | "reference" | "date"; documentation?: string }>,
+) => ({
+  type,
+  interaction: readSearch,
+  searchParam,
+});
 
 export const handlers = [
   http.get(`*${BASE}/metadata`, () =>
@@ -73,28 +85,71 @@ export const handlers = [
             },
             {
               type: "Observation",
-              interaction: [{ code: "read" }, { code: "search-type" }],
+              interaction: readSearch,
               searchParam: [
                 { name: "_id", type: "token" },
                 { name: "code", type: "token" },
+                { name: "category", type: "token" },
                 { name: "subject", type: "reference" },
                 { name: "patient", type: "reference" },
                 { name: "status", type: "token" },
                 { name: "date", type: "date" },
               ],
             },
-            {
-              type: "AllergyIntolerance",
-              interaction: [{ code: "read" }, { code: "search-type" }],
-              searchParam: [
-                {
-                  name: "patient",
-                  type: "reference",
-                  documentation: "Who the sensitivity is for",
-                },
-                { name: "code", type: "token" },
-              ],
-            },
+            capabilityResource("Condition", [
+              { name: "patient", type: "reference" },
+              { name: "code", type: "token" },
+              { name: "category", type: "token" },
+              { name: "clinical-status", type: "token" },
+              { name: "onset-date", type: "date" },
+            ]),
+            capabilityResource("MedicationRequest", [
+              { name: "patient", type: "reference" },
+              { name: "code", type: "token" },
+              { name: "status", type: "token" },
+              { name: "intent", type: "token" },
+              { name: "authoredon", type: "date" },
+            ]),
+            capabilityResource("AllergyIntolerance", [
+              { name: "patient", type: "reference", documentation: "Who the sensitivity is for" },
+              { name: "code", type: "token" },
+              { name: "clinical-status", type: "token" },
+              { name: "type", type: "token" },
+              { name: "category", type: "token" },
+            ]),
+            capabilityResource("Procedure", [
+              { name: "patient", type: "reference" },
+              { name: "code", type: "token" },
+              { name: "status", type: "token" },
+              { name: "date", type: "date" },
+            ]),
+            capabilityResource("Encounter", [
+              { name: "patient", type: "reference" },
+              { name: "status", type: "token" },
+              { name: "class", type: "token" },
+              { name: "type", type: "token" },
+              { name: "date", type: "date" },
+            ]),
+            capabilityResource("Immunization", [
+              { name: "patient", type: "reference" },
+              { name: "vaccine-code", type: "token" },
+              { name: "status", type: "token" },
+              { name: "date", type: "date" },
+            ]),
+            capabilityResource("DiagnosticReport", [
+              { name: "patient", type: "reference" },
+              { name: "code", type: "token" },
+              { name: "category", type: "token" },
+              { name: "status", type: "token" },
+              { name: "date", type: "date" },
+            ]),
+            capabilityResource("CarePlan", [
+              { name: "patient", type: "reference" },
+              { name: "category", type: "token" },
+              { name: "status", type: "token" },
+              { name: "intent", type: "token" },
+              { name: "date", type: "date" },
+            ]),
           ],
         },
       ],
@@ -294,6 +349,8 @@ export const handlers = [
       ...compartmentHandlers("Procedure", proceduresFor),
       ...compartmentHandlers("Encounter", encountersFor),
       ...compartmentHandlers("Immunization", immunizationsFor),
+      ...compartmentHandlers("DiagnosticReport", diagnosticReportsFor),
+      ...compartmentHandlers("CarePlan", carePlansFor),
     ];
   })(),
 ];

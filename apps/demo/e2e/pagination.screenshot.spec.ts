@@ -27,6 +27,37 @@ test.describe("Patient index pagination (#15)", () => {
     });
   });
 
+  test("Newly loaded rows are reachable by scrolling the main pane", async ({
+    page,
+  }) => {
+    // Regression: the page used `height: 100%` + `flex: 1` on the results
+    // pane, so its content overflowed visually but didn't grow `<main>`'s
+    // scrollHeight. Rows past the first viewport were rendered but
+    // unreachable — `<main>` could only scroll a few px, far short of the
+    // last row.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/Patient");
+    const rows = page.getByTestId("patient-row");
+    await expect(rows).toHaveCount(20);
+
+    await page.getByTestId("load-more").click();
+    await expect(rows).toHaveCount(36);
+
+    // Programmatically scroll <main> to the bottom (mirroring what a user's
+    // mouse wheel would do) and check the last row is now in the viewport.
+    const lastRowInView = await page.evaluate(() => {
+      const main = document.querySelector("main") as HTMLElement;
+      main.scrollTop = main.scrollHeight;
+      const rows = document.querySelectorAll<HTMLElement>(
+        '[data-testid="patient-row"]',
+      );
+      const last = rows[rows.length - 1];
+      const rect = last.getBoundingClientRect();
+      return rect.top < window.innerHeight && rect.bottom > 0;
+    });
+    expect(lastRowInView).toBe(true);
+  });
+
   test("Search filter resets pagination", async ({ page }) => {
     await page.goto("/Patient");
     const search = page.getByTestId("resource-search");

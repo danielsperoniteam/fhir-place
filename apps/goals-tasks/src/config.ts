@@ -5,7 +5,7 @@ const BASE = import.meta.env.BASE_URL;
 
 export const FHIR_BASE_URL: string =
   import.meta.env.VITE_FHIR_BASE_URL ??
-  (USE_MOCK ? `${BASE}fhir` : "https://hapi.fhir.org/baseR4");
+  (USE_MOCK ? `${BASE}fhir` : "https://r4.smarthealthit.org");
 
 export const ROUTER_BASENAME: string = BASE.replace(/\/$/, "") || "/";
 

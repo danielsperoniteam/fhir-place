@@ -5,11 +5,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/samsuffolksperoni/fhir-place.git",
+    "url": "git+https://github.com/danielsperoniteam/fhir-place.git",
     "directory": "packages/react-fhir"
   },
-  "homepage": "https://github.com/samsuffolksperoni/fhir-place#readme",
-  "bugs": "https://github.com/samsuffolksperoni/fhir-place/issues",
+  "homepage": "https://github.com/danielsperoniteam/fhir-place#readme",
+  "bugs": "https://github.com/danielsperoniteam/fhir-place/issues",
   "keywords": [
     "fhir",
     "fhir-r4",
@@ -49,6 +49,10 @@
     "./components": {
       "types": "./dist/components/index.d.ts",
       "import": "./dist/components/index.js"
+    },
+    "./layout-hints": {
+      "types": "./dist/layout-hints/index.d.ts",
+      "import": "./dist/layout-hints/index.js"
     }
   },
   "files": [
@@ -57,7 +61,6 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "pnpm sync:sds",
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "test": "vitest",

@@ -1,9 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Observation, Patient, StructureDefinition } from "fhir/r4";
+import type { Condition, Immunization, MedicationRequest, Observation, Patient, Procedure, StructureDefinition } from "fhir/r4";
 import { describe, expect, it, vi } from "vitest";
+import { ConditionStructureDefinition } from "../../test/fixtures/StructureDefinition-Condition.js";
+import { ImmunizationStructureDefinition } from "../../test/fixtures/StructureDefinition-Immunization.js";
+import { MedicationRequestStructureDefinition } from "../../test/fixtures/StructureDefinition-MedicationRequest.js";
 import { ObservationStructureDefinition } from "../../test/fixtures/StructureDefinition-Observation.js";
+import { ProcedureStructureDefinition } from "../../test/fixtures/StructureDefinition-Procedure.js";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { getByPath, ResourceTable } from "./ResourceTable.js";
@@ -335,6 +339,208 @@ describe("ResourceTable", () => {
     expect(within(row).getByText("—")).toBeInTheDocument();
     // Gender present → renders via code renderer
     expect(within(row).getByText("other")).toBeInTheDocument();
+  });
+
+  describe("compartment choice-column variants (regression)", () => {
+    it("medication[x] — CodeableConcept variant renders medication text", () => {
+      const rx: MedicationRequest = {
+        resourceType: "MedicationRequest",
+        id: "rx1",
+        status: "active",
+        intent: "order",
+        medicationCodeableConcept: { text: "Lisinopril 10mg" },
+        subject: { reference: "Patient/p1" },
+      };
+      render(
+        <ResourceTable<MedicationRequest>
+          resources={[rx]}
+          columns={["status", "medication[x]", "authoredOn"]}
+          columnLabels={{ status: "Status", "medication[x]": "Medication", authoredOn: "Ordered" }}
+          structureDefinition={MedicationRequestStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      expect(within(row).getByText(/Lisinopril 10mg/)).toBeInTheDocument();
+      expect(within(row).queryByText(/"text":/)).not.toBeInTheDocument();
+    });
+
+    it("medication[x] — Reference variant renders reference display text, not raw JSON", () => {
+      const rx: MedicationRequest = {
+        resourceType: "MedicationRequest",
+        id: "rx2",
+        status: "active",
+        intent: "order",
+        medicationReference: { reference: "Medication/m1", display: "Amoxicillin 500mg capsule" },
+        subject: { reference: "Patient/p1" },
+      };
+      render(
+        <ResourceTable<MedicationRequest>
+          resources={[rx]}
+          columns={["status", "medication[x]", "authoredOn"]}
+          columnLabels={{ status: "Status", "medication[x]": "Medication", authoredOn: "Ordered" }}
+          structureDefinition={MedicationRequestStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      // ReferenceRenderer renders display text, not raw JSON
+      expect(within(row).getByText(/Amoxicillin 500mg capsule/)).toBeInTheDocument();
+      expect(within(row).queryByText(/"reference":/)).not.toBeInTheDocument();
+    });
+
+    it("onset[x] — onsetDateTime variant renders the date string", () => {
+      const condition: Condition = {
+        resourceType: "Condition",
+        id: "c1",
+        clinicalStatus: { text: "active" },
+        code: { text: "Hypertension" },
+        subject: { reference: "Patient/p1" },
+        onsetDateTime: "2022-01-15",
+      };
+      render(
+        <ResourceTable<Condition>
+          resources={[condition]}
+          columns={["clinicalStatus", "code", "onset[x]"]}
+          columnLabels={{ clinicalStatus: "Status", code: "Condition", "onset[x]": "Onset" }}
+          structureDefinition={ConditionStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      // DateTime renderer emits a <time dateTime="..."> element; match by attribute
+      // rather than locale-formatted text which is environment-dependent.
+      expect(
+        within(row).getByText((_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2022-01-15"),
+      ).toBeInTheDocument();
+    });
+
+    it("onset[x] — onsetPeriod variant renders start and end dates, not raw JSON", () => {
+      const condition: Condition = {
+        resourceType: "Condition",
+        id: "c2",
+        code: { text: "Seasonal allergy" },
+        subject: { reference: "Patient/p1" },
+        onsetPeriod: { start: "2023-03-01", end: "2023-05-31" },
+      };
+      render(
+        <ResourceTable<Condition>
+          resources={[condition]}
+          columns={["clinicalStatus", "code", "onset[x]"]}
+          columnLabels={{ clinicalStatus: "Status", code: "Condition", "onset[x]": "Onset" }}
+          structureDefinition={ConditionStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      // PeriodRenderer shows start and end
+      expect(within(row).getByText(/2023-03-01/)).toBeInTheDocument();
+      expect(within(row).queryByText(/"start":/)).not.toBeInTheDocument();
+    });
+
+    it("performed[x] — performedDateTime variant renders the date string", () => {
+      const procedure: Procedure = {
+        resourceType: "Procedure",
+        id: "proc1",
+        status: "completed",
+        code: { text: "Appendectomy" },
+        subject: { reference: "Patient/p1" },
+        performedDateTime: "2021-08-10",
+      };
+      render(
+        <ResourceTable<Procedure>
+          resources={[procedure]}
+          columns={["status", "code", "performed[x]"]}
+          columnLabels={{ status: "Status", code: "Procedure", "performed[x]": "Performed" }}
+          structureDefinition={ProcedureStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      // DateTime renderer emits a <time dateTime="..."> element; match by attribute.
+      expect(
+        within(row).getByText((_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2021-08-10"),
+      ).toBeInTheDocument();
+    });
+
+    it("performed[x] — performedPeriod variant renders start date, not raw JSON", () => {
+      const procedure: Procedure = {
+        resourceType: "Procedure",
+        id: "proc2",
+        status: "completed",
+        code: { text: "Physical therapy" },
+        subject: { reference: "Patient/p1" },
+        performedPeriod: { start: "2022-02-01", end: "2022-06-30" },
+      };
+      render(
+        <ResourceTable<Procedure>
+          resources={[procedure]}
+          columns={["status", "code", "performed[x]"]}
+          columnLabels={{ status: "Status", code: "Procedure", "performed[x]": "Performed" }}
+          structureDefinition={ProcedureStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      expect(within(row).getByText(/2022-02-01/)).toBeInTheDocument();
+      expect(within(row).queryByText(/"start":/)).not.toBeInTheDocument();
+    });
+
+    it("occurrence[x] — occurrenceDateTime variant renders the date string", () => {
+      const imm: Immunization = {
+        resourceType: "Immunization",
+        id: "imm1",
+        status: "completed",
+        vaccineCode: { text: "Influenza vaccine" },
+        patient: { reference: "Patient/p1" },
+        occurrenceDateTime: "2023-10-05",
+      };
+      render(
+        <ResourceTable<Immunization>
+          resources={[imm]}
+          columns={["status", "vaccineCode", "occurrence[x]"]}
+          columnLabels={{ status: "Status", vaccineCode: "Vaccine", "occurrence[x]": "Administered" }}
+          structureDefinition={ImmunizationStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      // DateTime renderer emits a <time dateTime="..."> element; match by attribute.
+      expect(
+        within(row).getByText((_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2023-10-05"),
+      ).toBeInTheDocument();
+    });
+
+    it("occurrence[x] — occurrenceString variant renders the string value, not raw JSON", () => {
+      const imm: Immunization = {
+        resourceType: "Immunization",
+        id: "imm2",
+        status: "completed",
+        vaccineCode: { text: "COVID-19 vaccine" },
+        patient: { reference: "Patient/p1" },
+        occurrenceString: "approximately 2021",
+      };
+      render(
+        <ResourceTable<Immunization>
+          resources={[imm]}
+          columns={["status", "vaccineCode", "occurrence[x]"]}
+          columnLabels={{ status: "Status", vaccineCode: "Vaccine", "occurrence[x]": "Administered" }}
+          structureDefinition={ImmunizationStructureDefinition}
+          layout="table"
+        />,
+        { wrapper: wrap() },
+      );
+      const row = screen.getByTestId("resource-row");
+      expect(within(row).getByText(/approximately 2021/)).toBeInTheDocument();
+      expect(within(row).queryByText(/"approximately/)).not.toBeInTheDocument();
+    });
   });
 
   describe("responsive layouts", () => {

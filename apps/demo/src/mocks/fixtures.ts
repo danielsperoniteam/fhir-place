@@ -1,7 +1,9 @@
 import type {
   AllergyIntolerance,
   Bundle,
+  CarePlan,
   Condition,
+  DiagnosticReport,
   Encounter,
   Immunization,
   MedicationRequest,
@@ -248,6 +250,58 @@ export const immunizationsFor = (patientId: string): Immunization[] => {
   ];
 };
 
+export const diagnosticReportsFor = (patientId: string): DiagnosticReport[] => {
+  if (patientId !== "ada") return [];
+  return [
+    {
+      resourceType: "DiagnosticReport",
+      id: "dr-lipids-ada",
+      status: "final",
+      category: [{ text: "Laboratory" }],
+      code: { text: "Lipid panel" },
+      subject: adaSubject,
+      effectiveDateTime: "2024-09-15T09:10:00Z",
+      issued: "2024-09-15T11:30:00Z",
+    },
+    {
+      resourceType: "DiagnosticReport",
+      id: "dr-echo-ada",
+      status: "final",
+      category: [{ text: "Cardiology" }],
+      code: { text: "Echocardiography report" },
+      subject: adaSubject,
+      effectiveDateTime: "2023-10-12T14:00:00Z",
+      issued: "2023-10-12T16:45:00Z",
+    },
+  ];
+};
+
+export const carePlansFor = (patientId: string): CarePlan[] => {
+  if (patientId !== "ada") return [];
+  return [
+    {
+      resourceType: "CarePlan",
+      id: "cp-cardiac-ada",
+      status: "active",
+      intent: "plan",
+      title: "Cardiovascular risk reduction",
+      category: [{ text: "Chronic disease management" }],
+      subject: adaSubject,
+      period: { start: "2024-09-15" },
+    },
+    {
+      resourceType: "CarePlan",
+      id: "cp-migraine-ada",
+      status: "completed",
+      intent: "plan",
+      title: "Migraine self-management",
+      category: [{ text: "Neurology" }],
+      subject: adaSubject,
+      period: { start: "2018-08-12", end: "2019-02-12" },
+    },
+  ];
+};
+
 export const searchBundle = <T extends Resource>(
   resources: T[],
 ): Bundle<T> => ({
@@ -376,5 +430,21 @@ export const compartmentStructureDefinitions: StructureDefinition[] = [
     { path: "vaccineCode", short: "Vaccine product administered", type: "CodeableConcept" },
     { path: "patient", short: "Who was immunised", type: "Reference" },
     { path: "occurrenceDateTime", short: "When the vaccine was administered", type: "dateTime" },
+  ]),
+  mkSd("DiagnosticReport", [
+    { path: "status", short: "registered | partial | preliminary | final | amended | corrected | appended | cancelled | entered-in-error | unknown", type: "code" },
+    { path: "category", short: "Service category", type: "CodeableConcept", array: true },
+    { path: "code", short: "Name/code for this diagnostic report", type: "CodeableConcept" },
+    { path: "subject", short: "The subject of the report", type: "Reference" },
+    { path: "effectiveDateTime", short: "Clinically relevant time", type: "dateTime" },
+    { path: "issued", short: "DateTime this version was made", type: "instant" },
+  ]),
+  mkSd("CarePlan", [
+    { path: "status", short: "draft | active | on-hold | revoked | completed | entered-in-error | unknown", type: "code" },
+    { path: "intent", short: "proposal | plan | order | option", type: "code" },
+    { path: "title", short: "Human-friendly name for the care plan", type: "string" },
+    { path: "category", short: "Type of plan", type: "CodeableConcept", array: true },
+    { path: "subject", short: "Who the care plan is for", type: "Reference" },
+    { path: "period", short: "Time period plan covers", type: "Period" },
   ]),
 ];

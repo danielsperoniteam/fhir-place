@@ -124,40 +124,84 @@ describe("preferredCoding", () => {
   });
 });
 
-describe("CodeableConcept renderer", () => {
+describe("CodeableConcept renderer (CodedValue)", () => {
   const renderer = defaultTypeRenderers.CodeableConcept!;
   const ctx = { path: "Observation.code", typeCode: "CodeableConcept" };
 
-  it("renders the text alongside the preferred coding's code", () => {
+  // The popover only mounts on hover/focus to keep the chip's text from
+  // duplicating into the accessibility tree. Tests use this helper to open
+  // the popover before asserting on its contents.
+  function openPopover(testIdRoot: HTMLElement) {
+    const wrapper = testIdRoot.querySelector(
+      '[data-testid="coded-value"]',
+    ) as HTMLElement;
+    fireEvent.mouseEnter(wrapper);
+  }
+
+  it("renders the text label and the primary coding's code on the chip", () => {
     const cc: CodeableConcept = {
       text: "Diastolic blood pressure",
       coding: [
         { system: "http://loinc.org", code: "8462-4", display: "Diastolic blood pressure" },
       ],
     };
+    const { getByTestId } = render(<>{renderer(cc, ctx)}</>);
+    expect(getByTestId("coded-value-label").textContent).toBe(
+      "Diastolic blood pressure",
+    );
+    expect(getByTestId("coded-value-code").textContent).toBe("8462-4");
+  });
+
+  it("renders the popover text section on hover when CodeableConcept.text is set", () => {
+    const cc: CodeableConcept = {
+      text: "Diastolic blood pressure",
+      coding: [{ system: "http://loinc.org", code: "8462-4" }],
+    };
+    const { container, getByTestId, queryByTestId } = render(
+      <>{renderer(cc, ctx)}</>,
+    );
+    expect(queryByTestId("coded-value-popover-text")).toBeNull();
+    openPopover(container);
+    expect(getByTestId("coded-value-popover-text").textContent).toBe(
+      "Diastolic blood pressure",
+    );
+  });
+
+  it("renders an em-dash when neither text nor coding is present", () => {
+    const cc: CodeableConcept = {};
     const { container } = render(<>{renderer(cc, ctx)}</>);
-    expect(container.textContent).toContain("Diastolic blood pressure");
-    expect(container.textContent).toContain("8462-4");
-    expect(container.textContent).toContain("LOINC");
+    expect(container.textContent).toBe("—");
   });
 
   it("falls back to plain text when no coding is present", () => {
     const cc: CodeableConcept = { text: "free text only" };
-    const { container } = render(<>{renderer(cc, ctx)}</>);
-    expect(container.textContent).toBe("free text only");
-    expect(container.querySelector("code")).toBeNull();
+    const { getByTestId } = render(<>{renderer(cc, ctx)}</>);
+    expect(getByTestId("coded-value-label").textContent).toBe("free text only");
   });
 
   it("renders just the coding when text is missing", () => {
     const cc: CodeableConcept = {
       coding: [{ system: "http://loinc.org", code: "8462-4", display: "Diastolic blood pressure" }],
     };
-    const { container } = render(<>{renderer(cc, ctx)}</>);
-    expect(container.textContent).toContain("Diastolic blood pressure");
-    expect(container.textContent).toContain("8462-4");
+    const { getByTestId } = render(<>{renderer(cc, ctx)}</>);
+    expect(getByTestId("coded-value-label").textContent).toBe(
+      "Diastolic blood pressure",
+    );
+    expect(getByTestId("coded-value-code").textContent).toBe("8462-4");
   });
 
-  it("hides non-preferred codings behind a +N more toggle", () => {
+  it("shows a +N indicator when there is more than one coding", () => {
+    const cc: CodeableConcept = {
+      coding: [
+        { system: "http://loinc.org", code: "8462-4" },
+        { system: "http://snomed.info/sct", code: "271650006" },
+      ],
+    };
+    const { getByTestId } = render(<>{renderer(cc, ctx)}</>);
+    expect(getByTestId("coded-value-extra-count").textContent).toBe("+1");
+  });
+
+  it("tucks unknown-system codings into a collapsed expander", () => {
     const cc: CodeableConcept = {
       text: "Diastolic blood pressure",
       coding: [
@@ -166,20 +210,18 @@ describe("CodeableConcept renderer", () => {
         { system: "http://example.org/custom", code: "DBP-9" },
       ],
     };
-    const { container, getByRole } = render(<>{renderer(cc, ctx)}</>);
-    // preferred coding visible
-    expect(container.textContent).toContain("8462-4");
-    // extras hidden initially
-    expect(container.textContent).not.toContain("271650006");
+    const { container, getByTestId } = render(<>{renderer(cc, ctx)}</>);
+    openPopover(container);
+    // The unknown coding (DBP-9) lives behind the expander.
     expect(container.textContent).not.toContain("DBP-9");
-    // expand toggle visible
-    const toggle = getByRole("button", { name: /show 2 other codings/i });
-    expect(toggle.textContent).toBe("+2 more");
-    fireEvent.click(toggle);
-    // extras now visible
+    const toggle = getByTestId("coded-value-other-toggle");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // Both known LOINC + SNOMED codings are listed in the popover body.
     expect(container.textContent).toContain("271650006");
+    expect(container.textContent).toContain("8462-4");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(container.textContent).toContain("DBP-9");
-    expect(toggle.textContent).toBe("hide");
   });
 
   it("falls back to the bundled display when Coding.display is missing", () => {
@@ -192,14 +234,14 @@ describe("CodeableConcept renderer", () => {
         },
       ],
     };
-    const { container } = render(
+    const { getByTestId } = render(
       <>{renderer(cc, { ...ctx, path: "AllergyIntolerance.clinicalStatus" })}</>,
     );
-    expect(container.textContent).toContain("Active");
-    expect(container.querySelector("code")?.textContent).toBe("active");
+    expect(getByTestId("coded-value-label").textContent).toBe("Active");
+    expect(getByTestId("coded-value-code").textContent).toBe("active");
   });
 
-  it("surfaces the bundled CodeSystem definition in the chip tooltip", () => {
+  it("surfaces the bundled CodeSystem definition in the popover on hover", () => {
     const cc: CodeableConcept = {
       coding: [
         {
@@ -209,19 +251,16 @@ describe("CodeableConcept renderer", () => {
         },
       ],
     };
-    const { container } = render(
+    const { container, getByTestId } = render(
       <>{renderer(cc, { ...ctx, path: "AllergyIntolerance.clinicalStatus" })}</>,
     );
-    const title = container.querySelector("code")?.getAttribute("title") ?? "";
-    expect(title).toContain(
-      "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical#active",
-    );
-    expect(title).toContain(
+    openPopover(container);
+    expect(getByTestId("coded-value-definition").textContent).toContain(
       "The subject is currently experiencing, or is at risk of, a reaction to the identified substance.",
     );
   });
 
-  it("omits the system label in the pill for unknown code systems", () => {
+  it("renders the friendly system pill for known systems on hover", () => {
     const cc: CodeableConcept = {
       coding: [
         {
@@ -231,21 +270,65 @@ describe("CodeableConcept renderer", () => {
         },
       ],
     };
-    const { container } = render(<>{renderer(cc, { ...ctx, path: "AllergyIntolerance.clinicalStatus" })}</>);
-    const chip = container.querySelector("code");
-    expect(chip?.textContent).toBe("active");
-    expect(chip?.getAttribute("title")).toContain(
-      "allergyintolerance-clinical",
+    const { container, getByTestId } = render(
+      <>{renderer(cc, { ...ctx, path: "AllergyIntolerance.clinicalStatus" })}</>,
+    );
+    openPopover(container);
+    expect(getByTestId("coded-value-system-pill").textContent).toContain(
+      "HL7 AllergyIntolerance Clinical",
     );
   });
 
-  it("does not render the toggle when there is only one coding", () => {
+  it("does not render the +N indicator when there is only one coding", () => {
     const cc: CodeableConcept = {
       text: "Diastolic blood pressure",
       coding: [{ system: "http://loinc.org", code: "8462-4" }],
     };
-    const { container } = render(<>{renderer(cc, ctx)}</>);
-    expect(container.querySelector("button")).toBeNull();
+    const { container, queryByTestId } = render(<>{renderer(cc, ctx)}</>);
+    expect(queryByTestId("coded-value-extra-count")).toBeNull();
+    openPopover(container);
+    // No hidden band when every coding belongs to a known system.
+    expect(queryByTestId("coded-value-hidden-band")).toBeNull();
+  });
+
+  it("renders a tone dot when ctx.tone is set", () => {
+    const cc: CodeableConcept = {
+      coding: [{ system: "http://loinc.org", code: "8462-4" }],
+    };
+    const { container } = render(
+      <>{renderer(cc, { ...ctx, tone: "success" })}</>,
+    );
+    // Tone is opt-in via the context — the dot ships as the first child
+    // before the label inside the chip.
+    const chip = container.querySelector('[data-testid="coded-value-chip"]');
+    expect(chip?.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("closes the popover on mouseleave and resets the expander state", () => {
+    const cc: CodeableConcept = {
+      text: "Diastolic blood pressure",
+      coding: [
+        { system: "http://loinc.org", code: "8462-4" },
+        { system: "http://example.org/custom", code: "DBP-9" },
+      ],
+    };
+    const { container, queryByTestId, getByTestId } = render(
+      <>{renderer(cc, ctx)}</>,
+    );
+    const wrapper = container.querySelector(
+      '[data-testid="coded-value"]',
+    ) as HTMLElement;
+    fireEvent.mouseEnter(wrapper);
+    fireEvent.click(getByTestId("coded-value-other-toggle"));
+    expect(
+      getByTestId("coded-value-other-toggle").getAttribute("aria-expanded"),
+    ).toBe("true");
+    fireEvent.mouseLeave(wrapper);
+    expect(queryByTestId("coded-value-popover")).toBeNull();
+    fireEvent.mouseEnter(wrapper);
+    expect(
+      getByTestId("coded-value-other-toggle").getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 });
 

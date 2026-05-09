@@ -86,9 +86,7 @@ describe("searchBuilder runtime", () => {
     const url = searchBuilder("Patient")
       .revInclude("Observation:subject")
       .build();
-    expect(url).toBe(
-      "Patient?_revinclude=Observation%3Asubject",
-    );
+    expect(url).toBe("Patient?_revinclude=Observation%3Asubject");
   });
 
   it("chains multiple wheres and include", () => {

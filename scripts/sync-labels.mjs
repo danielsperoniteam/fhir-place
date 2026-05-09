@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Idempotent label bootstrap for samsuffolksperoni/fhir-place.
+// Idempotent label bootstrap for danielsperoniteam/fhir-place.
 //
 // - Ensures every canonical label in CANONICAL exists with the right color
 //   and description; updates any whose color/description drifted.
@@ -10,10 +10,10 @@
 // Required env:
 //   GITHUB_TOKEN   token with `repo` scope (or workflow GITHUB_TOKEN)
 // Optional env:
-//   GITHUB_REPOSITORY   "owner/repo" (defaults to samsuffolksperoni/fhir-place)
+//   GITHUB_REPOSITORY   "owner/repo" (defaults to danielsperoniteam/fhir-place)
 //   DRY_RUN             "1" to log without making changes
 
-const REPO = process.env.GITHUB_REPOSITORY || 'samsuffolksperoni/fhir-place';
+const REPO = process.env.GITHUB_REPOSITORY || 'danielsperoniteam/fhir-place';
 const TOKEN = process.env.GITHUB_TOKEN;
 const DRY_RUN = process.env.DRY_RUN === '1';
 const API = 'https://api.github.com';

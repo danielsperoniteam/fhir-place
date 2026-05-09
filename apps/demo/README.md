@@ -1,6 +1,6 @@
 # fhir-ui (`apps/demo`)
 
-fhir-ui is a full FHIR browser and editor built on [`@fhir-place/react-fhir`](../../packages/react-fhir/README.md). It ships as the live demo at <https://samsuffolksperoni.github.io/fhir-place/> and serves as the reference implementation of what you can build with react-fhir.
+fhir-ui is a full FHIR browser and editor built on [`@fhir-place/react-fhir`](../../packages/react-fhir/README.md). It ships as the live demo at <https://danielsperoniteam.github.io/fhir-place/> and serves as the reference implementation of what you can build with react-fhir.
 
 ## What it does
 

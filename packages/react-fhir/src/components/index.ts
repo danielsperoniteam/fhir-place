@@ -1,4 +1,5 @@
 export * from "./Narrative.js";
+export * from "./codedValue/index.js";
 export * from "./renderers.js";
 export * from "./ResourceView.js";
 export * from "./inputs/index.js";
@@ -8,3 +9,4 @@ export * from "./ReferencePicker.js";
 export * from "./ResourceTable.js";
 export * from "./ColumnPicker.js";
 export * from "./SortPicker.js";
+export * from "./HintedDetail.js";

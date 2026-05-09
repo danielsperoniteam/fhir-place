@@ -17,14 +17,14 @@ import type {
   Resource,
 } from "fhir/r4";
 import type { ReactNode } from "react";
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import {
   formatAddress,
   formatHumanName,
   formatReferenceLabel,
 } from "../structure/format.js";
-import { lookupCoreDisplay } from "../structure/core/valuesets.js";
-import { useCodeLookup, useReadReference } from "../hooks/queries.js";
+import { useReadReference } from "../hooks/queries.js";
+import { CodedValue } from "./codedValue/index.js";
 
 /** Context passed to every renderer. */
 export interface RendererContext {
@@ -34,6 +34,12 @@ export interface RendererContext {
   typeCode: string | undefined;
   /** Callback to resolve a Reference into a link. Defaults to plain text. */
   onReferenceClick?: (ref: Reference) => void;
+  /**
+   * Optional opt-in tone for `Coding` / `CodeableConcept` values rendered
+   * inside this context. Callers (e.g. a per-resource override map) attach
+   * this explicitly — the default renderers never derive tone from values.
+   */
+  tone?: "success" | "warn" | "danger";
 }
 
 export type FhirTypeRenderer = (
@@ -227,109 +233,17 @@ export function preferredCoding(
   return cc.coding[0];
 }
 
-function CodeChip({ coding }: { coding: Coding }) {
-  const knownLabel = coding.system
-    ? KNOWN_CODE_SYSTEM_LABELS[coding.system]
-    : undefined;
-  // Bundled hits return synchronously via initialData; unbundled systems
-  // (SNOMED, LOINC, etc.) fire a CodeSystem/$lookup against the configured
-  // terminology server and update the tooltip when it lands.
-  const { data: lookup } = useCodeLookup(coding.system, coding.code);
-  const baseTitle = coding.system
-    ? `${coding.system}#${coding.code}`
-    : coding.code ?? "";
-  const lines: string[] = [baseTitle];
-  if (lookup?.display && lookup.display !== coding.display) {
-    lines.push(lookup.display);
-  }
-  if (lookup?.definition) lines.push(lookup.definition);
-  return (
-    <code
-      className="rounded bg-slate-100 px-1 py-0.5 text-xs"
-      title={lines.join("\n")}
-    >
-      {knownLabel ? `${knownLabel} ` : ""}
-      {coding.code}
-    </code>
-  );
-}
-
-function ExtraCodings({ codings }: { codings: readonly Coding[] }) {
-  const [open, setOpen] = useState(false);
-  if (codings.length === 0) return null;
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="ml-1 text-xs text-slate-500 underline"
-        aria-expanded={open}
-        aria-label={
-          open ? "Hide other codings" : `Show ${codings.length} other coding${codings.length === 1 ? "" : "s"}`
-        }
-      >
-        {open ? "hide" : `+${codings.length} more`}
-      </button>
-      {open && (
-        <span className="ml-1 inline-flex flex-wrap gap-1">
-          {codings.map((c, i) => (
-            <CodeChip key={`${c.system ?? ""}#${c.code ?? ""}#${i}`} coding={c} />
-          ))}
-        </span>
-      )}
-    </>
-  );
-}
-
-const CodingRenderer: FhirTypeRenderer = (value) => {
+const CodingRenderer: FhirTypeRenderer = (value, ctx) => {
   const c = value as Coding;
-  const display = c.display ?? lookupCoreDisplay(c.system, c.code);
-  if (display) {
-    return (
-      <span>
-        {display} <CodeChip coding={c} />
-      </span>
-    );
-  }
-  return <CodeChip coding={c} />;
+  return <CodedValue value={c} tone={ctx.tone} />;
 };
 
 const CodeableConceptRenderer: FhirTypeRenderer = (value, ctx) => {
   const cc = value as CodeableConcept;
-  const all = cc.coding ?? [];
-  const chosen = preferredCoding(cc, ctx.path);
-  const extras = chosen ? all.filter((c) => c !== chosen) : all.slice();
-
-  if (cc.text) {
-    const codingSummary = all
-      .map((c) => [codeSystemLabel(c.system), c.code].filter(Boolean).join(" "))
-      .filter(Boolean)
-      .join(", ");
-    return (
-      <span title={codingSummary}>
-        {cc.text}
-        {chosen?.code && (
-          <>
-            {" "}
-            <CodeChip coding={chosen} />
-          </>
-        )}
-        <ExtraCodings codings={extras} />
-      </span>
-    );
+  if (!cc.text && !cc.coding?.length) {
+    return <span className="text-slate-400">—</span>;
   }
-  if (chosen) {
-    const display =
-      chosen.display ?? lookupCoreDisplay(chosen.system, chosen.code);
-    return (
-      <span>
-        {display ? <>{display} </> : null}
-        <CodeChip coding={chosen} />
-        <ExtraCodings codings={extras} />
-      </span>
-    );
-  }
-  return <span className="text-slate-400">—</span>;
+  return <CodedValue value={cc} tone={ctx.tone} />;
 };
 
 const QuantityRenderer: FhirTypeRenderer = (value) => {
