@@ -5,9 +5,13 @@ maintainer asks to dispatch the `engineer` subagent on a single issue —
 either by commenting `/dispatch-engineer` on the issue, or by running the
 workflow manually with an issue number input.
 
-This prompt is the manual counterpart to `hourly-engineer-dispatch.md`. It
-runs the same readiness gates but against one specific issue instead of
-scanning the whole backlog.
+This prompt is the manual counterpart to `hourly-engineer-dispatch.md`.
+Unlike the hourly routine, it **skips the readiness gates** (label
+completeness, blockers, no-assignee). The trigger requires repo-write
+access, so we trust the human to know whether the issue is ready. Two
+gates remain because they protect concurrency and the kill switch, not
+triage state: the `status: agent-paused` kill switch and the
+`status: in-progress` lock.
 
 This prompt **orchestrates only** — it never edits source code itself. The
 `engineer` subagent (`.claude/agents/engineer.md`) does all editing,
@@ -51,40 +55,24 @@ See also:
 Fetch issue `<N>` (the `Issue number` from your context). If it does not
 exist or is closed, post no comment, log the situation, and exit.
 
-## Step 2 — readiness gates
+## Step 2 — concurrency and kill-switch checks
 
-Apply the same filter the hourly routine uses
-(`hourly-engineer-dispatch.md` Step 3). The issue must be **all of**:
+Readiness gates are intentionally skipped — the human triggering this
+flow already decided the issue is ready. But two checks remain:
 
-- `state: open`
-- exactly one `type:` label
-- at least one `area:` label
-- exactly one `priority:` label
-- does **not** have `status: blocked`, `status: needs-triage`,
-  `status: in-progress`, or `status: needs-human`
-- has no assignees
-- every issue listed in the body under "Blocked by:" or as a `blocks`-style
-  sub-issue link is closed
-
-If any gate fails, post a single comment on the issue listing **every**
-failed gate (don't stop at the first), and exit. Example:
+**a. In-progress lock.** If the target issue already carries
+`status: in-progress`, do not double-claim. Post on the issue:
 
 ```
-Manual dispatch declined — issue not ready:
-
-- Missing required label: exactly one `priority:` (found: 0)
-- Has `status: blocked` — remove this label and resolve the blocker first
-- Open blocker: #123 must be closed first
-
-Re-run `/dispatch-engineer` once these are resolved.
+Already in progress — `status: in-progress` is set. If the previous
+dispatch is stuck, remove the label and re-run /dispatch-engineer.
 ```
 
-Use plain text bullets so the comment renders cleanly.
+Then exit.
 
-## Step 3 — kill-switch check
-
-Find the open issue titled exactly `Engineer dispatch — hourly report`. If
-it carries the `status: agent-paused` label, post on the **target issue**:
+**b. Kill switch.** Find the open issue titled exactly
+`Engineer dispatch — hourly report`. If it carries the
+`status: agent-paused` label, post on the **target issue**:
 
 ```
 Manual dispatch paused — `status: agent-paused` is set on the tracking
@@ -93,9 +81,10 @@ issue. Remove that label first.
 
 Then exit.
 
-## Step 4 — claim and dispatch
+## Step 3 — claim and dispatch
 
-Mirrors `hourly-engineer-dispatch.md` Step 4 for a single ticket:
+Mirrors `hourly-engineer-dispatch.md` Step 4 for a single ticket. Step 2
+already verified the issue is not already claimed; proceed.
 
 1. **Claim:** add `status: in-progress` via `mcp__github__issue_write`.
    This label is the lock — it prevents the next hourly run (or another
@@ -125,7 +114,7 @@ Mirrors `hourly-engineer-dispatch.md` Step 4 for a single ticket:
 
 Compute the slug as `kebab-case(first-50-chars-of-title-after-stripping-prefixes)`.
 
-## Step 5 — do not touch the tracking issue
+## Step 4 — do not touch the tracking issue
 
 The hourly routine owns the rolling tracking-issue body. A manual run
 should not rewrite it. If you want the run recorded, the next hourly run

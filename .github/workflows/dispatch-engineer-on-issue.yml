@@ -5,9 +5,11 @@
 #      number as input.
 #
 # This is the manual-trigger counterpart to the hourly engineer-dispatch
-# routine (`.github/workflows/hourly-engineer-dispatch.yml`). It runs the
-# same readiness gates against one specific issue instead of scanning the
-# whole backlog.
+# routine (`.github/workflows/hourly-engineer-dispatch.yml`). It targets
+# one specific issue and intentionally **skips the readiness gates** — the
+# human triggering it already decided the issue is ready. The kill switch
+# (`status: agent-paused` on the tracking issue) and the in-progress lock
+# still apply.
 #
 # Slash command:
 #   - Trigger:       Issue comment containing `/dispatch-engineer`
