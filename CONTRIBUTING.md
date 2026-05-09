@@ -134,6 +134,8 @@ GitHub Issues are the canonical backlog (see `docs/decisions/0001-use-github-iss
 
 **Automation:** the canonical label set is managed by `scripts/sync-labels.mjs` and re-applied on every push to `main` via `.github/workflows/sync-labels.yml`. A daily cron (`.github/workflows/daily-pm-triage.yml`) runs the prompt at `docs/prompts/daily-pm-triage.md` to label new issues, strip bracket prefixes, dedup bot-filed bugs, close finished epics, and post a rolling daily report.
 
+**Manual engineer dispatch:** if a ready issue has not yet been picked up by the hourly engineer-dispatch routine and you want it worked on now, comment `/dispatch-engineer` on it (maintainers only) or run the `Dispatch engineer on issue` workflow from the Actions tab with the issue number. The same readiness gates as the hourly run apply — see `docs/prompts/dispatch-engineer-on-issue.md`.
+
 ## Questions?
 
 Open an issue. We're pre-1.0, so preferences and defaults are still moving.
