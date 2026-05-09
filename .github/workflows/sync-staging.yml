@@ -7,6 +7,11 @@
 # Uses the admin bypass on the staging ruleset to push directly.
 # Does NOT trigger if the push to main came from the promotion PR
 # (detected by commit message) to avoid infinite loops.
+#
+# If the trivial merge hits conflicts, the workflow invokes Claude to attempt
+# resolution following docs/prompts/pr-resolve-conflicts.md. Only if Claude
+# cannot resolve — or pushes a fix that doesn't actually catch staging up to
+# main — does it escalate to a human.
 
 name: Sync staging with main
 
@@ -16,7 +21,10 @@ on:
       - main
 
 permissions:
-  contents: write  # push to staging via admin bypass
+  contents: write        # push to staging via admin bypass
+  pull-requests: write   # comment on the open promotion PR, if any
+  issues: write          # create the escalation issue
+  id-token: write        # required by claude-code-action@v1
 
 concurrency:
   group: sync-staging
@@ -25,14 +33,14 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     # Skip if this push came from the promotion PR merge (avoid loops)
     if: "!contains(github.event.head_commit.message, 'promote staging to main')"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: staging
           fetch-depth: 0
 
       - name: Configure git identity
@@ -43,8 +51,7 @@ jobs:
       - name: Check if staging needs sync
         id: check
         run: |
-          git fetch origin staging
-          # Check if main has commits not on staging
+          git fetch origin main staging
           BEHIND=$(git rev-list --count origin/staging..origin/main)
           echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
 
@@ -57,8 +64,83 @@ jobs:
           git merge origin/main --no-edit
           git push origin staging
 
-      - name: Escalate if merge failed
+      # --- Conflict path: reset, let Claude resolve, verify, escalate if needed ---
+
+      - name: Reset working tree for Claude
         if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure'
+        run: |
+          git merge --abort || true
+          git reset --hard origin/staging
+
+      - name: Setup pnpm
+        if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure'
+        run: pnpm install --frozen-lockfile
+
+      - name: Attempt conflict resolution with Claude
+        if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure'
+        id: resolve
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            A direct push to main triggered the sync-staging workflow, which
+            tried to merge main into staging and hit conflicts.
+
+            Context:
+            - Source branch: main
+            - Target branch: staging (currently checked out at origin/staging,
+              clean working tree)
+            - There is no PR — this is a direct branch sync.
+
+            Read docs/prompts/pr-resolve-conflicts.md and follow the
+            methodology for resolving conflicts. Adaptations for this
+            non-PR context:
+
+            - In Step 1, run `git merge origin/main` (treat main as the
+              base_ref).
+            - Skip the PR-comment steps (Step 6 and the comment in the
+              needs-human path) — there is no PR. If you find an open
+              staging→main promotion PR, you may post the summary there;
+              otherwise say nothing.
+            - Use commit message:
+              `chore: sync main into staging (auto-resolved conflicts)`
+            - Push to `staging`. NEVER push to main.
+            - If the conflict is genuinely ambiguous or fits the
+              needs-human criteria from the prompt, run `git merge --abort`
+              and exit non-zero. The workflow will escalate to a human.
+          claude_args: "--max-turns 100"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify staging caught up to main
+        if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure' && steps.resolve.outcome == 'success'
+        id: verify
+        continue-on-error: true
+        run: |
+          git fetch origin main staging
+          BEHIND=$(git rev-list --count origin/staging..origin/main)
+          if [ "$BEHIND" != "0" ]; then
+            echo "staging still behind main by $BEHIND commits after Claude run"
+            exit 1
+          fi
+
+      - name: Escalate if merge failed
+        if: >-
+          steps.check.outputs.behind != '0' &&
+          steps.merge.outcome == 'failure' &&
+          (steps.resolve.outcome != 'success' || steps.verify.outcome != 'success')
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -74,8 +156,9 @@ jobs:
             const body = [
               '## ⚠️ Staging sync failed',
               '',
-              'A direct-to-main merge could not be automatically synced to staging ',
-              'due to merge conflicts.',
+              'A direct-to-main merge could not be automatically synced to staging.',
+              'Both the trivial merge and the Claude-assisted conflict resolution',
+              'either hit a needs-human case or did not leave staging caught up to main.',
               '',
               '**Action needed:** @danielsperoni please merge main into staging manually:',
               '```bash',
