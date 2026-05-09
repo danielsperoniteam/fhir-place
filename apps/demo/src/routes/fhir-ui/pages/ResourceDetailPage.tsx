@@ -19,8 +19,27 @@ import { patientFieldOptions } from "../../../patientFields.js";
 
 const PATIENT_FIELDS_KEY = "fhir-place-demo-patient-detail-fields";
 
+// Stored XSS in the JSON viewer (issue #360): the highlighter output below
+// is fed into `dangerouslySetInnerHTML`, so any FHIR data containing `<`,
+// `>`, or `&` (e.g. a Patient's `text.div` carrying `<img src=x onerror=...>`)
+// used to execute attacker JS in the viewer's origin and could exfiltrate
+// the bearer tokens we cache in localStorage. Escape every line BEFORE
+// running the highlight regexes. We deliberately do not escape `"` or `'`
+// — they are harmless in HTML text-content position (the highlighter writes
+// its spans there, never into attribute values) and leaving them alone keeps
+// the existing token regexes working unchanged.
+const HTML_ESCAPE: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+};
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>]/g, (c) => HTML_ESCAPE[c] ?? c);
+}
+
 function colorJson(line: string): string {
-  return line
+  return escapeHtml(line)
     .replace(
       /("(?:[^"\\]|\\.)*")(\s*:)/g,
       `<span style="color:var(--accent-text)">$1</span>$2`,
@@ -431,6 +450,7 @@ export function ResourceDetailPage() {
             {/* JSON content */}
             {(rightPane === "json" || rightPane === "formatted") && (
               <div
+                data-testid="resource-json"
                 style={{
                   flex: 1,
                   overflow: "auto",
