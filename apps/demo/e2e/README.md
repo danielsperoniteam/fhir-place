@@ -22,6 +22,7 @@ server backed by the in-browser MSW mock, so no live FHIR server is needed.
 | `delete-error.spec.ts` | Delete failure shows an inline error (not an uncaught exception) |
 | `missing-resource.spec.ts` | Navigating to a missing resource ID shows a not-found state |
 | `allergy-intolerance-patient-filter.spec.ts` | AllergyIntolerance list is filtered to the current patient compartment |
+| `docs.spec.ts` | `/docs` redirects to default doc, sidebar TOC renders, slug deep-links work, unknown slug shows not-found, sidebar Docs button navigates |
 
 ### Live-site monitor (`../e2e-live/`)
 

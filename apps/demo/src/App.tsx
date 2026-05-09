@@ -15,6 +15,8 @@ import { ResourceListPage } from "./routes/fhir-ui/pages/ResourceListPage.js";
 import { ResourceTypePickerPage } from "./routes/fhir-ui/pages/ResourceTypePickerPage.js";
 import { SettingsPage } from "./routes/fhir-ui/pages/SettingsPage.js";
 import { CqlRunnerPage } from "./routes/cql-runner/CqlRunnerPage.js";
+import { DocsPage } from "./routes/docs/DocsPage.js";
+import { DEFAULT_DOC_SLUG } from "./routes/docs/manifest.js";
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -100,6 +102,8 @@ function Shell() {
           <SentryRoutes>
             <Route path="/" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
             <Route path="/cql-runner" element={<CqlRunnerPage />} />
+            <Route path="/docs" element={<RedirectWithQuery to={`/docs/${DEFAULT_DOC_SLUG}`} />} />
+            <Route path="/docs/:slug" element={<DocsPage />} />
             <Route path="/fhir-ui" element={<RedirectWithQuery to="/fhir-ui/Patient" />} />
             <Route path="/fhir-ui/ask" element={<AskPage />} />
             <Route path="/fhir-ui/failure-gallery" element={<FailureGalleryPage />} />
