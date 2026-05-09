@@ -27,7 +27,7 @@ import { ALL_TASKS, TASKS_BY_ID } from "./tasks/index.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const SMART_FHIR_BASE = "https://r4.smarthealthit.org";
-const DEFAULT_BASE_URL = "https://samsuffolksperoni.github.io/fhir-place/";
+const DEFAULT_BASE_URL = "https://danielsperoniteam.github.io/fhir-place/";
 
 /**
  * Mirror of `apps/demo/src/config.ts` BUILTIN_SERVERS, kept inline so the
