@@ -135,6 +135,25 @@ export async function runAgent(
     for (const use of toolUses) {
       const input = (use.input ?? {}) as Record<string, unknown>;
 
+      if (terminal) {
+        // report_outcome already fired this turn. Anthropic requires a
+        // tool_result for every tool_use we acknowledge, so reply with a
+        // skip notice and record the skipped call so the trace is honest.
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: use.id,
+          content: "Skipped: report_outcome already called; run is terminal.",
+        });
+        steps.push({
+          index: steps.length,
+          toolName: use.name,
+          input,
+          output: { ok: false, error: "skipped: post-report_outcome" },
+          durationMs: 0,
+        });
+        continue;
+      }
+
       if (use.name === "report_outcome") {
         outcome = {
           status: input.status as OutcomeStatus,

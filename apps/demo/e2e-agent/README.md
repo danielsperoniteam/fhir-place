@@ -8,8 +8,9 @@ runtime model, intentionally not folded into the same reporter.
 
 This phase is the minimum loop end-to-end:
 - Anthropic tool-use agent (Sonnet 4.6) drives Playwright in-process.
-- Targets the deployed Pages demo, pinned to the **SMART Health IT R4** server
-  via a localStorage init script.
+- Targets the deployed Pages demo. The active FHIR server defaults to
+  **SMART Health IT R4** but follows `--fhir-base` / `LIVE_FHIR_BASE_URL`,
+  selected via a localStorage init script.
 - One hand-written task. No judge, no LLM-generated tasks, no CI.
 
 ## Run it
@@ -26,8 +27,12 @@ LIVE_SITE_BASE_URL=http://localhost:5173 pnpm --filter @fhir-place/demo agent:ru
 Reports land in `e2e-agent/results/<runId>/report.json` with screenshots in
 `screenshots/`. The directory is gitignored.
 
-Exit code: `0` if the agent reported `success`, `1` otherwise (`blocked`,
-`bug-suspected`, or any ceiling tripped).
+Exit codes:
+- `0` — agent reported `success`
+- `1` — agent reported anything else (`blocked`, `bug-suspected`, ceiling tripped)
+- `2` — bad CLI args or missing API key
+- `75` — FHIR server unreachable (`EX_TEMPFAIL`); lets callers tell an infra
+  outage apart from an agent verdict.
 
 ## Ceilings
 

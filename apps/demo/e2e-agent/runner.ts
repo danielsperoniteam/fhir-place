@@ -3,12 +3,16 @@
  *
  *   tsx e2e-agent/runner.ts --task=find-allergies
  *
- * Boots a Chromium browser, points the deployed demo at the SMART Health IT
- * R4 server (via localStorage init), runs the agent loop, then writes a JSON
- * report + screenshots to `e2e-agent/results/<runId>/`.
+ * Boots a Chromium browser, points the deployed demo at the FHIR server
+ * resolved from --fhir-base / LIVE_FHIR_BASE_URL (defaults to SMART Health
+ * IT R4) via a localStorage init script, runs the agent loop, then writes a
+ * JSON report + screenshots to `e2e-agent/results/<runId>/`.
  *
- * Phase-1 scope: no judge, no triage layer, no CI. Exit code is 0 if the
- * agent reported `success`, 1 otherwise.
+ * Phase-1 scope: no judge, no triage layer, no CI. Exit codes:
+ *   0  agent reported success
+ *   1  agent reported anything else (failure / blocked / error)
+ *   2  bad CLI args or missing API key
+ *  75  FHIR server unreachable (EX_TEMPFAIL) — distinguishes infra blip
  */
 
 import { chromium } from "@playwright/test";
@@ -24,6 +28,59 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const SMART_FHIR_BASE = "https://r4.smarthealthit.org";
 const DEFAULT_BASE_URL = "https://samsuffolksperoni.github.io/fhir-place/";
+
+/**
+ * Mirror of `apps/demo/src/config.ts` BUILTIN_SERVERS, kept inline so the
+ * runner can map --fhir-base to the right `activeServerId` without importing
+ * Vite-flavored app code. Keep in sync if the app gains new built-ins.
+ */
+const BUILTIN_SERVER_IDS_BY_BASE_URL: Readonly<Record<string, string>> = {
+  "https://r4.smarthealthit.org": "builtin-smart",
+  "https://hapi.fhir.org/baseR4": "builtin-hapi",
+  "https://server.fire.ly": "builtin-firely",
+  "https://test.fhir.org/r4": "builtin-fhir-test",
+};
+
+const AGENT_CUSTOM_SERVER_ID = "agent-custom";
+
+const normalizeBaseUrl = (url: string): string =>
+  url.trim().replace(/\/+$/, "").toLowerCase();
+
+interface ServerSeed {
+  activeServerId: string;
+  customServer: {
+    id: string;
+    label: string;
+    baseUrl: string;
+    authMode: "none";
+    builtin: false;
+  } | null;
+}
+
+function buildServerSeed(fhirBaseUrl: string): ServerSeed {
+  const normalized = normalizeBaseUrl(fhirBaseUrl);
+  for (const [url, id] of Object.entries(BUILTIN_SERVER_IDS_BY_BASE_URL)) {
+    if (normalizeBaseUrl(url) === normalized) {
+      return { activeServerId: id, customServer: null };
+    }
+  }
+  let host = fhirBaseUrl;
+  try {
+    host = new URL(fhirBaseUrl).host;
+  } catch {
+    // Use raw URL as label fallback.
+  }
+  return {
+    activeServerId: AGENT_CUSTOM_SERVER_ID,
+    customServer: {
+      id: AGENT_CUSTOM_SERVER_ID,
+      label: `Agent override (${host})`,
+      baseUrl: fhirBaseUrl,
+      authMode: "none",
+      builtin: false,
+    },
+  };
+}
 
 interface CliArgs {
   taskId: string;
@@ -97,8 +154,10 @@ async function main() {
 
   const reachable = await checkFhirReachable(cli.fhirBaseUrl);
   if (!reachable) {
-    console.warn(`SMART FHIR server unreachable at ${cli.fhirBaseUrl} — skipping run.`);
-    process.exit(0);
+    // Use exit code 75 (EX_TEMPFAIL) so callers can tell an infra-side outage
+    // apart from an agent verdict (success=0, failure=1, bad-args=2).
+    console.warn(`FHIR server unreachable at ${cli.fhirBaseUrl} — skipping run.`);
+    process.exit(75);
   }
 
   const runId = `${task.id}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -112,16 +171,41 @@ async function main() {
     baseURL: cli.baseUrl,
   });
 
-  // Pin the SMART server before any app code runs.
+  // Pin the active FHIR server before any app code runs. If --fhir-base
+  // points at a known built-in, just select it; otherwise seed a custom
+  // entry in the servers list and select that.
+  const seed = buildServerSeed(cli.fhirBaseUrl);
   await context.addInitScript(
-    ({ activeServerId }: { activeServerId: string }) => {
+    ({ activeServerId, customServer }) => {
       try {
         window.localStorage.setItem("fhir-place:active-server", activeServerId);
+        if (customServer) {
+          const raw = window.localStorage.getItem("fhir-place:servers");
+          let servers: unknown[] = [];
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) servers = parsed;
+            } catch {
+              servers = [];
+            }
+          }
+          const others = servers.filter(
+            (s) =>
+              !s ||
+              typeof s !== "object" ||
+              (s as { id?: unknown }).id !== customServer.id,
+          );
+          window.localStorage.setItem(
+            "fhir-place:servers",
+            JSON.stringify([...others, customServer]),
+          );
+        }
       } catch {
         // localStorage unavailable; the app falls back to the first built-in.
       }
     },
-    { activeServerId: "builtin-smart" },
+    { activeServerId: seed.activeServerId, customServer: seed.customServer },
   );
 
   const page = await context.newPage();
@@ -157,7 +241,7 @@ async function main() {
   };
 
   // Land on the app root before the agent takes over so the localStorage
-  // init script has run and the SMART server is active.
+  // init script has run and the configured FHIR server is active.
   await page.goto("./", { waitUntil: "domcontentloaded" });
 
   const startedAt = new Date();
