@@ -479,6 +479,7 @@ export function ResourceListPage() {
 
         {layout === "table" && (
           <ColumnPicker
+            key={resourceType}
             options={tableColumns}
             selected={columns}
             defaultSelected={defaultVisibleColumns}
