@@ -1,0 +1,46 @@
+# Re-trigger Codex review when a PR head changes.
+#
+# Codex (chatgpt-codex-connector) reviews on PR open and on `@codex review`,
+# but does not re-run on push. When an author addresses Codex feedback and
+# pushes a fix, Codex is silent until someone manually pings it. This
+# workflow closes that loop: on every PR `synchronize` it posts an
+# `@codex review` comment, debounced by a 30s wait + concurrency
+# cancellation so a rapid-fire push only produces one re-review.
+#
+# Why a small debounce: a fix is often 2-3 quick commits. We want one
+# Codex re-review for the final state, not three for intermediate states.
+# `cancel-in-progress: true` cancels the prior wait when a new push lands;
+# only the last sync survives the wait and posts the comment.
+
+name: Codex re-review on PR sync
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: codex-on-pr-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  rereview:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Debounce — wait for rapid follow-up pushes
+        run: sleep 30
+
+      - name: Post @codex review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: '@codex review',
+            });
