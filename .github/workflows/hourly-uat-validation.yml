@@ -29,13 +29,6 @@ on:
   # schedule:
   #   - cron: "15 * * * *"   # :15 of every hour, offset from engineer-dispatch (:05)
   workflow_dispatch:
-  # Also trigger on PR push so an author who fixes UAT-feedback gets the
-  # validator re-walking within minutes instead of within an hour. The
-  # prompt's SHA-marker dedupe (`<!-- uat-validation:run sha=... -->`)
-  # makes repeat triggers cheap — only PRs whose head SHA changed are
-  # actually re-walked.
-  pull_request:
-    types: [synchronize, ready_for_review, opened]
 
 permissions:
   contents: read         # read prompt file from the checkout
