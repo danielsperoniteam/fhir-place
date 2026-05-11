@@ -74,8 +74,11 @@ export function ColumnPicker({
     return defaultSelected ?? options.map((o) => o.path);
   });
 
-  // Hydration effect: if the persisted value loaded asynchronously (e.g. SSR
-  // hydration where window isn't available on first render), reconcile once.
+  // Sync the parent with our resolved initial selection on mount. Without
+  // this, an uncontrolled picker mounted after a resource-type change (e.g.
+  // SPA nav Patient → AllergyIntolerance keyed by `resourceType`) would show
+  // the new type's defaults checked while the parent still holds the previous
+  // type's `columns` state — and the table would render the wrong columns.
   const hydratedRef = useRef(false);
   useEffect(() => {
     if (isControlled || hydratedRef.current) return;
@@ -84,6 +87,8 @@ export function ColumnPicker({
     if (persisted && persisted.length > 0) {
       setInternalSelected(persisted);
       onChange(persisted);
+    } else {
+      onChange(internalSelected);
     }
     // Run once on mount; storageKey / validPaths changes do not retrigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps

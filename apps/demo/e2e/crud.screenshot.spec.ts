@@ -14,8 +14,8 @@ test.describe("CRUD flows", () => {
     await search.getByRole("textbox", { name: "given" }).fill("Alan");
     await search.getByRole("button", { name: "Search" }).click();
 
-    await expect(page.getByTestId("patient-row")).toHaveCount(1);
-    await expect(page.getByTestId("patient-row")).toContainText("Alan Mathison Turing");
+    await expect(page.getByTestId("resource-row")).toHaveCount(1);
+    await expect(page.getByTestId("resource-row")).toContainText("Alan Mathison Turing");
 
     await page.screenshot({
       path: "../../screenshots/05-search-by-gender.png",
@@ -25,7 +25,7 @@ test.describe("CRUD flows", () => {
     // Clear and verify full page comes back.
     await search.getByRole("button", { name: "Clear" }).click();
     await search.getByRole("button", { name: "Search" }).click();
-    await expect(page.getByTestId("patient-row")).toHaveCount(20);
+    await expect(page.getByTestId("resource-row")).toHaveCount(20);
   });
 
   test("create → edit → delete a patient end-to-end", async ({ page }) => {

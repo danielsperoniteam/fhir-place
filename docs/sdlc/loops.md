@@ -30,6 +30,8 @@ prompt: |
            │
 on demand: ─── Daily doc sync          (workflow_dispatch only)
 on push:   ─── Pages deploy            (push to main or staging)
+on push:   ─── Promote staging         (push to staging → opens/updates promotion PR)
+on push:   ─── Sync staging            (push to main → merges main back into staging)
 on /resolve-conflicts: ─ PR conflict resolver
 ```
 
@@ -165,7 +167,52 @@ Node version requirement; missing app READMEs. If anything has drifted,
 the agent opens a `docs/auto-sync-<date>` branch with a small commit and
 a PR targeting `main`. Markdown-only, so CI is fast.
 
-## The two event-driven workflows
+## The three event-driven workflows
+
+### Promote staging — automated promotion PR
+
+- **Workflow:** [`promote-staging.yml`](../../.github/workflows/promote-staging.yml)
+- **Trigger:** `push` to `staging`.
+- **Concurrency group:** `promote-staging` (`cancel-in-progress: true`)
+- **Permissions:** `contents: read`, `pull-requests: write`, `issues: read`
+- **Agent involvement:** none — deterministic `github-script`.
+
+When code lands on `staging`, this workflow opens (or updates) a single
+long-lived PR targeting `main`. The PR body aggregates UAT steps from
+every PR merged into staging since the last promotion, giving a reviewer
+a single checklist to validate against the deployed `/staging/` URL.
+
+The PR is assigned to `@danielsperoni`. Items flagged with
+`status: needs-human` are called out at the top of the body. Once
+someone independently confirms the UAT steps pass and no regressions
+exist, they approve and merge — which triggers Pages to rebuild `/`.
+
+**Automatic conflict resolution:** after creating/updating the PR, the
+workflow checks mergeable state. If conflicts exist, it invokes Claude
+with the same `pr-resolve-conflicts.md` prompt to attempt resolution.
+If resolution fails, it labels the PR `status: needs-human`, posts an
+escalation comment mentioning `@danielsperoni`, and requests review.
+The `/resolve-conflicts` command remains available for manual retries.
+
+If the PR already exists (from a prior staging push), only the body is
+updated. When it's merged, the next staging push creates a fresh one.
+
+### Sync staging — reverse sync after direct-to-main merges
+
+- **Workflow:** [`sync-staging.yml`](../../.github/workflows/sync-staging.yml)
+- **Trigger:** `push` to `main` (skipped if the commit message contains
+  "promote staging to main" to avoid infinite loops).
+- **Concurrency group:** `sync-staging` (`cancel-in-progress: true`)
+- **Permissions:** `contents: write`
+- **Agent involvement:** none — deterministic git merge.
+
+When a PR merges directly to `main` (skipping the staging UAT loop),
+this workflow merges main back into staging so it doesn't fall behind.
+Uses the admin bypass on the staging ruleset to push directly.
+
+If the merge has conflicts it cannot resolve, it escalates to
+`@danielsperoni` by commenting on the open promotion PR or filing a new
+issue with `status: needs-human`.
 
 ### Live site monitor — nightly regression
 

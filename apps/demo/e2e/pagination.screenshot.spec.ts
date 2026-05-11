@@ -5,7 +5,7 @@ test.describe("Patient index pagination (#15)", () => {
     page,
   }) => {
     await page.goto("/Patient");
-    const rows = page.getByTestId("patient-row");
+    const rows = page.getByTestId("resource-row");
     await expect(rows).toHaveCount(20); // first page: _count=20 of 36
 
     const loadMore = page.getByTestId("load-more");
@@ -37,7 +37,7 @@ test.describe("Patient index pagination (#15)", () => {
     // last row.
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/Patient");
-    const rows = page.getByTestId("patient-row");
+    const rows = page.getByTestId("resource-row");
     await expect(rows).toHaveCount(20);
 
     await page.getByTestId("load-more").click();
@@ -49,7 +49,7 @@ test.describe("Patient index pagination (#15)", () => {
       const main = document.querySelector("main") as HTMLElement;
       main.scrollTop = main.scrollHeight;
       const rows = document.querySelectorAll<HTMLElement>(
-        '[data-testid="patient-row"]',
+        '[data-testid="resource-row"]',
       );
       const last = rows[rows.length - 1];
       const rect = last.getBoundingClientRect();
@@ -64,9 +64,16 @@ test.describe("Patient index pagination (#15)", () => {
     await search.getByRole("textbox", { name: "family" }).fill("Nguyen");
     await search.getByRole("button", { name: "Search" }).click();
 
-    const rows = page.getByTestId("patient-row");
+    const rows = page.getByTestId("resource-row");
     // Filtered down below one-page threshold — no Load more.
     await expect(rows.first()).toBeVisible();
     await expect(page.getByTestId("load-more")).not.toBeVisible();
+  });
+
+  test("Larger page-size options (500, 1000) are available", async ({ page }) => {
+    await page.goto("/Patient");
+    await page.getByTestId("page-size-picker").click();
+    await expect(page.getByTestId("page-size-option-500")).toBeVisible();
+    await expect(page.getByTestId("page-size-option-1000")).toBeVisible();
   });
 });

@@ -19,8 +19,25 @@ import { patientFieldOptions } from "../../../patientFields.js";
 
 const PATIENT_FIELDS_KEY = "fhir-place-demo-patient-detail-fields";
 
-function colorJson(line: string): string {
-  return line
+// HTML-escape FHIR-supplied JSON before token-coloring so a malicious
+// `text.div` (or any string containing `<`, `>`, `&`) cannot inject
+// markup via `dangerouslySetInnerHTML` below. JSON.stringify only
+// escapes `"` and `\` (not the angle brackets that XHTML narrative
+// requires), so without this step a payload like
+// `<img src=x onerror=alert(1)>` lands in the live DOM. See #360.
+//
+// We deliberately leave `"` and `'` alone so the JSON-token regexes
+// below still match — the matched `$1` is rendered as element text
+// content, not as an attribute value, so unescaped quotes are inert.
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+};
+const escapeHtml = (s: string): string => s.replace(/[&<>]/g, (c) => HTML_ESCAPES[c]!);
+
+export function colorJson(line: string): string {
+  return escapeHtml(line)
     .replace(
       /("(?:[^"\\]|\\.)*")(\s*:)/g,
       `<span style="color:var(--accent-text)">$1</span>$2`,
@@ -431,6 +448,7 @@ export function ResourceDetailPage() {
             {/* JSON content */}
             {(rightPane === "json" || rightPane === "formatted") && (
               <div
+                data-testid="resource-json"
                 style={{
                   flex: 1,
                   overflow: "auto",

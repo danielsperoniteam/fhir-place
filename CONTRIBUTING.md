@@ -33,7 +33,8 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 
 ## Shipping a PR
 
-1. Branch off `main`.
+1. Branch off `main`. (See "Staging deploys" below for the staging-promote
+   step you do before review.)
 2. Write the code + tests. Match the existing style (`tsc --strict`, Vitest, MSW for HTTP mocking). Every library-level change should have unit-test coverage; behaviour that touches real servers should also have an integration test in `packages/react-fhir/integration/`.
 3. **Add a changeset** if your PR changes `@fhir-place/react-fhir`:
    ```bash
@@ -54,21 +55,35 @@ several PRs work together before they hit production.
 
 **Flow:**
 
-1. Open every PR — human or agent — with `base: staging`. `staging` has no
-   branch protection so a human can merge as soon as CI is green and the
-   review is done.
-2. The Pages workflow rebuilds both branches on every push; wait for the
-   staging build to be green before declaring a change ready for UAT.
-3. Walk the PR's **UAT on live staging** steps against the live
-   `/fhir-place/staging/` URL. If anything is off, fix on a follow-up PR
-   (still targeting `staging`).
-4. When the combined state on staging looks right, fast-forward `main` to
-   `staging` (or open a `staging -> main` PR). That promotes everything
-   that's been UAT'd, together, to production.
+1. Open every PR — human or agent — with `base: main`. The PR diff is
+   reviewed against main; merging to main is the final step.
+2. **Promote the PR branch to `staging` before review.** Agents do this
+   automatically (see `.claude/agents/engineer.md` step 11). Humans
+   should do it by hand:
+   ```bash
+   git fetch origin staging
+   git checkout -B staging-promote origin/staging
+   git merge --no-ff --no-edit <your-branch>
+   git push origin staging-promote:staging
+   ```
+   The push to `staging` must be fast-forward or a no-ff merge —
+   never force-push. If it conflicts, resolve on staging by hand or
+   leave staging alone and note it on the PR.
+3. The Pages workflow rebuilds both branches on every push; wait for
+   the staging build to be green before declaring a change ready for
+   UAT.
+4. Walk the PR's **UAT on live staging** steps against the live
+   `/fhir-place/staging/` URL. If anything is off, fix on a follow-up
+   PR and re-promote.
+5. When UAT passes, merge the PR to `main`. The change is already on
+   staging from step 2, so /staging/ stays in sync; periodically
+   fast-forward `staging` back to `main` once the queue of in-flight
+   PRs has drained, to keep the two branches from diverging long-term.
 
-**Agents always target `staging`.** See `.claude/agents/engineer.md` and
-`AGENTS.md`. Every agent-authored PR must include a UAT section with
-concrete copy-pasteable steps for the live staging URL.
+**Agents always promote to staging themselves.** See
+`.claude/agents/engineer.md` and `AGENTS.md`. Every agent-authored PR
+must include a UAT section with concrete copy-pasteable steps for the
+live staging URL.
 
 ## Bump conventions
 
@@ -86,6 +101,19 @@ Keep these in mind when making changes:
 - **Server-agnostic.** Every feature flows through the `FhirClient` interface. No direct `fetch` calls outside `FetchFhirClient`.
 - **Safe by default.** Only `<Narrative>` gets to render HTML. Every other component uses React's default escaping.
 - **Escape hatches.** If something's hard-coded, provide a prop to override it. `renderers` / `inputs` / `cellRenderers` exist for a reason.
+
+## `dangerouslySetInnerHTML` is forbidden without documented sanitization
+
+FHIR data is attacker-controlled. Any FHIR resource the viewer fetches can carry `<`, `>`, or `&` (a `text.div` narrative is a *required* element on most resources), and `JSON.stringify` does not escape those characters. Passing FHIR-derived strings — or anything derived from them — into `dangerouslySetInnerHTML` is a stored-XSS sink. See #360 for the bug this rule was written for.
+
+Rules:
+
+- **Default: don't use it.** React's default text rendering escapes everything; that is what the JSON viewer, the structured detail walker, and every other display component must rely on.
+- **If you genuinely need it,** the input must be either:
+  1. constant markup the repo controls (no FHIR data, no user input), or
+  2. run through a sanitizer with a tight allow-list (`DOMPurify` is the dependency of choice if you need one).
+- **Document why.** Every remaining `dangerouslySetInnerHTML` in the codebase must have a comment immediately above it stating the sanitization story — what input it accepts, what trusts it, and why it's safe. PR reviewers should treat an undocumented sink as a blocker.
+- **No exceptions for syntax highlighting.** If you're tempted to build HTML strings out of FHIR content for highlighting / pretty-printing, escape the content first (`& < >` is the minimum) or render the spans as React elements instead.
 
 ## Writing tests
 
@@ -118,6 +146,8 @@ GitHub Issues are the canonical backlog (see `docs/decisions/0001-use-github-iss
 **Renaming `apps/demo/`:** the directory and package will move to `apps/fhir-explorer/` (`@fhir-place/fhir-explorer`). Until that lands, code paths still say `demo`; the label and conversational name is `fhir-explorer`.
 
 **Automation:** the canonical label set is managed by `scripts/sync-labels.mjs` and re-applied on every push to `main` via `.github/workflows/sync-labels.yml`. A daily cron (`.github/workflows/daily-pm-triage.yml`) runs the prompt at `docs/prompts/daily-pm-triage.md` to label new issues, strip bracket prefixes, dedup bot-filed bugs, close finished epics, and post a rolling daily report.
+
+**Manual engineer dispatch:** to put an issue in front of the engineer subagent immediately, comment `/dispatch-engineer` on it (maintainers only) or run the `Dispatch engineer on issue` workflow from the Actions tab with the issue number. Unlike the hourly run, manual dispatch skips the readiness gates — you're trusted to know the issue is ready. The `status: agent-paused` kill switch and the `status: in-progress` lock still apply. See `docs/prompts/dispatch-engineer-on-issue.md`.
 
 ## Questions?
 

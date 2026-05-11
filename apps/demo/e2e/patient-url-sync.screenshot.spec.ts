@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test.describe("Patient list — URL sync", () => {
   test.beforeEach(async ({ page }) => {
-    // Reset the layout/columns localStorage so the list view (with its
-    // search form) is the default and tests are deterministic.
+    // Reset the layout/columns localStorage so the table view is the
+    // default and tests are deterministic.
     await page.addInitScript(() => {
       window.localStorage.removeItem("fhir-place-demo-patient-layout");
       window.localStorage.removeItem("fhir-place-demo-patient-columns");
@@ -17,14 +17,14 @@ test.describe("Patient list — URL sync", () => {
     await search.getByRole("button", { name: /search/i }).click();
     await expect(page).toHaveURL(/\?given=Alan/);
     // Filter applied — exactly one synthetic match.
-    await expect(page.getByTestId("patient-row")).toHaveCount(1);
+    await expect(page.getByTestId("resource-row")).toHaveCount(1);
   });
 
   test("loading a URL with filters pre-fills the form and applies the filter", async ({
     page,
   }) => {
     await page.goto("/Patient?given=Alan");
-    await expect(page.getByTestId("patient-row")).toHaveCount(1);
+    await expect(page.getByTestId("resource-row")).toHaveCount(1);
     await expect(
       page.getByTestId("resource-search").getByRole("textbox", { name: "given" }),
     ).toHaveValue("Alan");
@@ -42,5 +42,12 @@ test.describe("Patient list — URL sync", () => {
       .click();
     await expect(page).toHaveURL(/\?given=Alan/);
     await expect(page).not.toHaveURL(/_count=/);
+  });
+
+  test("does not expose the unfinished saved-query action", async ({ page }) => {
+    await page.goto("/Patient");
+
+    const toolbar = page.getByTestId("search-params-toolbar");
+    await expect(toolbar.getByRole("button", { name: "Save query" })).toHaveCount(0);
   });
 });

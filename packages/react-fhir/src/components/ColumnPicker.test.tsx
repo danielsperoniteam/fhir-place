@@ -121,6 +121,36 @@ describe("ColumnPicker", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Birth Date"));
   });
 
+  it("syncs the parent with its initial selection on mount (no localStorage)", () => {
+    const onChange = vi.fn();
+    render(
+      <ColumnPicker
+        options={options}
+        defaultSelected={["name", "gender"]}
+        onChange={onChange}
+        storageKey="patients-columns"
+      />,
+    );
+    expect(onChange).toHaveBeenCalledWith(["name", "gender"]);
+  });
+
+  it("syncs the parent with the persisted selection on mount", () => {
+    window.localStorage.setItem(
+      "patients-columns",
+      JSON.stringify(["birthDate"]),
+    );
+    const onChange = vi.fn();
+    render(
+      <ColumnPicker
+        options={options}
+        defaultSelected={["name", "gender"]}
+        onChange={onChange}
+        storageKey="patients-columns"
+      />,
+    );
+    expect(onChange).toHaveBeenCalledWith(["birthDate"]);
+  });
+
   it("respects the controlled `selected` prop", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

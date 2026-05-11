@@ -44,7 +44,7 @@ test.describe("Delete failure handling", () => {
       );
     });
 
-    await page.getByTestId("patient-row").first().click();
+    await page.getByTestId("resource-row").first().click();
     await page.getByTestId("delete-resource").click();
     await expect(page.getByTestId("delete-confirm")).toBeVisible();
     await page.getByTestId("delete-confirm-button").click();

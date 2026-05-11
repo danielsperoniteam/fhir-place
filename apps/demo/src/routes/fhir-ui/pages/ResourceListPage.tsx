@@ -18,14 +18,13 @@ import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { loadAnthropicApiKey } from "../../../config.js";
 import {
   RESOURCE_LIST_CONFIG,
-  genericFormatMeta,
   genericFormatPrimary,
   isTopResourceType,
   type ResourceListColumn,
   type ResourceListConfig,
 } from "../../../resourceListConfig.js";
 
-type Layout = "list" | "table" | "json";
+type Layout = "table" | "json";
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500, 1000] as const;
 const DEFAULT_PAGE_SIZE = 20;
 const pageSizeStorageKey = "fhir-place-demo-page-size";
@@ -62,10 +61,10 @@ const readPersistedColumns = (rt: string): string[] | null => {
 
 const readLayout = (rt: string, scoped: boolean): Layout => {
   if (scoped) return "table";
-  if (typeof window === "undefined") return "list";
+  if (typeof window === "undefined") return "table";
   const v = window.localStorage.getItem(layoutKey(rt));
-  if (v === "table" || v === "json" || v === "list") return v;
-  return "list";
+  if (v === "table" || v === "json") return v;
+  return "table";
 };
 
 const labelFromPath = (path: string): string => {
@@ -147,7 +146,6 @@ export function ResourceListPage() {
     ? RESOURCE_LIST_CONFIG[resourceType]
     : undefined;
   const formatPrimary = config?.formatPrimary ?? genericFormatPrimary;
-  const formatMeta = config?.formatMeta ?? genericFormatMeta;
 
   const [layout, setLayout] = useState<Layout>(() =>
     readLayout(resourceType, Boolean(patientId)),
@@ -355,6 +353,7 @@ export function ResourceListPage() {
           }}
         >
           <div
+            data-testid="search-params-toolbar"
             style={{
               display: "flex",
               alignItems: "center",
@@ -375,7 +374,6 @@ export function ResourceListPage() {
               Search params
             </span>
             <div style={{ flex: 1 }} />
-            <button style={{ ...ccBtn("ghost"), fontSize: 12 }}>Save query</button>
             <button style={{ ...ccBtn("secondary"), fontSize: 12 }}>Clear</button>
           </div>
 
@@ -427,8 +425,8 @@ export function ResourceListPage() {
             border: "1px solid var(--border)",
           }}
         >
-          {(["list", "table", "json"] as const).map((l) => {
-            const labels: Record<string, string> = { list: "List", table: "Table", json: "JSON" };
+          {(["table", "json"] as const).map((l) => {
+            const labels: Record<string, string> = { table: "Table", json: "JSON" };
             const active = layout === l;
             return (
               <button
@@ -479,6 +477,7 @@ export function ResourceListPage() {
 
         {layout === "table" && (
           <ColumnPicker
+            key={resourceType}
             options={tableColumns}
             selected={columns}
             defaultSelected={defaultVisibleColumns}
@@ -541,15 +540,6 @@ export function ResourceListPage() {
               {JSON.stringify(resources, null, 2)}
             </pre>
           </div>
-        ) : layout === "list" ? (
-          <ResourceList
-            resources={resources}
-            resourceType={resourceType}
-            singular={singular}
-            formatPrimary={formatPrimary}
-            formatMeta={formatMeta}
-            isLoading={isLoading}
-          />
         ) : resources.length > 0 ? (
           <div
             style={{
@@ -716,96 +706,6 @@ function PageSizePicker({ value, onChange }: PageSizePickerProps) {
             </button>
           ))}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─── List view ────────────────────────────────────────────────────────────────
-
-interface ResourceListProps {
-  resources: Resource[];
-  resourceType: string;
-  singular: string;
-  formatPrimary: (resource: Resource) => string;
-  formatMeta?: (resource: Resource) => Array<string | undefined | null>;
-  isLoading: boolean;
-}
-
-function ResourceList({
-  resources,
-  resourceType,
-  singular,
-  formatPrimary,
-  formatMeta,
-  isLoading,
-}: ResourceListProps) {
-  const rowTestId = `${resourceType.toLowerCase()}-row`;
-
-  return (
-    <div
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        overflow: "hidden",
-      }}
-    >
-      {resources.map((r, i) => {
-        const meta = formatMeta?.(r).filter((v): v is string => Boolean(v)) ?? [];
-        return (
-          <Link
-            key={r.id}
-            to={`/fhir-ui/${resourceType}/${r.id}`}
-            data-testid={rowTestId}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              padding: "10px 16px",
-              borderBottom:
-                i < resources.length - 1 ? "1px solid var(--border)" : "none",
-              textDecoration: "none",
-              color: "var(--text)",
-              transition: "background 80ms ease",
-            }}
-            onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLAnchorElement).style.background = "var(--sunken)")
-            }
-            onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")
-            }
-          >
-            <span style={{ fontSize: 13, fontWeight: 500 }}>{formatPrimary(r)}</span>
-            <span
-              style={{
-                fontSize: 12,
-                color: "var(--text-muted)",
-                fontFamily: CC_MONO,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {meta.length > 0 ? `${meta.join(" · ")} · ` : ""}
-              {r.id}
-            </span>
-            {resourceType === "Patient" && r.id && (
-              <PatientRowCounts patientId={r.id} />
-            )}
-          </Link>
-        );
-      })}
-      {!isLoading && resources.length === 0 && (
-        <p
-          style={{
-            padding: "24px 16px",
-            textAlign: "center",
-            fontSize: 13,
-            color: "var(--text-muted)",
-          }}
-        >
-          No {singular} records match.
-        </p>
       )}
     </div>
   );

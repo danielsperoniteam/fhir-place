@@ -1,0 +1,14 @@
+{
+  "_comment": "Fixture: patient with no AllergyIntolerance resources. Used by the Failure Gallery to demonstrate the no-allergy-data partial-response case.",
+  "resourceType": "Bundle",
+  "id": "allergy-empty-bundle",
+  "type": "searchset",
+  "total": 0,
+  "link": [
+    {
+      "relation": "self",
+      "url": "https://r4.smarthealthit.org/AllergyIntolerance?patient=no-allergy-patient-001"
+    }
+  ],
+  "entry": []
+}

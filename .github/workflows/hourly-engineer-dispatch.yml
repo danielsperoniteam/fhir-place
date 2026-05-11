@@ -16,17 +16,20 @@
 #      to the right human reviewer.
 #   4. Open one tracking issue manually titled exactly
 #      `Engineer dispatch — hourly report`. The bot will populate it.
-#   5. Merge this workflow with cron commented out (manual-only). After
-#      5–10 successful manual runs, uncomment cron in a follow-up PR.
+#   5. Cron is enabled at a daily cadence (15:05 UTC = 11:05 ET) so runs
+#      land inside Daniel's work day. workflow_dispatch is preserved for
+#      manual triggers. Despite the name, this workflow is daily — the
+#      file/prompt rename is a separate follow-up.
 
 name: Hourly engineer dispatch
 
 on:
-  # Cron is intentionally commented out for the first week — manual-only
-  # via workflow_dispatch. Enable in a follow-up PR after observing
-  # several manual runs.
-  # schedule:
-  #   - cron: "5 * * * *"   # :05 of every hour
+  # Daily cadence (not hourly, despite the workflow name). 15:05 UTC =
+  # 11:05 ET, inside Daniel's work day so he can see runs land.
+  # workflow_dispatch is preserved alongside the schedule so manual
+  # triggers still work.
+  schedule:
+    - cron: "5 15 * * *"   # 11:05 ET, daily
   workflow_dispatch:
 
 permissions:
@@ -79,6 +82,30 @@ jobs:
           # subagent invocation needs more turns than the PM routine. Cap
           # at 300 — the workflow timeout-minutes is the real wall-clock
           # bound; this just prevents pathological loops from racing it.
-          claude_args: "--max-turns 300"
+          #
+          # --allowedTools: the action's default tool set is conservative
+          # and excludes Bash, Edit, Write, and Agent. Without this flag
+          # the dispatcher cannot spawn the engineer subagent or do any
+          # of its git/PR work — every call returns a permission denial
+          # (run 25584355918 hit 8 denials and accomplished nothing).
+          # Mirrors the local driver at scripts/dispatch-engineer.sh
+          # (line 68). Verified flag spelling against the action's docs
+          # at docs/configuration.md (camelCase, not --allowed-tools).
+          # Defense in depth: the engineer subagent enforces its own
+          # hard rules; this just bounds what a prompt-injected
+          # dispatcher can call.
+          #
+          # --disallowedTools: AskUserQuestion has no responder in a
+          # headless workflow — both prior manual runs (May 8 + May 9)
+          # terminated as no-ops because the model called it to
+          # disambiguate between the `mcp__github__*` and `gh`-via-Bash
+          # paths and got no answer. ExitPlanMode is a similar dead-end
+          # here. The dispatcher prompt's hard-rules section also tells
+          # the agent never to call these (defense in depth in case the
+          # flag spelling changes upstream).
+          claude_args: "--max-turns 300 --allowedTools Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__* --disallowedTools AskUserQuestion,ExitPlanMode"
+          # Temporary: show full output until 5–10 successful manual runs
+          # (per workflow's own setup notes). Remove once cron is enabled.
+          show_full_output: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

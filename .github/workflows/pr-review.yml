@@ -1,0 +1,107 @@
+# Runs the engineer review prompt whenever a PR opens or moves from
+# draft to ready-for-review. Mirrors issue-review.yml but with a
+# diff-aware brief and a single (engineer) reviewer — PM-level
+# product framing is settled at the issue stage by issue-review.yml,
+# so PR-time review is purely about code correctness.
+#
+# See docs/prompts/pr-review.md for what the agent does.
+#
+# Setup required (one-time):
+#   1. ANTHROPIC_API_KEY already exists in repo secrets (used by every
+#      Claude workflow). No new secret to add.
+#   2. The reviewer subagent at .claude/agents/senior-fhir-engineer.md
+#      must exist.
+#
+# Security:
+#   - Author-association gate skips PRs from forks / first-time
+#     contributors. Without this, anyone could open a PR from a fork
+#     and burn ANTHROPIC_API_KEY tokens. OWNER, MEMBER, COLLABORATOR
+#     can trigger; everyone else is silently skipped.
+#   - Review-only: no `contents: write`. The orchestrator's allowed
+#     tools list excludes Edit/Write/Bash, so even under prompt
+#     injection it cannot modify the repo.
+
+name: PR review (engineer)
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+  # Manual re-run for a specific PR, e.g. when the workflow was added
+  # after the PR was already open, or to retry after a transient
+  # failure.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to review"
+        required: true
+        type: string
+
+permissions:
+  pull-requests: write  # post review comments
+  contents: read        # read prompt and agent files plus the diff
+  id-token: write       # required by claude-code-action@v1
+
+concurrency:
+  # Per-PR: never run two reviews on the same PR at once, but
+  # different PRs can review in parallel.
+  group: pr-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+    steps:
+      - id: check
+        env:
+          ASSOC: ${{ github.event.pull_request.author_association }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          # workflow_dispatch is gated by GitHub itself (write-access
+          # users only). For pull_request events we re-check the
+          # author's association so a fork PR doesn't burn tokens.
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$ASSOC" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "allowed=true"  >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "allowed=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::Skipping PR review — author_association=$ASSOC is not OWNER/MEMBER/COLLABORATOR." ;;
+          esac
+
+  review:
+    needs: gate
+    if: needs.gate.outputs.allowed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Claude Code with the pr-review prompt
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Read the file at docs/prompts/pr-review.md and execute
+            the instructions in it for PR #${{ github.event.pull_request.number || inputs.pr_number }}.
+            Do not modify the prompt file. Do not push, branch, or
+            edit any source. The MCP github tools are configured and
+            the senior-fhir-engineer subagent at .claude/agents/ is
+            available for dispatch via the Agent tool.
+          # --max-turns 40: read PR + diff, single subagent call,
+          # post one review. 40 leaves headroom for retries.
+          # --allowedTools: deliberately excludes Edit, Write, and
+          # general Bash. The single Bash exception is `gh pr review`
+          # so the orchestrator can post a REQUEST_CHANGES review
+          # (which gates merge) or a plain COMMENT review (advisory)
+          # depending on the subagent's verdict. The subagent
+          # inherits the allow-list, so it cannot edit or shell out
+          # either.
+          claude_args: "--max-turns 40 --allowedTools Read,Grep,Glob,Agent,mcp__github__*,Bash(gh pr review:*)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -51,6 +51,7 @@ export function CCSidebar() {
   const isAsk = location.pathname === "/fhir-ui/ask";
   const isCql = location.pathname === "/cql-runner";
   const isGallery = location.pathname === "/fhir-ui/failure-gallery";
+  const isDocs = location.pathname.startsWith("/docs");
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -514,6 +515,30 @@ export function CCSidebar() {
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3.5 4.5L1 7l2.5 2.5M10.5 4.5L13 7l-2.5 2.5M8 2l-2 10" />
+          </svg>
+        </button>
+        {/* Docs */}
+        <button
+          onClick={() => navigate("/docs")}
+          title="Docs"
+          data-testid="docs-nav"
+          style={{
+            background: isDocs ? "var(--accent-soft)" : "transparent",
+            border: "none",
+            borderRadius: 6,
+            padding: "4px 5px",
+            cursor: "pointer",
+            color: isDocs ? "var(--accent-text)" : "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2.5 2h6.5l3 3v7H2.5z" />
+            <path d="M9 2v3h3" />
+            <path d="M4.5 7.5h5M4.5 9.5h5M4.5 5.5h2" />
           </svg>
         </button>
         {/* Failure Gallery */}

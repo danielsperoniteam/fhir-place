@@ -54,4 +54,42 @@ test.describe("patient list — table view + column picker", () => {
     await page.reload();
     await expect(page.getByTestId("resource-table")).toBeVisible();
   });
+
+  // Regression for the "missing columns" bug: SPA-navigating from one
+  // resource type's table view to another's would leak the previous type's
+  // column selection into the picker, leaving only the common `id` column
+  // visible. After a layout toggle the picker re-mounted with the new
+  // type's defaults checked while the parent still rendered just `id` —
+  // a visible state divergence between picker UI and the table.
+  test("SPA-navigating between resource types resets columns to the new type's defaults", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("fhir-place-demo-patient-layout", "table");
+      localStorage.setItem("fhir-place-demo-allergyintolerance-layout", "table");
+    });
+
+    await page.goto("/fhir-ui/Patient");
+    await expect(page.getByTestId("resource-table")).toBeVisible();
+
+    // SPA nav (no full reload) to AllergyIntolerance.
+    await page.evaluate(() => {
+      window.history.pushState({}, "", "/fhir-ui/AllergyIntolerance");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await expect(page.getByRole("columnheader", { name: /^status$/i })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /^code$/i })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /^reaction$/i })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /^id$/i })).toHaveCount(0);
+
+    // The picker UI must agree with what the table renders.
+    await page.getByRole("button", { name: /columns/i }).click();
+    await expect(page.getByRole("checkbox", { name: /^status$/i })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /^code$/i })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /^reaction$/i })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /^id$/i })).not.toBeChecked();
+  });
 });

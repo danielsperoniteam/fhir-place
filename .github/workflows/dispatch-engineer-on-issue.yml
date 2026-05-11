@@ -1,0 +1,157 @@
+# Manually dispatches the engineer subagent on a single issue. Two triggers:
+#
+#   1. A maintainer comments `/dispatch-engineer` on the issue.
+#   2. A maintainer runs this workflow from the Actions tab with the issue
+#      number as input.
+#
+# This is the manual-trigger counterpart to the hourly engineer-dispatch
+# routine (`.github/workflows/hourly-engineer-dispatch.yml`). It targets
+# one specific issue and intentionally **skips the readiness gates** — the
+# human triggering it already decided the issue is ready. The kill switch
+# (`status: agent-paused` on the tracking issue) and the in-progress lock
+# still apply.
+#
+# Slash command:
+#   - Trigger:       Issue comment containing `/dispatch-engineer`
+#   - Security gate: commenter must have OWNER, MEMBER, or COLLABORATOR association
+#   - Scope:         issues only (not PRs) — PR comments are ignored
+#
+# Manual run:
+#   - Trigger:       workflow_dispatch with `issue_number` input
+#   - Security gate: GitHub already restricts workflow_dispatch to write-access
+#                    users; no extra check needed
+#
+# Setup required (one-time):
+#   1. ANTHROPIC_API_KEY must already exist in repo secrets (shared with the
+#      hourly dispatch and other Claude workflows — no new secret needed).
+#   2. Branch protection on `main` is the same as for hourly dispatch:
+#        - PR before merge
+#        - Required status checks: test, e2e
+#        - Block force-push and deletion
+#      The agent only opens drafts; humans approve and merge.
+
+name: Dispatch engineer on issue
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to dispatch the engineer subagent on."
+        required: true
+        type: string
+
+permissions:
+  contents: write       # push bot/* branches only — main is protected
+  issues: write         # claim labels, comment on issues
+  pull-requests: write  # open and comment on draft PRs (NOT merge)
+  id-token: write       # required by claude-code-action@v1
+
+concurrency:
+  # Per-issue concurrency: a second dispatch on the same issue waits for
+  # the first to finish. Different issues run in parallel.
+  group: dispatch-engineer-on-issue-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # Two acceptance paths:
+    #   - workflow_dispatch (always allowed; GitHub gates on repo write access)
+    #   - issue_comment from a trusted author with the slash command on a
+    #     real issue (not a PR comment)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request == null &&
+        contains(github.event.comment.body, '/dispatch-engineer') &&
+        (
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 45    # 1 ticket × ~25 min budget + overhead
+
+    steps:
+      - name: Resolve trigger metadata
+        id: trigger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const isComment = context.eventName === 'issue_comment';
+            const issueNumber = isComment
+              ? context.payload.issue.number
+              : context.payload.inputs.issue_number;
+            const triggeredBy = isComment
+              ? context.payload.comment.user.login
+              : context.actor;
+            const sourceUrl = isComment
+              ? context.payload.comment.html_url
+              : `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            core.setOutput('issue_number', issueNumber);
+            core.setOutput('triggered_by', triggeredBy);
+            core.setOutput('source_url', sourceUrl);
+            core.setOutput('source_kind', isComment ? 'slash command' : 'manual workflow_dispatch');
+
+      - name: Acknowledge slash command
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes'
+            });
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed for git worktree from inside the action
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Claude Code with the manual-dispatch prompt
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Mirrors the hourly dispatch shape: tell Claude to read the prompt
+          # file rather than slurping it into a workflow input. The prompt
+          # orchestrates only; the engineer subagent does all editing under
+          # its own hard rules (defense in depth).
+          prompt: |
+            A maintainer asked to dispatch the engineer subagent on a single
+            issue.
+
+            Context:
+            - Issue number: ${{ steps.trigger.outputs.issue_number }}
+            - Triggered by: @${{ steps.trigger.outputs.triggered_by }}
+            - Source:       ${{ steps.trigger.outputs.source_kind }}
+            - Source URL:   ${{ steps.trigger.outputs.source_url }}
+
+            Read the file at docs/prompts/dispatch-engineer-on-issue.md and
+            execute the instructions in it. Do not modify the prompt file
+            itself. The MCP github tools are already configured and the
+            engineer subagent at .claude/agents/engineer.md is available for
+            dispatch.
+          # Same budget as hourly dispatch, scaled for one ticket. The
+          # workflow timeout-minutes is the real wall-clock bound; this just
+          # prevents pathological loops from racing it.
+          claude_args: "--max-turns 200 --allowedTools Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*"
+          show_full_output: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -31,14 +31,14 @@ test("home redirects to Patient list and renders", async ({ page }) => {
 test("Patient list shows at least one row", async ({ page }) => {
   await page.goto("./#/Patient");
   await expect(page.getByRole("heading", { name: /patients/i })).toBeVisible();
-  const rows = page.getByTestId("patient-row");
+  const rows = page.getByTestId("resource-row");
   await expect(rows.first()).toBeVisible({ timeout: 30_000 });
   expect(await rows.count()).toBeGreaterThan(0);
 });
 
 test("Patient detail page renders without an error wall", async ({ page }) => {
   await page.goto("./#/Patient");
-  const firstRow = page.getByTestId("patient-row").first();
+  const firstRow = page.getByTestId("resource-row").first();
   await expect(firstRow).toBeVisible({ timeout: 30_000 });
   await firstRow.click();
 
@@ -53,7 +53,7 @@ test("Patient detail page renders without an error wall", async ({ page }) => {
 
 test("Patient detail shows compartment chips", async ({ page }) => {
   await page.goto("./#/Patient");
-  await page.getByTestId("patient-row").first().click();
+  await page.getByTestId("resource-row").first().click();
   // The chip nav is rendered for every Patient detail page (counts may be 0).
   await expect(page.getByTestId("compartment-links")).toBeVisible({
     timeout: 30_000,

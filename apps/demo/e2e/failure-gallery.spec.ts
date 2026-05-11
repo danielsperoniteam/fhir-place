@@ -38,6 +38,7 @@ test.describe("Failure Gallery page", () => {
 
     const evidence = page.getByTestId("gallery-evidence-no-allergy-data");
     await expect(evidence).toBeVisible();
+    await expect(evidence).toContainText("mocks/allergy-empty-bundle.json");
   });
 
   test("missing-lab case renders with CANNOT DETERMINE badge and response", async ({ page }) => {

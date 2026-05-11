@@ -26,8 +26,9 @@ rolling tracking issue so the audit trail is in GitHub itself.
 | File | Covers |
 | --- | --- |
 | [`agents.md`](./agents.md) | The eight agent personas, what each is allowed to do, and which workflows invoke them. |
-| [`loops.md`](./loops.md) | The five recurring loops + two event-driven workflows, their cadence, and their concurrency model. |
+| [`loops.md`](./loops.md) | The five recurring loops + four event-driven workflows, their cadence, and their concurrency model. |
 | [`lifecycle.md`](./lifecycle.md) | End-to-end journey of one ticket: issue → triage → branch → PR → staging UAT → merge → deploy → live monitor. |
+| [`branch-protection.md`](./branch-protection.md) | Rulesets for `main` and `staging` — merge queue, required checks, and how they interact with the promotion workflow. |
 | [`safety.md`](./safety.md) | Hard rules, blast-radius caps, dedupe markers, the kill switch, and the deny-list. |
 | [`gaps.md`](./gaps.md) | What isn't yet wired up — single-issue gaps and bigger themes (agentic users, feature flags), each annotated with a proposed `human-review-needed: low/medium/high` level. |
 

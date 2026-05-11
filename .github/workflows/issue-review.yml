@@ -1,0 +1,75 @@
+# Runs the PM + engineer review prompt whenever a new issue is filed.
+# See docs/prompts/issue-review.md for what the agent does.
+#
+# Setup required (one-time):
+#   1. ANTHROPIC_API_KEY already exists in repo secrets (used by the PM
+#      and engineer-dispatch workflows). No new secret to add.
+#   2. The reviewer subagents at .claude/agents/health-tech-pm.md and
+#      .claude/agents/senior-fhir-engineer.md must exist.
+#
+# This is review-only — the workflow has no `contents: write` and the
+# orchestrator's allowed-tools list excludes Edit/Write/Bash, so even
+# under prompt injection it cannot modify the repo.
+
+name: Issue review (PM + engineer)
+
+on:
+  issues:
+    types: [opened]
+  # Manual re-run for a specific issue, e.g. when the workflow is first
+  # enabled or when an earlier run failed and should be retried.
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to review"
+        required: true
+        type: string
+
+permissions:
+  issues: write       # post review comments
+  contents: read      # read prompt and agent files
+  id-token: write     # required by claude-code-action@v1
+
+concurrency:
+  # Per-issue: never run two reviews on the same issue at once, but
+  # different issues can review in parallel.
+  group: issue-review-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Claude Code with the issue-review prompt
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Tell Claude to read the prompt file rather than inlining the
+          # whole thing — keeps the prompt in version control as a
+          # readable markdown file (mirrors daily-pm-triage and
+          # hourly-engineer-dispatch).
+          prompt: |
+            Read the file at docs/prompts/issue-review.md and execute
+            the instructions in it for issue #${{ github.event.issue.number || inputs.issue_number }}.
+            Do not modify the prompt file. Do not open a branch or PR.
+            The MCP github tools are already configured and the
+            health-tech-pm and senior-fhir-engineer subagents at
+            .claude/agents/ are available for dispatch via the Agent
+            tool.
+          # --max-turns 60: orchestration is small (read issue, two
+          # parallel subagent calls, two comment posts). 60 leaves
+          # headroom for retries without risking runaway loops.
+          # --allowedTools: deliberately excludes Edit, Write, and Bash.
+          # The orchestrator does not need to modify the repo, and the
+          # subagents' frontmatter Edit/Write/Bash tools are gated by
+          # this allow-list too — so a prompt-injected issue body
+          # cannot cause file edits via either path. Agent is required
+          # so the orchestrator can dispatch the two reviewer
+          # subagents.
+          claude_args: "--max-turns 60 --allowedTools Read,Grep,Glob,Agent,mcp__github__*"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

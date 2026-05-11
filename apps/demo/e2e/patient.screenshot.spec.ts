@@ -4,7 +4,7 @@ test.describe("fhir-place demo", () => {
   test("patient list renders and filters by name", async ({ page }) => {
     await page.goto("/Patient");
     await expect(page.getByRole("heading", { name: /patients/i })).toBeVisible();
-    const rows = page.getByTestId("patient-row");
+    const rows = page.getByTestId("resource-row");
     // With fixture pagination: first page shows 20 of 36 synthetic patients.
     await expect(rows).toHaveCount(20);
     await expect(rows).toContainText(["Ada Lovelace", "Alan Mathison Turing"]);
@@ -30,7 +30,10 @@ test.describe("fhir-place demo", () => {
     page,
   }) => {
     await page.goto("/Patient");
-    await page.getByRole("link", { name: /ada lovelace/i }).click();
+    await page
+      .getByTestId("resource-row")
+      .filter({ hasText: /ada lovelace/i })
+      .click();
 
     await expect(page).toHaveURL(/\/Patient\/ada/);
     const view = page.getByTestId("resource-view");

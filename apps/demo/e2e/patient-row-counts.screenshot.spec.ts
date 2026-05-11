@@ -9,7 +9,7 @@ test.describe("Patient list row counts", () => {
     // counts per fixtures.ts: Conditions 2, MedicationRequests 2,
     // AllergyIntolerance 1, Observations 3, Procedures 1, Encounters 2,
     // Immunizations 1.
-    const adaRow = page.getByTestId("patient-row").filter({ hasText: "Ada Lovelace" });
+    const adaRow = page.getByTestId("resource-row").filter({ hasText: "Ada Lovelace" });
     const counts = adaRow.getByTestId("patient-row-counts");
     await expect(counts).toBeVisible();
     await expect(counts).toContainText(/Cond\s+2/);

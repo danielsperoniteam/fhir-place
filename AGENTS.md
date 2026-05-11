@@ -51,13 +51,23 @@ When asked to do a QA pass on the demo app:
 
 ## Staging-first deploys
 
-- Branch off `origin/staging`, not `origin/main`.
-- Open every PR with `base: staging`. Humans promote `staging` → `main`
-  after live UAT — agents never target `main` directly.
+- Branch off `origin/main` (so the PR diff against main is clean —
+  no in-flight work from other tickets).
+- Open every PR with `base: main`. Then **promote your branch to
+  `staging` yourself** so UAT can run *before* the human merges to main:
+  ```bash
+  git fetch origin staging
+  git checkout -B staging-promote origin/staging
+  git merge --no-ff --no-edit bot/issue-<N>-<slug>
+  git push origin staging-promote:staging
+  ```
+  The push to `staging` must be fast-forward or a no-ff merge commit —
+  never `--force`. If the merge conflicts, abort, leave staging alone,
+  and note on the PR that staging promotion needs a human.
 - Every PR body must include a **UAT on live staging** section with
   concrete steps a human or downstream agent can run against
-  `https://danielsperoniteam.github.io/fhir-place/staging/` once the
-  change is merged and Pages has redeployed. If you cannot articulate
+  `https://danielsperoniteam.github.io/fhir-place/staging/` once your
+  staging push lands and Pages redeploys. If you cannot articulate
   those steps, the change is not ready.
 - The Pages workflow rebuilds both branches on every push; staging's
   build going green is part of "done."

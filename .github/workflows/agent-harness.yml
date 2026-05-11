@@ -1,0 +1,87 @@
+name: LLM agent harness
+
+# Manual-dispatch run of the Phase-1 LLM-agent harness against the deployed
+# demo. Picks a random task by default, or a specific one via the `task`
+# input. Uploads the run report + screenshots as an artifact. Phase 1: no
+# cron, no issue filer — exists so we can watch a few runs and measure the
+# noise floor before automating either.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Task id to run (or 'random'). See apps/demo/e2e-agent/tasks/."
+        required: false
+        default: random
+        type: string
+      max_steps:
+        description: "Max tool-use steps per task."
+        required: false
+        default: "25"
+        type: string
+      wallclock_ms:
+        description: "Wallclock ceiling per task, in milliseconds."
+        required: false
+        default: "90000"
+        type: string
+      cost_ceiling_usd:
+        description: "Estimated cost ceiling per task, in USD."
+        required: false
+        default: "0.25"
+        type: string
+      model:
+        description: "Anthropic model id."
+        required: false
+        default: claude-sonnet-4-6
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-harness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @fhir-place/demo exec playwright install --with-deps chromium
+
+      - name: Run agent harness
+        id: agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pnpm --filter @fhir-place/demo agent:run \
+            --task=${{ inputs.task }} \
+            --model=${{ inputs.model }} \
+            --max-steps=${{ inputs.max_steps }} \
+            --wallclock-ms=${{ inputs.wallclock_ms }} \
+            --cost-ceiling=${{ inputs.cost_ceiling_usd }}
+        continue-on-error: true
+
+      - name: Upload run results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-harness-${{ github.run_id }}
+          path: apps/demo/e2e-agent/results
+          if-no-files-found: warn
+
+      - name: Surface agent exit status
+        if: steps.agent.outcome == 'failure'
+        run: |
+          echo "Agent did not report 'success'. See the uploaded artifact for the report and screenshots."
+          exit 1
