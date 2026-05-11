@@ -89,6 +89,21 @@ the cadence; this doc is the path through the loops.
        new bot-filed issues → next morning's PM triage
 ```
 
+## Sprint board column mapping
+
+The [fhir-place sprint board](https://github.com/orgs/danielsperoniteam/projects/1) has six Status columns. Each lines up with stages in this lifecycle:
+
+| Column | Stage(s) | What lands here |
+| --- | --- | --- |
+| **Todo** | 1–2 | New issues, post-triage and not yet picked up. The "ready queue" lives here. |
+| **Blocked** | (sidetrack) | Carries the `status: blocked` label or otherwise stuck on an external dependency. |
+| **In progress** | 3–4 | An engineer (subagent or human) has the claim. `status: in-progress` is on the issue. |
+| **Ready for review** | 5–6 | Draft PR is open and either marked ready or still draft awaiting human review. |
+| **Ready for UAT** | 7–8 | PR has merged into `staging`. `/staging/` has been redeployed. Waiting for human UAT against the live staging URL. |
+| **Released** | 9–10 | Promoted from `staging` to `main`. Pages has redeployed the production slot. Post-deploy regression has run (or will, next nightly). |
+
+Transitions are driven by [`project-sync.yml`](../../.github/workflows/project-sync.yml) — it listens for issue/PR/push events and moves items between columns as items hit each stage. The workflow is the source of truth for column moves; if a state needs to change, change the trigger in the workflow, not the column manually.
+
 ## Stage-by-stage
 
 ### 1. Issue creation
