@@ -186,6 +186,10 @@ export function useValueSet(
   return useQuery({
     queryKey: fhirQueryKeys.valueSet(client?.baseUrl ?? "", url ?? ""),
     queryFn: async ({ signal }) => {
+      // tx.fhir.org currently emits browser-visible CORS failures for this
+      // core R4 ValueSet before we can fall back; use the bundled copy there.
+      const bundled = coreValueSet(url);
+      if (bundled && client?.baseUrl.includes("tx.fhir.org")) return bundled;
       // 1. $expand
       try {
         return await client!.request<ValueSet>({
@@ -208,7 +212,6 @@ export function useValueSet(
         // fall through
       }
       // 3. bundled fallback
-      const bundled = coreValueSet(url);
       if (bundled) return bundled;
       throw new Error(
         `ValueSet ${url} could not be resolved from this server and is not bundled in the library`,

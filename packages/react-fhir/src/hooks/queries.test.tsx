@@ -33,6 +33,7 @@ import {
 
 const BASE = "https://fhir.example.test/fhir";
 const TX_BASE = "https://tx.example.test/r4";
+const TX_FHIR_BASE = "https://tx.fhir.org/r4";
 const server = setupServer();
 
 beforeAll(() => {
@@ -249,7 +250,7 @@ describe("query hooks", () => {
 
   describe("useValueSet", () => {
     it("prefers the $expand operation and returns the expanded ValueSet", async () => {
-      const url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      const url = "http://example.org/fhir/ValueSet/server-expanded";
       server.use(
         http.get(`${BASE}/ValueSet/$expand`, ({ request }) => {
           expect(new URL(request.url).searchParams.get("url")).toBe(url);
@@ -274,8 +275,36 @@ describe("query hooks", () => {
       expect(result.current.data?.expansion?.contains).toHaveLength(2);
     });
 
+    it("returns bundled core ValueSets without making terminology requests", async () => {
+      const url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      const expand = vi.fn();
+      const search = vi.fn();
+      server.use(
+        http.get(`${TX_FHIR_BASE}/ValueSet/$expand`, () => {
+          expand();
+          return HttpResponse.json({ resourceType: "OperationOutcome" }, { status: 500 });
+        }),
+        http.get(`${TX_FHIR_BASE}/ValueSet`, () => {
+          search();
+          return HttpResponse.json({ resourceType: "Bundle", type: "searchset", entry: [] });
+        }),
+      );
+      const { wrapper } = mkWrapper({ terminologyBaseUrl: TX_FHIR_BASE });
+      const { result } = renderHook(() => useValueSet(url), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.url).toBe(url);
+      expect(result.current.data?.expansion?.contains?.map((c) => c.code)).toEqual([
+        "male",
+        "female",
+        "other",
+        "unknown",
+      ]);
+      expect(expand).not.toHaveBeenCalled();
+      expect(search).not.toHaveBeenCalled();
+    });
+
     it("falls back to ValueSet?url=... when $expand errors", async () => {
-      const url = "http://hl7.org/fhir/ValueSet/task-status";
+      const url = "http://example.org/fhir/ValueSet/search-only";
       server.use(
         http.get(`${BASE}/ValueSet/$expand`, () =>
           HttpResponse.json({ resourceType: "OperationOutcome" }, { status: 501 }),
@@ -315,7 +344,7 @@ describe("query hooks", () => {
     });
 
     it("strips a `|version` suffix before resolving against the server", async () => {
-      const base = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      const base = "http://example.org/fhir/ValueSet/versioned";
       let captured: string | null = null;
       server.use(
         http.get(`${BASE}/ValueSet/$expand`, ({ request }) => {
@@ -392,7 +421,7 @@ describe("query hooks", () => {
     });
 
     it("falls through to the data client when no terminology client is provided", async () => {
-      const url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      const url = "http://example.org/fhir/ValueSet/data-expanded";
       const dataExpand = vi.fn();
       server.use(
         http.get(`${BASE}/ValueSet/$expand`, () => {
@@ -416,7 +445,7 @@ describe("query hooks", () => {
     });
 
     it("scopes the query cache by the terminology client's baseUrl", async () => {
-      const url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+      const url = "http://example.org/fhir/ValueSet/tx-expanded";
       server.use(
         http.get(`${TX_BASE}/ValueSet/$expand`, () =>
           HttpResponse.json({
