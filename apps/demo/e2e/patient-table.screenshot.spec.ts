@@ -55,6 +55,31 @@ test.describe("patient list — table view + column picker", () => {
     await expect(page.getByTestId("resource-table")).toBeVisible();
   });
 
+  test("MedicationRequest table resolves medicationReference in Medication column", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.removeItem("fhir-place-demo-medicationrequest-layout");
+      localStorage.removeItem("fhir-place-demo-medicationrequest-columns");
+    });
+
+    await page.goto("/fhir-ui/MedicationRequest");
+    await page.getByTestId("layout-table").click();
+
+    const table = page.getByTestId("resource-table-table");
+    await expect(table).toBeVisible();
+    await expect(
+      table.getByRole("columnheader", { name: /^medication$/i }),
+    ).toBeVisible();
+
+    const referenceRow = table
+      .getByTestId("resource-row")
+      .filter({ hasText: "Sumatriptan 50 mg oral tablet" });
+    await expect(referenceRow).toBeVisible();
+    await expect(referenceRow.getByText("—")).toHaveCount(0);
+  });
+
   // Regression for the "missing columns" bug: SPA-navigating from one
   // resource type's table view to another's would leak the previous type's
   // column selection into the picker, leaving only the common `id` column

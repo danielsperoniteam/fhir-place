@@ -176,7 +176,10 @@ export const medicationRequestsFor = (patientId: string): MedicationRequest[] =>
       id: "mr-sum-ada",
       status: "completed",
       intent: "order",
-      medicationCodeableConcept: { text: "Sumatriptan 50 mg oral tablet" },
+      medicationReference: {
+        reference: "Medication/sumatriptan",
+        display: "Sumatriptan 50 mg oral tablet",
+      },
       subject: adaSubject,
       authoredOn: "2018-08-12T14:00:00Z",
     },
@@ -362,7 +365,7 @@ export const observationStructureDefinition: StructureDefinition = {
 
 const mkSd = (
   type: string,
-  elements: Array<{ path: string; short?: string; type?: string; array?: boolean }>,
+  elements: Array<{ path: string; short?: string; type?: string | string[]; array?: boolean }>,
 ): StructureDefinition => ({
   resourceType: "StructureDefinition",
   id: type,
@@ -383,7 +386,9 @@ const mkSd = (
         min: 0,
         max: e.array ? "*" : "1",
         ...(e.short ? { short: e.short } : {}),
-        ...(e.type ? { type: [{ code: e.type }] } : {}),
+        ...(e.type
+          ? { type: (Array.isArray(e.type) ? e.type : [e.type]).map((code) => ({ code })) }
+          : {}),
       })),
     ],
   },
@@ -396,13 +401,13 @@ export const compartmentStructureDefinitions: StructureDefinition[] = [
     { path: "verificationStatus", short: "unconfirmed | provisional | differential | confirmed | refuted | entered-in-error", type: "CodeableConcept" },
     { path: "code", short: "Identification of the condition", type: "CodeableConcept" },
     { path: "subject", short: "Who the condition is about", type: "Reference" },
-    { path: "onsetDateTime", short: "Estimated or actual date, date-time, or age", type: "dateTime" },
+    { path: "onset[x]", short: "Estimated or actual date, date-time, or age", type: ["dateTime", "Age", "Period", "Range", "string"] },
   ]),
   mkSd("MedicationRequest", [
     { path: "status", short: "active | on-hold | cancelled | completed | entered-in-error | stopped | draft | unknown", type: "code" },
     { path: "intent", short: "proposal | plan | order | original-order | reflex-order | filler-order | instance-order | option", type: "code" },
     { path: "priority", short: "routine | urgent | asap | stat", type: "code" },
-    { path: "medicationCodeableConcept", short: "Medication ordered", type: "CodeableConcept" },
+    { path: "medication[x]", short: "Medication ordered", type: ["CodeableConcept", "Reference"] },
     { path: "subject", short: "Who the medication is for", type: "Reference" },
     { path: "authoredOn", short: "When the request was initially authored", type: "dateTime" },
   ]),
@@ -417,7 +422,7 @@ export const compartmentStructureDefinitions: StructureDefinition[] = [
     { path: "status", short: "preparation | in-progress | not-done | on-hold | stopped | completed | entered-in-error | unknown", type: "code" },
     { path: "code", short: "Identification of the procedure", type: "CodeableConcept" },
     { path: "subject", short: "Who the procedure was performed on", type: "Reference" },
-    { path: "performedDateTime", short: "When the procedure was performed", type: "dateTime" },
+    { path: "performed[x]", short: "When the procedure was performed", type: ["dateTime", "Period", "string", "Age", "Range"] },
   ]),
   mkSd("Encounter", [
     { path: "status", short: "planned | arrived | triaged | in-progress | onleave | finished | cancelled | entered-in-error | unknown", type: "code" },
@@ -429,7 +434,7 @@ export const compartmentStructureDefinitions: StructureDefinition[] = [
     { path: "status", short: "completed | entered-in-error | not-done", type: "code" },
     { path: "vaccineCode", short: "Vaccine product administered", type: "CodeableConcept" },
     { path: "patient", short: "Who was immunised", type: "Reference" },
-    { path: "occurrenceDateTime", short: "When the vaccine was administered", type: "dateTime" },
+    { path: "occurrence[x]", short: "When the vaccine was administered", type: ["dateTime", "string"] },
   ]),
   mkSd("DiagnosticReport", [
     { path: "status", short: "registered | partial | preliminary | final | amended | corrected | appended | cancelled | entered-in-error | unknown", type: "code" },
