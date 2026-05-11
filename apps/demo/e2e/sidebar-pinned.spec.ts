@@ -66,6 +66,12 @@ test.describe("Sidebar Pinned section", () => {
     await expect(page.getByTestId("pinned-empty-state")).toBeVisible();
   });
 
+  test("topbar does not expose an inert History action", async ({ page }) => {
+    await expect(page.getByTestId("topbar-actions")).not.toContainText(
+      "History",
+    );
+  });
+
   test("clicking a pinned row navigates to its route", async ({ page }) => {
     await page.goto("/fhir-ui/Observation");
     await page.getByTestId("topbar-pin").click();

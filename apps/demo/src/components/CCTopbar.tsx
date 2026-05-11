@@ -120,7 +120,10 @@ export function CCTopbar() {
       <div style={{ flex: 1 }} />
 
       {/* Actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 6 }}
+        data-testid="topbar-actions"
+      >
         <button
           onClick={() => pinnable && togglePin(fullPath)}
           disabled={!pinnable}
@@ -143,12 +146,6 @@ export function CCTopbar() {
           title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
         >
           {theme === "light" ? <MoonIcon /> : <SunIcon />}
-        </button>
-        <button style={ccBtn("ghost")}>
-          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M2 4h10M2 7h10M2 10h6" />
-          </svg>
-          History
         </button>
         <Link
           to="/fhir-ui/settings"
