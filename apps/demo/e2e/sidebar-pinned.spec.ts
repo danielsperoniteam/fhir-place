@@ -80,4 +80,19 @@ test.describe("Sidebar Pinned section", () => {
     await section.getByText("Observation", { exact: true }).click();
     await expect(page).toHaveURL(/\/fhir-ui\/Observation$/);
   });
+
+  test("pinned rows are keyboard-focusable links", async ({ page }) => {
+    await page.goto("/fhir-ui/Observation");
+    await page.getByTestId("topbar-pin").click();
+
+    await page.goto("/fhir-ui/Patient");
+    const pinnedRow = page.getByTestId(/^pinned-row-/);
+    await expect(pinnedRow).toContainText("Observation");
+    await expect(pinnedRow).toHaveAttribute("href", /\/fhir-ui\/Observation$/);
+
+    await pinnedRow.focus();
+    await expect(pinnedRow).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/fhir-ui\/Observation$/);
+  });
 });

@@ -21,4 +21,25 @@ test.describe("Sidebar resource counts", () => {
     // resolving > 0, the total is non-zero and numeric.
     await expect(page.getByTestId("sidebar-count-all")).toHaveText(numeric);
   });
+
+  test("resource links are keyboard-focusable and navigate on Enter", async ({
+    page,
+  }) => {
+    await page.goto("/fhir-ui/Patient");
+
+    await page.getByTestId("jump-search-trigger").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("sidebar-link-Patient")).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    const allergyLink = page.getByTestId("sidebar-link-AllergyIntolerance");
+    await expect(allergyLink).toBeFocused();
+    await expect(allergyLink).toHaveAttribute(
+      "href",
+      /\/fhir-ui\/AllergyIntolerance$/,
+    );
+
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/fhir-ui\/AllergyIntolerance$/);
+  });
 });

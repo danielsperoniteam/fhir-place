@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { fhirQueryKeys, useFhirClient, type SearchParams } from "@fhir-place/react-fhir";
 import { useQueries } from "@tanstack/react-query";
 import type { Bundle, Resource } from "fhir/r4";
@@ -243,6 +243,7 @@ export function CCSidebar() {
         <div
           role="button"
           tabIndex={0}
+          data-testid="jump-search-trigger"
           onClick={() => setJumpOpen(true)}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setJumpOpen(true); }}
           style={{
@@ -316,9 +317,9 @@ export function CCSidebar() {
         {TOP_RESOURCE_TYPES.map((rt) => {
           const isActive = rt === activeType;
           return (
-            <div
+            <Link
               key={rt}
-              onClick={() => navigate(`/fhir-ui/${rt}`)}
+              to={`/fhir-ui/${rt}`}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -329,6 +330,7 @@ export function CCSidebar() {
                 color: isActive ? "var(--accent-text)" : "var(--text)",
                 cursor: "pointer",
                 marginBottom: 1,
+                textDecoration: "none",
                 transition: "background 80ms ease",
               }}
               data-testid={`sidebar-link-${rt}`}
@@ -351,7 +353,7 @@ export function CCSidebar() {
                 isActive={isActive}
                 testId={`sidebar-count-${rt}`}
               />
-            </div>
+            </Link>
           );
         })}
       </div>
@@ -392,10 +394,10 @@ export function CCSidebar() {
           pins.map((pin) => {
             const isActive = pin.path === `${location.pathname}${location.search}`;
             return (
-              <div
+              <Link
                 key={pin.id}
+                to={pin.path}
                 data-testid={`pinned-row-${pin.id}`}
-                onClick={() => navigate(pin.path)}
                 onContextMenu={(e) => handlePinContext(e, pin, renamePin, removePin)}
                 title="Right-click to rename or remove"
                 style={{
@@ -408,6 +410,7 @@ export function CCSidebar() {
                   color: isActive ? "var(--accent-text)" : "var(--text)",
                   cursor: "pointer",
                   marginBottom: 1,
+                  textDecoration: "none",
                   transition: "background 80ms ease",
                 }}
               >
@@ -437,7 +440,7 @@ export function CCSidebar() {
                 >
                   {pin.kind}
                 </span>
-              </div>
+              </Link>
             );
           })
         )}
