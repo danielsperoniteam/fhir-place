@@ -1,0 +1,52 @@
+# Arms auto-merge on any non-draft pull request targeting `staging`.
+#
+# Why: Staging's ruleset requires 0 approving reviews, so a PR can land
+# through the merge queue on green CI alone. But entering the queue
+# still requires someone to click "Enable auto-merge" or run
+# `gh pr merge --auto`. This workflow does that automatically — so the
+# only human action on the staging side is **marking the PR ready**
+# (or opening it ready-for-review). The queue handles everything else.
+#
+# Triggers:
+#   - pull_request: opened (non-draft) or ready_for_review or reopened
+#
+# Skips:
+#   - PRs that are still draft (those aren't ready to merge)
+#   - PRs not targeting `staging` (main-bound PRs go through their own
+#     human-approval path)
+#   - PRs from forks (the GITHUB_TOKEN can't act on fork PR refs the
+#     same way; the maintainer should arm manually after review)
+#
+# Auth: default GITHUB_TOKEN with `pull-requests: write` is enough to
+# enable auto-merge. No PAT needed.
+
+name: Auto-queue staging PRs
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+concurrency:
+  group: auto-queue-staging-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  arm:
+    if: >-
+      github.event.pull_request.base.ref == 'staging' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Enable auto-merge for #${{ github.event.pull_request.number }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --auto
