@@ -171,7 +171,8 @@ export function ResourceListPage() {
   const [draftParams, setDraftParams] = useState<SearchParams>(params);
   useEffect(() => setDraftParams(params), [params]);
   const formInitial = useMemo(() => formInitialFromUrl(searchParams), [searchParams]);
-  const formKey = searchParams.toString();
+  const [formResetVersion, setFormResetVersion] = useState(0);
+  const formKey = `${searchParams.toString()}:${formResetVersion}`;
 
   const {
     data,
@@ -264,6 +265,13 @@ export function ResourceListPage() {
       entries.unshift(["patient", patientId]);
     }
     setSearchParams(Object.fromEntries(entries), { replace: true });
+  };
+
+  const clearFilters = () => {
+    const next: Record<string, string> = patientId ? { patient: patientId } : {};
+    setDraftParams({ _count: pageSize, ...next });
+    setSearchParams(next, { replace: true });
+    setFormResetVersion((version) => version + 1);
   };
 
   const heading = patientId ? resourceType : config?.title ?? resourceType;
@@ -374,7 +382,14 @@ export function ResourceListPage() {
             </span>
             <div style={{ flex: 1 }} />
             <button style={{ ...ccBtn("ghost"), fontSize: 12 }}>Save query</button>
-            <button style={{ ...ccBtn("secondary"), fontSize: 12 }}>Clear</button>
+            <button
+              type="button"
+              data-testid="resource-list-clear"
+              onClick={clearFilters}
+              style={{ ...ccBtn("secondary"), fontSize: 12 }}
+            >
+              Clear
+            </button>
           </div>
 
           <ResourceSearch
@@ -710,4 +725,3 @@ function PageSizePicker({ value, onChange }: PageSizePickerProps) {
     </div>
   );
 }
-

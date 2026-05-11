@@ -43,4 +43,39 @@ test.describe("Patient list — URL sync", () => {
     await expect(page).toHaveURL(/\?given=Alan/);
     await expect(page).not.toHaveURL(/_count=/);
   });
+
+  test("list-page Clear empties a typed non-compartment search field", async ({
+    page,
+  }) => {
+    await page.goto("/Patient");
+
+    const given = page
+      .getByTestId("resource-search")
+      .getByRole("textbox", { name: "given" });
+    await given.fill("Alan");
+    await page.getByTestId("resource-list-clear").click();
+
+    await expect(given).toHaveValue("");
+    await expect(page).toHaveURL(/\/Patient$/);
+  });
+
+  test("list-page Clear preserves patient scope and removes other filters", async ({
+    page,
+  }) => {
+    await page.goto("/Condition?patient=ada");
+
+    const search = page.getByTestId("resource-search");
+    const clinicalStatus = search.getByRole("textbox", {
+      name: "clinical-status",
+    });
+    await clinicalStatus.fill("active");
+    await search.getByRole("button", { name: /search/i }).click();
+    await expect(page).toHaveURL(/patient=ada/);
+    await expect(page).toHaveURL(/clinical-status=active/);
+
+    await page.getByTestId("resource-list-clear").click();
+
+    await expect(clinicalStatus).toHaveValue("");
+    await expect(page).toHaveURL(/\/Condition\?patient=ada$/);
+  });
 });
