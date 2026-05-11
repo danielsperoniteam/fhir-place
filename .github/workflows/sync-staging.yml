@@ -1,17 +1,23 @@
 # Keeps staging up-to-date with main after direct-to-main merges.
 #
 # When someone merges a PR directly into main (skipping staging — e.g.,
-# docs-only or CI-only changes), this workflow fast-forwards or merges
-# main into staging so staging never falls behind.
+# docs-only or CI-only changes), this workflow opens a "chore: sync main
+# into staging" PR and arms it for auto-merge through the merge queue.
+# Staging's ruleset requires 0 approving reviews, so once test + e2e
+# pass on the merge commit the queue lands it without human action.
 #
-# Uses the admin bypass on the staging ruleset to push directly.
+# Why PR-based, not direct push: the staging ruleset blocks all
+# non-bypass direct pushes (including from github-actions[bot]), so a
+# `git push origin staging` from inside a workflow 422s. PRs are the
+# supported path for non-admin actors.
+#
 # Does NOT trigger if the push to main came from the promotion PR
 # (detected by commit message) to avoid infinite loops.
 #
 # If the trivial merge hits conflicts, the workflow invokes Claude to attempt
 # resolution following docs/prompts/pr-resolve-conflicts.md. Only if Claude
-# cannot resolve — or pushes a fix that doesn't actually catch staging up to
-# main — does it escalate to a human.
+# cannot resolve — or the PR doesn't actually catch staging up to main —
+# does it escalate to a human.
 
 name: Sync staging with main
 
@@ -55,14 +61,36 @@ jobs:
           BEHIND=$(git rev-list --count origin/staging..origin/main)
           echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
 
-      - name: Merge main into staging
+      # Create a branch from staging, merge main into it locally, push the
+      # branch, open a PR -> staging, arm auto-merge. Staging's ruleset
+      # requires 0 approving reviews, so once test+e2e pass the merge queue
+      # squashes it. Branch name is deterministic so re-runs update the
+      # same PR instead of opening a new one each push.
+      - name: Open sync PR + arm auto-merge
         if: steps.check.outputs.behind != '0'
         id: merge
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git checkout staging
-          git merge origin/main --no-edit
-          git push origin staging
+          BRANCH="chore/sync-main-into-staging"
+          git checkout -B "$BRANCH" origin/staging
+          if ! git merge origin/main --no-edit --no-ff -m "chore: sync main into staging"; then
+            echo "Trivial merge hit conflicts; will fall through to the Claude resolution path." >&2
+            exit 1
+          fi
+          git push --force-with-lease origin "$BRANCH"
+
+          # Reuse an open PR for this branch if one exists; otherwise open one.
+          PR_NUM=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$BRANCH" --base staging --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUM" ]; then
+            PR_NUM=$(gh pr create --repo "$GITHUB_REPOSITORY" --base staging --head "$BRANCH" \
+              --title "chore: sync main into staging" \
+              --body "Auto-opened by .github/workflows/sync-staging.yml after a direct-to-main commit. Staging requires 0 approving reviews, so the merge queue will pick this up once test + e2e go green." \
+              | grep -oE '[0-9]+$' | tail -1)
+          fi
+          echo "pr=$PR_NUM" >> "$GITHUB_OUTPUT"
+          gh pr merge "$PR_NUM" --repo "$GITHUB_REPOSITORY" --auto --squash
 
       # --- Conflict path: reset, let Claude resolve, verify, escalate if needed ---
 
@@ -95,28 +123,30 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            A direct push to main triggered the sync-staging workflow, which
-            tried to merge main into staging and hit conflicts.
+            A direct push to main triggered the sync-staging workflow.
+            The trivial `git merge origin/main` into the sync branch hit
+            conflicts. Resolve them on a sync branch and push it; the
+            workflow's next step will open / update the PR and arm
+            auto-merge.
 
             Context:
             - Source branch: main
-            - Target branch: staging (currently checked out at origin/staging,
-              clean working tree)
-            - There is no PR — this is a direct branch sync.
+            - Target branch: staging
+            - Working tree: clean, checked out at origin/staging
+            - Sync branch (you create): chore/sync-main-into-staging
 
             Read docs/prompts/pr-resolve-conflicts.md and follow the
             methodology for resolving conflicts. Adaptations for this
             non-PR context:
 
-            - In Step 1, run `git merge origin/main` (treat main as the
-              base_ref).
+            - In Step 1, run `git checkout -B chore/sync-main-into-staging origin/staging`
+              then `git merge origin/main --no-ff -m "chore: sync main into staging"`.
             - Skip the PR-comment steps (Step 6 and the comment in the
-              needs-human path) — there is no PR. If you find an open
+              needs-human path) — there is no PR yet. If you find an open
               staging→main promotion PR, you may post the summary there;
               otherwise say nothing.
-            - Use commit message:
-              `chore: sync main into staging (auto-resolved conflicts)`
-            - Push to `staging`. NEVER push to main.
+            - When done, `git push --force-with-lease origin chore/sync-main-into-staging`.
+              NEVER push directly to staging or main.
             - If the conflict is genuinely ambiguous or fits the
               needs-human criteria from the prompt, run `git merge --abort`
               and exit non-zero. The workflow will escalate to a human.
@@ -124,19 +154,41 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify staging caught up to main
+      - name: Open / update PR after Claude resolution
+        if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure' && steps.resolve.outcome == 'success'
+        id: post_resolve_pr
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="chore/sync-main-into-staging"
+          PR_NUM=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$BRANCH" --base staging --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUM" ]; then
+            PR_NUM=$(gh pr create --repo "$GITHUB_REPOSITORY" --base staging --head "$BRANCH" \
+              --title "chore: sync main into staging (auto-resolved conflicts)" \
+              --body "Auto-opened by .github/workflows/sync-staging.yml after Claude resolved conflicts merging main into staging." \
+              | grep -oE '[0-9]+$' | tail -1)
+          fi
+          gh pr merge "$PR_NUM" --repo "$GITHUB_REPOSITORY" --auto --squash
+
+      - name: Verify sync PR exists
         if: steps.check.outputs.behind != '0' && steps.merge.outcome == 'failure' && steps.resolve.outcome == 'success'
         id: verify
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch origin main staging
-          BEHIND=$(git rev-list --count origin/staging..origin/main)
-          if [ "$BEHIND" != "0" ]; then
-            echo "staging still behind main by $BEHIND commits after Claude run"
+          # Don't verify staging caught up — auto-merge through the queue
+          # takes ~3 min after we exit. Just verify the sync PR exists.
+          BRANCH="chore/sync-main-into-staging"
+          PR_NUM=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$BRANCH" --base staging --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUM" ]; then
+            echo "No open sync PR after Claude run; escalate."
             exit 1
           fi
+          echo "Sync PR #$PR_NUM is open and armed for auto-merge."
 
-      - name: Escalate if merge failed
+      - name: Escalate if sync flow failed
         if: >-
           steps.check.outputs.behind != '0' &&
           steps.merge.outcome == 'failure' &&
