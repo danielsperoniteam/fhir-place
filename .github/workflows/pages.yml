@@ -201,6 +201,14 @@ jobs:
 
   deploy:
     needs: build
+    # The github-pages environment is protected to "deploy only from main".
+    # Staging pushes still run the `build` job above (which rebuilds both
+    # the / and /staging/ slots so the artifact is complete) but the
+    # actual deploy must come from main — otherwise this step 422s with
+    # an environment-protection error. Skipping deploy on non-main refs
+    # keeps staging-push runs green and matches the design that main
+    # pushes are what refresh /staging/.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

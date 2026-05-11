@@ -153,31 +153,55 @@ jobs:
               owner, repo, state: 'open', head: `${owner}:staging`, base: 'main'
             });
 
+            const sha = context.sha.substring(0, 8);
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
             const body = [
               '## ⚠️ Staging sync failed',
               '',
-              'A direct-to-main merge could not be automatically synced to staging.',
+              `A direct-to-main merge (${sha}) could not be automatically synced to staging.`,
               'Both the trivial merge and the Claude-assisted conflict resolution',
               'either hit a needs-human case or did not leave staging caught up to main.',
               '',
               '**Action needed:** @danielsperoni please merge main into staging manually:',
               '```bash',
-              'git checkout staging && git merge origin/main',
+              'git checkout staging && git merge origin/main && git push origin staging',
               '```',
               '',
-              '_Failed at ' + new Date().toISOString() + '_'
+              `_Workflow run: ${runUrl} · Failed at ${new Date().toISOString()}_`
             ].join('\n');
 
+            const ESCALATION_TITLE = 'Staging sync failed — manual merge needed';
+
             if (openPRs.length > 0) {
+              // Active promotion PR — annotate it so the reviewer sees the
+              // staging-sync failure inline rather than opening a new ticket.
               await github.rest.issues.createComment({
                 owner, repo,
                 issue_number: openPRs[0].number,
                 body
               });
+              return;
+            }
+
+            // Dedup: if there's already an open escalation issue, comment on
+            // it instead of filing a new one. Avoids accumulating one issue
+            // per direct-to-main commit batch when sync stays broken.
+            const { data: existing } = await github.rest.issues.list({
+              owner, repo, state: 'open', labels: 'status: needs-human,area: infra',
+              per_page: 50
+            });
+            const open = existing.find(i => i.title === ESCALATION_TITLE);
+
+            if (open) {
+              await github.rest.issues.createComment({
+                owner, repo,
+                issue_number: open.number,
+                body: `Another sync failure on the same open issue.\n\n${body}`
+              });
             } else {
               await github.rest.issues.create({
                 owner, repo,
-                title: 'Staging sync failed — manual merge needed',
+                title: ESCALATION_TITLE,
                 body,
                 labels: ['status: needs-human', 'area: infra'],
                 assignees: ['danielsperoni']
