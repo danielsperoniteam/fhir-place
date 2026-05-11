@@ -102,6 +102,19 @@ Keep these in mind when making changes:
 - **Safe by default.** Only `<Narrative>` gets to render HTML. Every other component uses React's default escaping.
 - **Escape hatches.** If something's hard-coded, provide a prop to override it. `renderers` / `inputs` / `cellRenderers` exist for a reason.
 
+## `dangerouslySetInnerHTML` is forbidden without documented sanitization
+
+FHIR data is attacker-controlled. Any FHIR resource the viewer fetches can carry `<`, `>`, or `&` (a `text.div` narrative is a *required* element on most resources), and `JSON.stringify` does not escape those characters. Passing FHIR-derived strings — or anything derived from them — into `dangerouslySetInnerHTML` is a stored-XSS sink. See #360 for the bug this rule was written for.
+
+Rules:
+
+- **Default: don't use it.** React's default text rendering escapes everything; that is what the JSON viewer, the structured detail walker, and every other display component must rely on.
+- **If you genuinely need it,** the input must be either:
+  1. constant markup the repo controls (no FHIR data, no user input), or
+  2. run through a sanitizer with a tight allow-list (`DOMPurify` is the dependency of choice if you need one).
+- **Document why.** Every remaining `dangerouslySetInnerHTML` in the codebase must have a comment immediately above it stating the sanitization story — what input it accepts, what trusts it, and why it's safe. PR reviewers should treat an undocumented sink as a blocker.
+- **No exceptions for syntax highlighting.** If you're tempted to build HTML strings out of FHIR content for highlighting / pretty-printing, escape the content first (`& < >` is the minimum) or render the spans as React elements instead.
+
 ## Writing tests
 
 - Unit tests live next to their code as `*.test.ts(x)`. Vitest + MSW + Testing Library.

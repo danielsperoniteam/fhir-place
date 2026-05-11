@@ -1,0 +1,111 @@
+# dispatch-engineer.sh — local driver
+
+Local equivalent of `.github/workflows/hourly-engineer-dispatch.yml`. Picks
+ready issues, hands them to the `engineer` subagent in isolated worktrees,
+opens draft PRs. The two runners (this one and the GHA workflow) coexist
+safely via the `status: in-progress` label, which acts as a cross-runner
+atomic claim — no ticket can be picked up twice.
+
+Why a local copy at all? Cost.
+
+- **GHA workflow** runs on a clean Ubuntu runner under `ANTHROPIC_API_KEY`
+  (paid API tokens, real dollars per run).
+- **This local driver** runs on Daniel's Mac under the saved `claude login`
+  OAuth session. With no `ANTHROPIC_API_KEY` in the env, `claude` falls back
+  to that session and bills against the Claude Max subscription instead.
+
+Same prompt, same engineer subagent, same safety rules. Different wallet.
+
+## One-time setup
+
+1. **Log in to Claude Code on this machine.** The driver needs a saved
+   OAuth session at `~/.claude/.credentials.json`.
+   ```
+   claude login
+   ```
+   Confirm: `claude --version` works and an interactive `claude` session
+   shows your account, not an API-key auth path.
+
+2. **Store the GitHub PAT in keychain.** The driver pulls it via
+   `security find-generic-password -s github-pat-fhir-place`.
+   Required scopes: `repo`, `workflow`, `read:org`. PAT must have access to
+   `danielsperoniteam/fhir-place`.
+   ```
+   security add-generic-password -s github-pat-fhir-place -a "$USER" -w
+   # paste the PAT at the prompt; -w hides it from history
+   ```
+   Verify (rc=0 means item exists; this command does NOT print the secret):
+   ```
+   security find-generic-password -s github-pat-fhir-place -a "$USER" >/dev/null
+   echo $?
+   ```
+
+3. **Smoke-test by hand.** Run from a clean working tree:
+   ```
+   ~/src/fhir-place/scripts/dispatch-engineer.sh
+   ```
+   Expected: a log file at `logs/engineer-dispatch-<RUN_ID>.log`, no
+   "missing GITHUB_TOKEN" error, claude either says "no ready tickets"
+   (zero-cost run) or claims up to 3 issues.
+
+## launchd job
+
+Plist at `~/Library/LaunchAgents/com.danielsperoni.fhir-place-dispatch.plist`.
+Runs every 6 hours via `StartInterval`, `RunAtLoad=false` (first fire is on
+your terms, not at install time).
+
+Install:
+```
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.danielsperoni.fhir-place-dispatch.plist
+```
+
+Verify it's loaded:
+```
+launchctl print gui/$(id -u)/com.danielsperoni.fhir-place-dispatch | head -30
+```
+
+Trigger a run by hand (without waiting for the timer):
+```
+launchctl kickstart -k gui/$(id -u)/com.danielsperoni.fhir-place-dispatch
+```
+
+Tail the log:
+```
+tail -f ~/src/fhir-place/logs/engineer-dispatch-*.log
+```
+
+## Pause / resume / uninstall
+
+Pause (driver no-ops on next tick, lock file untouched):
+```
+touch ~/.fhir-place-pause
+```
+
+Resume:
+```
+rm ~/.fhir-place-pause
+```
+
+Uninstall the launchd job entirely:
+```
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.danielsperoni.fhir-place-dispatch.plist
+rm ~/Library/LaunchAgents/com.danielsperoni.fhir-place-dispatch.plist
+```
+
+## Built-in safety
+
+The driver itself is thin; the heavy rules live in
+`.claude/agents/engineer.md` and `docs/prompts/hourly-engineer-dispatch.md`.
+What this driver enforces directly:
+
+- **Lock file** at `/tmp/fhir-place-dispatch.lock` — at most one run at a
+  time on this machine. Stale locks (PID gone) clear automatically.
+- **Pause file** at `~/.fhir-place-pause` — short-circuit before doing any
+  work; useful when you're about to rebase main or do anything destructive.
+- **Dirty-tree refusal** — exits cleanly if `~/src/fhir-place` has uncommitted
+  changes. Daniel mid-edit > unattended bot.
+- **Tool allow-list** passed to `claude --allowedTools`, defense-in-depth
+  on top of the subagent's own permissions.
+- **iMessage on failure** — non-zero exit pings `+15082827897` with the run
+  ID and log path.
+- **Log rotation** — logs older than 14 days are pruned each run.

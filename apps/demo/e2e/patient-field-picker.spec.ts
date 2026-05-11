@@ -53,7 +53,6 @@ test.describe("patient field-picker options", () => {
     // <ColumnPicker> read localStorage internally, so the table briefly
     // disagreed with the picker until the user toggled a checkbox.
     await resetPrefs(page);
-    await page.goto("/");
     await page.evaluate(
       ([colKey]) => {
         localStorage.setItem(colKey, JSON.stringify(["identifier", "name", "id"]));

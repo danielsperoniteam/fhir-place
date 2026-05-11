@@ -43,4 +43,11 @@ test.describe("Patient list — URL sync", () => {
     await expect(page).toHaveURL(/\?given=Alan/);
     await expect(page).not.toHaveURL(/_count=/);
   });
+
+  test("does not expose the unfinished saved-query action", async ({ page }) => {
+    await page.goto("/Patient");
+
+    const toolbar = page.getByTestId("search-params-toolbar");
+    await expect(toolbar.getByRole("button", { name: "Save query" })).toHaveCount(0);
+  });
 });

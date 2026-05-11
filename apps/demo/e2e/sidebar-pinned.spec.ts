@@ -23,6 +23,7 @@ test.describe("Sidebar Pinned section", () => {
       }
     });
     await page.reload();
+    await expect(page).toHaveURL(/\/fhir-ui\/Patient$/);
   });
 
   test("renders an empty state with helper copy when no pins exist", async ({
@@ -63,6 +64,12 @@ test.describe("Sidebar Pinned section", () => {
     // Toggle off — pressing pin again on the same route removes it.
     await page.getByTestId("topbar-pin").click();
     await expect(page.getByTestId("pinned-empty-state")).toBeVisible();
+  });
+
+  test("topbar does not expose an inert History action", async ({ page }) => {
+    await expect(page.getByTestId("topbar-actions")).not.toContainText(
+      "History",
+    );
   });
 
   test("clicking a pinned row navigates to its route", async ({ page }) => {

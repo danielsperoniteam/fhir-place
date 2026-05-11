@@ -177,9 +177,10 @@ const formatScalar = (value: unknown): string => {
 };
 
 export class SearchBuilder<R extends SearchableResource> {
-  private readonly entries: Array<[string, string]> = [];
+  /** @internal Used by useTypedSearch to build the query key and fetch params. */
+  readonly entries: Array<[string, string]> = [];
 
-  constructor(private readonly resourceType: R) {}
+  constructor(readonly resourceType: R) {}
 
   where<P extends keyof SearchParamTypes[R] & string>(
     name: P,

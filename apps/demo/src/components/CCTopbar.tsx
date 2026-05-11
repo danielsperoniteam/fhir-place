@@ -38,7 +38,19 @@ function PinIcon({ filled }: { filled: boolean }) {
   );
 }
 
-export function CCTopbar() {
+function MenuIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2 3.5h10M2 7h10M2 10.5h10" />
+    </svg>
+  );
+}
+
+interface CCTopbarProps {
+  onMobileNavOpen?: () => void;
+}
+
+export function CCTopbar({ onMobileNavOpen }: CCTopbarProps) {
   const location = useLocation();
   const { theme, toggle } = useTheme();
   const { isPinned, togglePin } = usePinned();
@@ -83,6 +95,18 @@ export function CCTopbar() {
         flexShrink: 0,
       }}
     >
+      <button
+        type="button"
+        onClick={onMobileNavOpen}
+        className="mobile-nav-trigger"
+        style={ccBtn("ghost")}
+        title="Open navigation"
+        aria-label="Open navigation"
+        data-testid="mobile-nav-trigger"
+      >
+        <MenuIcon />
+      </button>
+
       {/* Breadcrumb */}
       <div
         style={{
@@ -120,7 +144,10 @@ export function CCTopbar() {
       <div style={{ flex: 1 }} />
 
       {/* Actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 6 }}
+        data-testid="topbar-actions"
+      >
         <button
           onClick={() => pinnable && togglePin(fullPath)}
           disabled={!pinnable}
@@ -143,12 +170,6 @@ export function CCTopbar() {
           title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
         >
           {theme === "light" ? <MoonIcon /> : <SunIcon />}
-        </button>
-        <button style={ccBtn("ghost")}>
-          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M2 4h10M2 7h10M2 10h6" />
-          </svg>
-          History
         </button>
         <Link
           to="/fhir-ui/settings"
