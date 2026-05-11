@@ -16,6 +16,7 @@ import { PatientCompartmentLinks } from "../../../components/PatientCompartmentL
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { PATIENT_COMPARTMENT } from "../../../compartment.js";
 import { patientFieldOptions } from "../../../patientFields.js";
+import { resourceCollectionLabel } from "../resourceLabels.js";
 
 const PATIENT_FIELDS_KEY = "fhir-place-demo-patient-detail-fields";
 
@@ -120,9 +121,10 @@ export function ResourceDetailPage() {
       >
         <Link
           to={`/fhir-ui/${resourceType}`}
+          data-testid="resource-detail-back-link"
           style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "none" }}
         >
-          ← All {resourceType.toLowerCase()}s
+          ← All {resourceCollectionLabel(resourceType)}
         </Link>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {isPatient && patientFields.length > 0 && (
@@ -232,9 +234,10 @@ export function ResourceDetailPage() {
           </p>
           <Link
             to={`/fhir-ui/${resourceType}`}
+            data-testid="resource-not-found-back-link"
             style={{ fontSize: 12, color: "var(--text-muted)" }}
           >
-            ← Back to all {resourceType.toLowerCase()}s
+            ← Back to all {resourceCollectionLabel(resourceType)}
           </Link>
         </div>
       )}
