@@ -1,6 +1,6 @@
 {
   "name": "@fhir-place/react-fhir",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Spec-driven React components for FHIR (R4) built on the plain REST API.",
   "license": "MIT",
   "repository": {
