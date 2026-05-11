@@ -101,7 +101,40 @@ body, .cc-shell * {
 }
 
 /* ─── Responsive sidebar ────────────────────────────────────────────────── */
+.mobile-nav-trigger {
+  display: none !important;
+  flex-shrink: 0;
+}
+
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  background: rgba(9, 9, 11, 0.5);
+}
+
+.mobile-nav-drawer {
+  width: min(84vw, 300px);
+  height: 100%;
+  background: var(--surface);
+  box-shadow: 8px 0 28px rgba(0, 0, 0, 0.22);
+}
+
+.mobile-nav-drawer .cc-sidebar {
+  display: flex !important;
+  width: 100% !important;
+}
+
 @media (max-width: 640px) {
+  .mobile-nav-trigger {
+    display: inline-flex !important;
+  }
+
+  .mobile-nav-backdrop {
+    display: block;
+  }
+
   .cc-sidebar {
     display: none !important;
   }

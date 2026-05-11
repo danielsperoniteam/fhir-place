@@ -38,7 +38,19 @@ function PinIcon({ filled }: { filled: boolean }) {
   );
 }
 
-export function CCTopbar() {
+function MenuIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2 3.5h10M2 7h10M2 10.5h10" />
+    </svg>
+  );
+}
+
+interface CCTopbarProps {
+  onMobileNavOpen?: () => void;
+}
+
+export function CCTopbar({ onMobileNavOpen }: CCTopbarProps) {
   const location = useLocation();
   const { theme, toggle } = useTheme();
   const { isPinned, togglePin } = usePinned();
@@ -83,6 +95,18 @@ export function CCTopbar() {
         flexShrink: 0,
       }}
     >
+      <button
+        type="button"
+        onClick={onMobileNavOpen}
+        className="mobile-nav-trigger"
+        style={ccBtn("ghost")}
+        title="Open navigation"
+        aria-label="Open navigation"
+        data-testid="mobile-nav-trigger"
+      >
+        <MenuIcon />
+      </button>
+
       {/* Breadcrumb */}
       <div
         style={{

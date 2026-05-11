@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { CCTopbar } from "./components/CCTopbar.js";
 import { CCSidebar } from "./components/CCSidebar.js";
@@ -75,6 +76,22 @@ function ErrorFallback() {
 }
 
 function Shell() {
+  const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileNavOpen]);
+
   return (
     <div
       className="cc-shell"
@@ -95,7 +112,7 @@ function Shell() {
 
       {/* Main column */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <CCTopbar />
+        <CCTopbar onMobileNavOpen={() => setMobileNavOpen(true)} />
         <CCTabs />
 
         {/* Page content */}
@@ -128,6 +145,25 @@ function Shell() {
         {/* Status bar */}
         <StatusBar />
       </div>
+
+      {mobileNavOpen && (
+        <div
+          className="mobile-nav-backdrop"
+          data-testid="mobile-nav-backdrop"
+          onMouseDown={() => setMobileNavOpen(false)}
+        >
+          <div
+            className="mobile-nav-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Primary navigation"
+            data-testid="mobile-nav-drawer"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <CCSidebar />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
