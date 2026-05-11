@@ -353,6 +353,7 @@ export function ResourceListPage() {
           }}
         >
           <div
+            data-testid="search-params-toolbar"
             style={{
               display: "flex",
               alignItems: "center",
@@ -373,7 +374,6 @@ export function ResourceListPage() {
               Search params
             </span>
             <div style={{ flex: 1 }} />
-            <button style={{ ...ccBtn("ghost"), fontSize: 12 }}>Save query</button>
             <button style={{ ...ccBtn("secondary"), fontSize: 12 }}>Clear</button>
           </div>
 
@@ -710,4 +710,3 @@ function PageSizePicker({ value, onChange }: PageSizePickerProps) {
     </div>
   );
 }
-

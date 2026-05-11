@@ -1,0 +1,217 @@
+# Syncs the fhir-place sprint board (org Project #1) to the SDLC stage
+# of each issue. Single source of truth for column moves — see
+# docs/sdlc/lifecycle.md for the column-to-stage mapping.
+#
+# Triggers:
+#   - issues: opened / labeled / unlabeled / closed / reopened
+#   - pull_request: opened / ready_for_review / labeled / closed
+#   - push to main (safety net for direct-merge cases that didn't fire
+#     the pull_request closed event — rare; the pull_request handler
+#     is the primary path)
+#
+# Transition matrix:
+#
+#   New issue                              -> Todo
+#   issue gains  status: in-progress       -> In progress
+#   issue gains  status: blocked           -> Blocked
+#   issue loses status:in-progress/blocked while open
+#                                          -> Todo
+#   PR opened (or ready_for_review)
+#     and PR closes the issue              -> Ready for review (the linked issue)
+#   PR labeled `uat: requested`
+#     and PR closes the issue              -> Ready for UAT
+#   PR merged into main
+#     and PR closes the issue              -> Released
+#
+# Auth: Projects v2 are NOT writable by the default GITHUB_TOKEN. The
+# workflow uses `secrets.PROJECT_PAT` — a fine-grained PAT (or App
+# installation token) with `Organization Projects: Read and write`
+# scoped to the danielsperoniteam org. If the secret is missing, the
+# job exits cleanly so the workflow doesn't fail spuriously on forks
+# or in setups where the secret isn't wired yet.
+
+name: Project board sync
+
+on:
+  issues:
+    types: [opened, labeled, unlabeled, closed, reopened]
+  pull_request:
+    types: [opened, ready_for_review, labeled, closed]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: project-sync-${{ github.event.issue.number || github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ secrets.PROJECT_PAT != '' }}
+    env:
+      PROJECT_ID: PVT_kwDOEMwOns4BXRof
+      STATUS_FIELD_ID: PVTSSF_lADOEMwOns4BXRofzhSfkVs
+      OPT_TODO: f75ad846
+      OPT_BLOCKED: bafdbe19
+      OPT_IN_PROGRESS: 47fc9ee4
+      OPT_READY_REVIEW: 3de50531
+      OPT_READY_UAT: b068b741
+      OPT_RELEASED: 98236657
+    steps:
+      - name: Decide transition + apply it
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            const PROJECT_ID = process.env.PROJECT_ID;
+            const STATUS_FIELD_ID = process.env.STATUS_FIELD_ID;
+            const OPTS = {
+              todo: process.env.OPT_TODO,
+              blocked: process.env.OPT_BLOCKED,
+              in_progress: process.env.OPT_IN_PROGRESS,
+              ready_review: process.env.OPT_READY_REVIEW,
+              ready_uat: process.env.OPT_READY_UAT,
+              released: process.env.OPT_RELEASED,
+            };
+
+            // Ensure an item exists in the project for a given content node id.
+            // Returns the item id.
+            async function ensureItem(contentId) {
+              const res = await github.graphql(
+                `mutation($projectId: ID!, $contentId: ID!) {
+                   addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                     item { id }
+                   }
+                 }`,
+                { projectId: PROJECT_ID, contentId }
+              );
+              return res.addProjectV2ItemById.item.id;
+            }
+
+            async function setStatus(contentId, optionId, label) {
+              const itemId = await ensureItem(contentId);
+              await github.graphql(
+                `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                   updateProjectV2ItemFieldValue(input: {
+                     projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                     value: { singleSelectOptionId: $optionId }
+                   }) { projectV2Item { id } }
+                 }`,
+                { projectId: PROJECT_ID, itemId, fieldId: STATUS_FIELD_ID, optionId }
+              );
+              core.info(`Moved item ${itemId} -> ${label}`);
+            }
+
+            async function linkedIssues(prNumber) {
+              const res = await github.graphql(
+                `query($owner: String!, $name: String!, $number: Int!) {
+                   repository(owner: $owner, name: $name) {
+                     pullRequest(number: $number) {
+                       closingIssuesReferences(first: 20) {
+                         nodes { id number }
+                       }
+                     }
+                   }
+                 }`,
+                { owner: context.repo.owner, name: context.repo.repo, number: prNumber }
+              );
+              return res.repository.pullRequest.closingIssuesReferences.nodes;
+            }
+
+            const event = context.eventName;
+            const action = context.payload.action;
+
+            if (event === 'issues') {
+              const issue = context.payload.issue;
+              const labels = (issue.labels || []).map(l => l.name);
+              const blocked = labels.includes('status: blocked');
+              const inProgress = labels.includes('status: in-progress');
+
+              if (issue.state === 'closed') {
+                // Closed-as-not-planned shouldn't move on the board. Items closed by a
+                // merged PR are already moved to Released by the pull_request handler
+                // below — no-op here.
+                core.info(`Issue #${issue.number} closed; no board move from issue close itself.`);
+                return;
+              }
+
+              if (blocked) {
+                await setStatus(issue.node_id, OPTS.blocked, 'Blocked');
+              } else if (inProgress) {
+                await setStatus(issue.node_id, OPTS.in_progress, 'In progress');
+              } else {
+                // No special status: ensure it's at least in the project, in Todo.
+                // Skip overwriting a later-stage column — only set Todo on opened/
+                // reopened, or when the user actively removed a status label.
+                // `unlabeled` fires for ANY label removal (priority:*, area:*, etc.),
+                // so gate on the removed label name to avoid yanking a Ready-for-
+                // review issue back to Todo when an unrelated label is removed.
+                let setTodo = action === 'opened' || action === 'reopened';
+                if (action === 'unlabeled') {
+                  const removed = context.payload.label && context.payload.label.name;
+                  setTodo = removed === 'status: in-progress' || removed === 'status: blocked';
+                }
+                if (setTodo) {
+                  await setStatus(issue.node_id, OPTS.todo, 'Todo');
+                }
+              }
+              return;
+            }
+
+            if (event === 'pull_request') {
+              const pr = context.payload.pull_request;
+              const merged = pr.merged === true;
+              const base = pr.base.ref;
+              const linked = await linkedIssues(pr.number);
+
+              if (linked.length === 0) {
+                core.info(`PR #${pr.number} has no closingIssuesReferences; no linked issue to move.`);
+                return;
+              }
+
+              let target, label;
+              if (action === 'closed' && merged) {
+                if (base === 'main') { target = OPTS.released; label = 'Released'; }
+                else {
+                  // Model B: PRs only ever merge to main. Anything else is unexpected.
+                  core.info(`PR merged into unexpected base ${base}; ignoring.`);
+                  return;
+                }
+              } else if (action === 'labeled') {
+                // `uat: requested` is the trigger to move into Ready for UAT —
+                // the engineer applies it after opening the PR; a downstream
+                // workflow then publishes the build to /staging/.
+                const added = context.payload.label && context.payload.label.name;
+                if (added !== 'uat: requested') return;
+                target = OPTS.ready_uat;
+                label = 'Ready for UAT';
+              } else if (action === 'opened' || action === 'ready_for_review') {
+                if (pr.draft && action === 'opened') {
+                  // A draft PR isn't ready for review yet — leave the issue where it is.
+                  return;
+                }
+                target = OPTS.ready_review;
+                label = 'Ready for review';
+              } else {
+                return;
+              }
+
+              for (const iss of linked) {
+                await setStatus(iss.id, target, label);
+              }
+              return;
+            }
+
+            if (event === 'push') {
+              // Push handler is a safety net for direct-merge cases the pull_request
+              // event didn't cover. We don't fetch PRs here — the pull_request handler
+              // is the primary path. No-op for now; reserve for future use.
+              core.info('Push event; pull_request handler is the primary path. No-op.');
+              return;
+            }

@@ -23,6 +23,7 @@ test.describe("Sidebar Pinned section", () => {
       }
     });
     await page.reload();
+    await expect(page).toHaveURL(/\/fhir-ui\/Patient$/);
   });
 
   test("renders an empty state with helper copy when no pins exist", async ({
