@@ -4,24 +4,24 @@
 #
 # Triggers:
 #   - issues: opened / labeled / unlabeled / closed / reopened
-#   - pull_request: opened / ready_for_review / closed
-#   - push to staging / main (covers direct-merge cases where the linked
-#     issue should move even though pull_request didn't fire — rare; the
-#     pull_request handler usually wins)
+#   - pull_request: opened / ready_for_review / labeled / closed
+#   - push to main (safety net for direct-merge cases that didn't fire
+#     the pull_request closed event — rare; the pull_request handler
+#     is the primary path)
 #
 # Transition matrix:
 #
-#   New issue                       -> Todo
-#   issue gains  status: in-progress -> In progress
-#   issue gains  status: blocked     -> Blocked
+#   New issue                              -> Todo
+#   issue gains  status: in-progress       -> In progress
+#   issue gains  status: blocked           -> Blocked
 #   issue loses status:in-progress/blocked while open
-#                                   -> Todo
+#                                          -> Todo
 #   PR opened (or ready_for_review)
-#     and PR closes the issue       -> Ready for review (the linked issue)
-#   PR merged into staging
-#     and PR closes the issue       -> Ready for UAT
+#     and PR closes the issue              -> Ready for review (the linked issue)
+#   PR labeled `uat: requested`
+#     and PR closes the issue              -> Ready for UAT
 #   PR merged into main
-#     and PR closes the issue       -> Released
+#     and PR closes the issue              -> Released
 #
 # Auth: Projects v2 are NOT writable by the default GITHUB_TOKEN. The
 # workflow uses `secrets.PROJECT_PAT` — a fine-grained PAT (or App
@@ -36,9 +36,9 @@ on:
   issues:
     types: [opened, labeled, unlabeled, closed, reopened]
   pull_request:
-    types: [opened, ready_for_review, closed]
+    types: [opened, ready_for_review, labeled, closed]
   push:
-    branches: [staging, main]
+    branches: [main]
 
 permissions:
   contents: read
@@ -178,11 +178,19 @@ jobs:
               let target, label;
               if (action === 'closed' && merged) {
                 if (base === 'main') { target = OPTS.released; label = 'Released'; }
-                else if (base === 'staging') { target = OPTS.ready_uat; label = 'Ready for UAT'; }
                 else {
+                  // Model B: PRs only ever merge to main. Anything else is unexpected.
                   core.info(`PR merged into unexpected base ${base}; ignoring.`);
                   return;
                 }
+              } else if (action === 'labeled') {
+                // `uat: requested` is the trigger to move into Ready for UAT —
+                // the engineer applies it after opening the PR; a downstream
+                // workflow then publishes the build to /staging/.
+                const added = context.payload.label && context.payload.label.name;
+                if (added !== 'uat: requested') return;
+                target = OPTS.ready_uat;
+                label = 'Ready for UAT';
               } else if (action === 'opened' || action === 'ready_for_review') {
                 if (pr.draft && action === 'opened') {
                   // A draft PR isn't ready for review yet — leave the issue where it is.
