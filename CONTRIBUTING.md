@@ -45,8 +45,20 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 
 ## Staging deploys
 
-A long-lived `staging` branch deploys alongside `main` so we can confirm
-several PRs work together before they hit production.
+The `staging` branch is a continuously-rebuilt deploy target:
+
+```
+staging = origin/main + every open PR with reviewDecision == APPROVED
+```
+
+Stacking is automatic — when a PR receives an approving CODEOWNER
+review, the [`stack-approved-prs.yml`](.github/workflows/stack-approved-prs.yml)
+workflow resets staging to main HEAD, merges every approved-and-open
+PR's head in order, and force-pushes. `pages.yml` redeploys
+`/staging/` with the new tip. Staging has no branch protection — it's
+a deploy artifact, not a source-of-truth branch.
+
+URLs:
 
 - `main` is published at <https://danielsperoniteam.github.io/fhir-place/>
   (goals-tasks at `/fhir-place/goals/`).
@@ -55,35 +67,29 @@ several PRs work together before they hit production.
 
 **Flow:**
 
-1. Open every PR — human or agent — with `base: main`. The PR diff is
-   reviewed against main; merging to main is the final step.
-2. **Promote the PR branch to `staging` before review.** Agents do this
-   automatically (see `.claude/agents/engineer.md` step 11). Humans
-   should do it by hand:
-   ```bash
-   git fetch origin staging
-   git checkout -B staging-promote origin/staging
-   git merge --no-ff --no-edit <your-branch>
-   git push origin staging-promote:staging
-   ```
-   The push to `staging` must be fast-forward or a no-ff merge —
-   never force-push. If it conflicts, resolve on staging by hand or
-   leave staging alone and note it on the PR.
-3. The Pages workflow rebuilds both branches on every push; wait for
-   the staging build to be green before declaring a change ready for
-   UAT.
-4. Walk the PR's **UAT on live staging** steps against the live
-   `/fhir-place/staging/` URL. If anything is off, fix on a follow-up
-   PR and re-promote.
-5. When UAT passes, merge the PR to `main`. The change is already on
-   staging from step 2, so /staging/ stays in sync; periodically
-   fast-forward `staging` back to `main` once the queue of in-flight
-   PRs has drained, to keep the two branches from diverging long-term.
+1. Open every PR — human or agent — with `base: main`.
+2. Get CODEOWNER approval. On approval, `stack-approved-prs.yml`
+   rebuilds staging automatically (you don't push to staging
+   yourself).
+3. Walk the PR's **UAT on live staging** steps against the live
+   `/staging/` URL. If anything is off, push a fix to the PR
+   branch — staging rebuilds on the next event (push, approval, or
+   close).
+4. When UAT passes, merge the PR to `main`. The next staging
+   rebuild excludes it (it's on main now, no longer "approved
+   and open").
 
-**Agents always promote to staging themselves.** See
-`.claude/agents/engineer.md` and `AGENTS.md`. Every agent-authored PR
-must include a UAT section with concrete copy-pasteable steps for the
-live staging URL.
+**Direct-to-main commits** trigger a staging rebuild from the new
+main HEAD automatically (the workflow fires on `push: main`). No
+separate sync step needed — every rebuild starts from main HEAD, so
+drift is impossible.
+
+**Agents never push to staging.** Engineer subagents only push to
+their `bot/*` branches; staging is owned by `stack-approved-prs.yml`
+and force-rebuilt from scratch on every relevant event. See
+`.claude/agents/engineer.md` and `AGENTS.md`. Every agent-authored
+PR must include a UAT section with concrete copy-pasteable steps for
+the live staging URL.
 
 ## Bump conventions
 

@@ -1,0 +1,118 @@
+# Continuously rebuilds the `staging` branch as:
+#
+#   staging = origin/main + every open PR with reviewDecision == APPROVED,
+#             merged in PR-number order
+#
+# This is the validation environment behind `/staging/`. PRs target `main`
+# (not staging); after a CODEOWNER approves the PR, this workflow stacks
+# the PR's head onto staging and force-pushes, which triggers `pages.yml`
+# to redeploy `/staging/`. UAT walks the live staging URL with the PR's
+# content available alongside other approved-in-flight PRs.
+#
+# Staging has no branch protection — it's a deploy artifact, not a
+# source-of-truth branch. Each rebuild force-resets from main HEAD.
+#
+# Triggers:
+#   - pull_request_review: submitted | dismissed
+#     → approval state may have changed; rebuild
+#   - pull_request: closed | reopened | synchronize
+#     → an approved PR was merged / closed, or got new commits
+#   - push to main
+#     → main advanced; rebuild from new HEAD so direct-to-main commits
+#       propagate to /staging/ automatically (no separate sync needed)
+#
+# Concurrency: one rebuild at a time per branch. Rapid events coalesce.
+
+name: Stack approved PRs onto staging
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+  pull_request:
+    types: [closed, reopened, synchronize]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write     # force-push staging
+  pull-requests: read
+
+concurrency:
+  group: stack-approved-prs
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Find open approved PRs targeting main
+        id: prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # `reviewDecision: APPROVED` means a CODEOWNER approval is present
+          # and no "request changes" review is outstanding (main's ruleset
+          # requires CODEOWNER review). PR-number sort keeps the merge
+          # order stable across runs.
+          PRS=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open --base main \
+            --json number,headRefName,headRepositoryOwner,reviewDecision \
+            --jq '[.[] | select(.reviewDecision == "APPROVED") | {number, head: .headRefName, owner: .headRepositoryOwner.login}] | sort_by(.number)')
+          # Compact one-line JSON for GITHUB_OUTPUT; expand for the human log.
+          ONE_LINE=$(echo "$PRS" | jq -c .)
+          echo "prs=$ONE_LINE" >> "$GITHUB_OUTPUT"
+          echo "Approved PRs to stack onto staging:"
+          echo "$PRS" | jq -r '.[] | "  #\(.number) [\(.owner)/\(.head)]"'
+          echo "count=$(echo "$PRS" | jq 'length')" >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild staging from main + approved PRs
+        env:
+          PRS: ${{ steps.prs.outputs.prs }}
+        run: |
+          # Reset staging to main HEAD. Any prior staging history is
+          # discarded — this branch is a deploy artifact, not source of
+          # truth.
+          git checkout -B staging origin/main
+
+          # Stack each approved PR by merging its head into staging.
+          echo "$PRS" | jq -c '.[]' | while read -r pr; do
+            NUM=$(echo "$pr" | jq -r '.number')
+            HEAD=$(echo "$pr" | jq -r '.head')
+            OWNER=$(echo "$pr" | jq -r '.owner')
+            echo "::group::Stacking PR #$NUM ($OWNER/$HEAD)"
+            # Same-repo PRs use a local ref; fork PRs need the head fetched
+            # via the PR's refspec on the upstream (`pull/<N>/head`).
+            if [ "$OWNER" = "${GITHUB_REPOSITORY%%/*}" ]; then
+              git fetch origin "$HEAD"
+              REF="origin/$HEAD"
+            else
+              git fetch origin "pull/$NUM/head:pr-$NUM"
+              REF="pr-$NUM"
+            fi
+            if git merge --no-edit --no-ff -m "stage: include PR #$NUM" "$REF"; then
+              echo "Stacked PR #$NUM"
+            else
+              echo "::warning::PR #$NUM conflicts with staging; skipping. Manual rebase needed."
+              git merge --abort
+            fi
+            echo "::endgroup::"
+          done
+
+          # Force-push (staging is unprotected; this is its definition).
+          # `--force-with-lease` so concurrent rebuilds don't silently
+          # clobber each other — concurrency:cancel-in-progress already
+          # cancels the prior run, but this is belt and suspenders.
+          git push --force-with-lease origin staging

@@ -4,38 +4,42 @@ The end-to-end journey of one piece of work, from "an issue exists" to
 "the change is live on `main`." Read [`loops.md`](./loops.md) first for
 the cadence; this doc is the path through the loops.
 
-## Deploy model: long-lived staging branch + batched promotion
+## Deploy model: stack of approved PRs on top of main
 
-`fhir-place` uses a **long-lived staging branch** that mirrors what's
-about to be promoted to production:
+`fhir-place` ships features through PRs that target `main`. The
+`staging` branch is a continuously-rebuilt deploy target:
 
-- Feature branches PR into **`staging`**, not directly into `main`.
-- `pages.yml` builds and deploys two slots from one artifact:
-  `/` from `main` and `/staging/` from `staging`. Both branches can
-  trigger a deploy (the github-pages environment is configured to
-  allow both).
-- Once a PR (or a batch of PRs) is on `staging` and `/staging/` has
-  refreshed, a human walks the **UAT on live staging** checklist
-  against the live URL.
-- `promote-staging.yml` opens / updates a single **promotion PR**
-  (`staging → main`) that aggregates UAT checklists from every PR
-  merged into staging since the last promotion. Approving and merging
-  the promotion PR is what ships to `/`.
-- `sync-staging.yml` keeps staging caught up to main after direct-to-
-  main commits (CI fixes, doc edits, etc. that bypass the staging
-  branch). It opens a `chore: sync main into staging` PR and arms
-  auto-merge; the queue lands it without human approval because the
-  staging ruleset requires 0 approving reviews.
+```
+staging = origin/main + every open PR with reviewDecision == APPROVED
+```
 
-The staging branch is **long-lived**: its history is preserved and
-its tip is what `/staging/` serves. There is one shared staging slot,
-not a per-PR preview slot.
+How it flows:
 
-This shape suits `fhir-place` because (a) batched UAT against the
-real staging URL is cheap and fast, (b) one human gates production
-via the promotion PR, and (c) the engineer agent always knows what
-its PR will be reviewed against (`staging`) without per-PR slot
-contention.
+- Feature branches PR into **`main`**, never an integration branch.
+- When a PR receives an approving CODEOWNER review,
+  [`stack-approved-prs.yml`](../../.github/workflows/stack-approved-prs.yml)
+  rebuilds the staging branch (reset to `main` HEAD, merge in every
+  approved-and-open PR's head in order, force-push). `pages.yml`
+  redeploys `/staging/` with the new tip.
+- UAT happens against the live `/staging/` URL with this PR's content
+  stacked alongside any other approved-in-flight PRs.
+- After UAT passes (and CI is green), the PR is merged to `main`. The
+  next staging rebuild excludes it (it's on main now).
+- If a PR is closed without merging, the next rebuild excludes it.
+- Direct-to-main commits trigger a staging rebuild from the new main
+  HEAD automatically — no separate sync workflow needed because every
+  rebuild already starts from main.
+
+There is **no rolling promotion PR**. Each PR ships independently when
+its UAT passes. Staging has no protected history; its tip is a
+deterministic function of `main` HEAD + open-approved PRs at any
+moment.
+
+This shape suits `fhir-place` because (a) features are mostly
+independent, so multiple in-flight PRs can be validated together
+without coordinating, (b) one human gates production via the
+per-PR main merge, and (c) staging always reflects the current
+"about to ship" state — never accumulates abandoned work.
 
 ## The state machine, in one diagram
 
@@ -72,7 +76,7 @@ contention.
                 │  status: in-progress    │  ← lock label
                 │  bot/issue-<N>-<slug>   │
                 │  branch created off     │
-                │  origin/staging         │
+                │  origin/main            │
                 └──────────────┬──────────┘
                                │
                   engineer subagent runs
@@ -83,39 +87,41 @@ contention.
                 │                            │
                 ▼                            ▼
         ┌─────────────────┐        ┌────────────────────────┐
-        │  PR opened      │        │ status: needs-human or │
-        │  (draft or      │        │ status: needs-triage   │
-        │   ready),       │        │ + structured comment   │
-        │  base: staging  │        └────────────────────────┘
-        │  Closes #N      │
+        │  Ready-for-     │        │ status: needs-human or │
+        │  review PR,     │        │ status: needs-triage   │
+        │  base: main     │        │ + structured comment   │
+        │  Closes #N      │        └────────────────────────┘
         └────────┬────────┘
                  │
-       Human review (or PR-review workflow). Author addresses
-       blockers in a follow-up commit, or resolves with reasoning.
+       Human review. On APPROVED:
                  │
                  ▼
-       PR merges into `staging` via merge queue
-       (0 approvals required; test + e2e gate)
+       stack-approved-prs.yml rebuilds `staging`:
+         git reset --hard origin/main
+         for each open approved PR: git merge
+         git push --force staging
                  │
                  ▼
-       pages.yml rebuilds /staging/ (and /, both slots
-       always rebuilt so the artifact stays complete)
+       pages.yml redeploys /staging/ with this PR
+       stacked alongside other approved-in-flight PRs
                  │
                  ▼
-       promote-staging.yml opens / updates the
-       `staging → main` promotion PR with aggregated
-       UAT checklists from every included PR
+       Human walks the PR's "UAT on live staging" checklist
+       against https://danielsperoniteam.github.io/fhir-place/staging/
                  │
                  ▼
-       Human walks the UAT checklist against
-       https://danielsperoniteam.github.io/fhir-place/staging/
+       PR is mergeable to main when:
+         - CI green (test, e2e)
+         - CODEOWNER review
+         - UAT walked (manual or uat: passed label)
                  │
                  ▼
-       Human approves + merges the promotion PR → main
+       Human merges PR → main
                  │
                  ▼
-       pages.yml rebuilds / (and /staging/ stays in sync
-       because both slots rebuild on every deploy)
+       pages.yml redeploys /
+       stack-approved-prs.yml rebuilds staging
+       (this PR is excluded — it's on main now)
                  │
                  ▼
        Live site monitor (06:30 UTC nightly) runs the
@@ -132,9 +138,9 @@ The [fhir-place sprint board](https://github.com/orgs/danielsperoniteam/projects
 | **Todo** | 1–2 | New issues, post-triage and not yet picked up. The "ready queue" lives here. |
 | **Blocked** | (sidetrack) | Carries the `status: blocked` label or otherwise stuck on an external dependency. |
 | **In progress** | 3–4 | An engineer (subagent or human) has the claim. `status: in-progress` is on the issue. |
-| **Ready for review** | 5–6 | Draft PR is open and either marked ready or still draft awaiting human review. |
-| **Ready for UAT** | 7–8 | PR has merged into `staging`. `/staging/` has been redeployed. Waiting for human UAT against the live staging URL. |
-| **Released** | 9–10 | Promoted from `staging` to `main`. Pages has redeployed the production slot. Post-deploy regression has run (or will, next nightly). |
+| **Ready for review** | 5–6 | PR is open against main, awaiting CODEOWNER review. |
+| **Ready for UAT** | 7 | PR is approved. `stack-approved-prs.yml` stacked it onto staging; `/staging/` has redeployed; UAT can be walked. |
+| **Released** | 8 | PR merged into main. `/` has redeployed. Post-deploy regression has run (or will, next nightly). |
 
 Transitions are driven by [`project-sync.yml`](../../.github/workflows/project-sync.yml). It listens for issue/PR/label events and moves items between columns. The workflow is the source of truth for column moves; if a state needs to change, change the trigger in the workflow, not the column manually.
 
@@ -196,14 +202,16 @@ second concurrent dispatch run cannot pick the same issue.
 [`.claude/agents/engineer.md`](../../.claude/agents/engineer.md)
 
 Worktree isolation: `git worktree add ../wt-<N> -b bot/issue-<N>-<slug>
-origin/staging`. The PR base is **always `staging`** — humans promote
-`staging` → `main` after live UAT.
+origin/main`. The PR base is **always `main`**. The engineer subagent
+does **not** push to staging or to any branch other than its own
+`bot/*` branch — staging is rebuilt downstream from main + approved
+PRs by the stack workflow, not by the engineer.
 
 Outcomes:
 
 | Outcome | Issue label after | Branch |
 | --- | --- | --- |
-| Draft / ready-for-review PR opened | `status: in-progress` stripped | pushed |
+| Ready-for-review PR opened against main | `status: in-progress` stripped | pushed |
 | Acceptance criteria ambiguous | `status: needs-triage` | not pushed |
 | Typecheck/tests/e2e/build fail past retry budget | `status: needs-human` | left in place locally |
 | Blast-radius cap exceeded | `status: needs-human` | not pushed |
@@ -217,10 +225,8 @@ The subagent comments the PR link onto the issue.
 
 ### 5. PR opened — what's in it
 
-PRs are opened with `base: staging`. They may be draft or ready-for-
-review; the engineer subagent opens them as draft by default and the
-author marks ready when checks have settled. The body is mandated to
-contain, in order:
+PRs are opened ready-for-review with `base: main`. The body is
+mandated to contain, in order:
 
 1. `Closes #<N>`
 2. **Summary** — 1–3 bullets, "why" not "what".
@@ -228,8 +234,9 @@ contain, in order:
 4. **UAT on live staging** — concrete, copy-pasteable steps a human or
    QA agent can walk against
    `https://danielsperoniteam.github.io/fhir-place/staging/` once the
-   PR has merged into staging and Pages has redeployed. Each step
-   names the route, the action, and the expected observable result.
+   PR has been approved and `stack-approved-prs.yml` has rebuilt
+   staging. Each step names the route, the action, and the expected
+   observable result.
 
 If the engineer can't articulate UAT steps, that's an exit condition —
 it doesn't open the PR.
@@ -242,64 +249,62 @@ that section but must not skip it silently.
 
 ### 6. Human review
 
-A human (or the PR-review workflow at
-[`.github/workflows/pr-review.yml`](../../.github/workflows/pr-review.yml))
-reviews the diff. The staging ruleset has
-`required_approving_review_count: 0` — review is optional for the merge
-gate but recommended for substantive changes. The PR-review workflow's
-engineer subagent can return `verdict: blocker` to gate merge via
-`REQUEST_CHANGES`; the author addresses the blocker and re-requests.
+A human (or the [PR-review workflow](../../.github/workflows/pr-review.yml))
+reviews the diff. main's ruleset requires `required_approving_review_count: 1`
+plus `require_code_owner_review: true` — Daniel is the CODEOWNER.
 
-When the PR is marked ready and CI is green (`test` and `e2e`
-required by the staging ruleset), the merge queue picks it up and
-squash-merges into staging.
+The PR-review workflow's engineer subagent can return
+`verdict: blocker` to gate merge via `REQUEST_CHANGES`; the author
+addresses the blocker and re-requests.
 
-### 7. Merge into `staging`
+### 7. Approval → staging stack
 
-The merge queue rebuilds the merge commit, re-runs `test` and `e2e`
-against it, and squashes into staging when both pass. The `staging`
-branch is the source of truth for the next deployment of `/staging/`.
+Once `reviewDecision: APPROVED` lands on the PR,
+[`stack-approved-prs.yml`](../../.github/workflows/stack-approved-prs.yml)
+fires:
 
-`pages.yml` triggers on the push to staging and rebuilds both `/` and
-`/staging/` slots from the latest of each branch, then deploys the
-combined artifact. `/staging/` refreshes within ~3 minutes.
+```
+git checkout -B staging origin/main
+for each open APPROVED PR (ordered by PR number):
+  git merge --no-ff origin/<head>  # skip on conflict, warn
+git push --force-with-lease origin staging
+```
 
-### 7b. Promotion PR
+`pages.yml` triggers on the push to staging and rebuilds the combined
+artifact (`/` from main + `/staging/` from staging), then deploys.
+`/staging/` refreshes within ~3 minutes with this PR's content
+stacked alongside any other approved-in-flight PRs.
 
-`promote-staging.yml` triggers on every push to staging and
-opens / updates a single open `staging → main` promotion PR. Its body
-aggregates the **UAT on live staging** sections from every PR merged
-into staging since the last promotion, giving a reviewer one
-consolidated checklist.
-
-The PR is assigned to `@danielsperoni`. Items flagged with
-`status: needs-human` are called out at the top of the body. Conflict
-resolution against main is attempted automatically by Claude; if it
-can't resolve cleanly, the workflow escalates.
+If two approved PRs conflict with each other on staging, the workflow
+emits a warning and skips the conflicting PR — manual rebase needed
+on that branch.
 
 ### 8. UAT validation against the live staging build
 
-A human (Daniel, typically) walks the UAT checklist on the promotion
-PR against
+A human walks the PR's **UAT on live staging** checklist against
 `https://danielsperoniteam.github.io/fhir-place/staging/`. The
 hourly UAT-validation workflow can also walk PRs that include a
 `UAT on live staging` block, setting `uat: passed` / `uat: failed`
 labels and filing out-of-scope bugs as new issues.
 
-If UAT fails, the human (or engineer subagent in a follow-up) fixes
-the regression in a new PR against staging, and the next promotion PR
-batch includes the fix.
+If `uat: failed`: the author addresses the regression in a new
+commit. The PR's approval doesn't auto-dismiss on push by default —
+re-review is at the reviewer's discretion. The staging rebuild fires
+on the new commits (via `synchronize` event) and `/staging/` re-runs
+with the fix.
 
-### 9. Promotion: `staging` → `main`
+### 9. Merge to main
 
-Approving and merging the promotion PR fast-forwards `main` to the
-current staging tip. `pages.yml` triggers on the push to main and
-rebuilds both slots; `/` is now serving the promoted code, and
-`/staging/` stays in sync because both slots rebuild on every deploy.
+A PR is mergeable when **all** are true:
 
-The main ruleset requires `test` and `e2e` to pass on the merge commit,
-plus one approving CODEOWNER review. Daniel is the codeowner; the
-review is also the human's verification that UAT passed.
+- CI green (`test`, `e2e` required by the main ruleset)
+- `reviewDecision: APPROVED` (CODEOWNER review)
+- UAT walked (manually, or `uat: passed` label set)
+- No outstanding "request changes" review
+
+Daniel merges manually. Once observation confirms the gates are
+trustworthy, an auto-merge workflow can be added that enqueues PRs
+matching the criteria.
 
 ### 10. Post-deploy regression check
 
@@ -311,39 +316,36 @@ If a regression is filed, it lands in the "ready" queue once PM triage
 labels it, the engineer dispatch picks it up at the next `:05`, and
 the lifecycle repeats.
 
-## Direct-to-main commits and back-sync
+## Direct-to-main commits
 
-Some commits bypass the staging branch — CI/workflow fixes, doc
-edits, or anything that needs to land on main immediately. After such
-a commit:
+Some commits land on main without going through a PR — most often
+this means a human pushed a hotfix or merged a PR using the admin
+bypass. In Model B this is fine and doesn't require a separate sync
+workflow:
 
-- `sync-staging.yml` triggers on the push to main.
-- It creates / reuses `chore/sync-main-into-staging`, merges
-  `origin/main` into it locally, force-with-lease pushes the branch,
-  opens (or reuses) a PR to staging, and arms `gh pr merge --auto`.
-- Because staging requires 0 approving reviews, the queue squash-
-  merges the sync PR once test + e2e are green.
-- If the trivial merge hits conflicts, the workflow invokes Claude
-  to resolve them on the sync branch. Only if Claude can't resolve
-  does it escalate to a human (dedup'd into one open issue).
+- The push to main triggers `stack-approved-prs.yml`.
+- The workflow rebuilds staging from the new main HEAD plus current
+  approved-open PRs.
+- `/staging/` redeploys.
+
+There is no separate main→staging sync workflow because every
+rebuild already starts from main HEAD. Drift is impossible by
+construction.
 
 ## Reverting from main
 
 Sometimes a PR merges to main and a regression surfaces in the next
 nightly check (or sooner). Recovery:
 
-1. Open a revert PR against `staging` (`git revert <merge-commit>`),
-   walk through the same staging → promotion → main flow. For urgent
-   reverts that can't wait, open against `main` directly and let
-   `sync-staging.yml` back-sync.
-2. CI runs. Walk the UAT for the revert if it's non-trivial.
-3. Merge the revert. `/` redeploys without the bad change.
+1. Open a revert PR against `main` (`git revert <merge-commit>`).
+2. CI runs. Approve, walk UAT against staging if non-trivial.
+3. Merge the revert. `/` redeploys without the bad change. Staging
+   rebuilds too.
 4. The original PR's bot-issue branch can be retried with a fix.
 
 For most regressions caught the next morning by `live-site-monitor`,
 the cycle is: bot files an issue → PM triage labels it → engineer
-dispatch picks it up → fix PR → ships through the same flow. The
-revert path is for the louder, faster cases.
+dispatch picks it up → fix PR → ships through the same flow.
 
 ## Where humans are required
 
@@ -352,14 +354,12 @@ points:
 
 1. **Triggering the kill switch** when something is going sideways
    (label the loop's tracking issue `status: agent-paused`).
-2. **Approving + merging the promotion PR** `staging → main` once UAT
-   has been walked. This is the production-deploy gate; it's where the
-   human verifies what they validated on `/staging/` is what's about
-   to ship to `/`.
+2. **Approving + merging the PR to main** once CI is green and UAT
+   has been walked. This is the production-deploy gate.
 3. **Modifying the SDLC itself** — prompts, agent definitions,
    workflows, `CODEOWNERS`. Self-modification is out of scope for every
    agent in the system.
 
 Everything else — triage, branch creation, code, tests, screenshots,
-PR open, code review, merge to staging, label management, bug-filing,
-back-sync — is automated.
+PR open, code review (Codex), staging stack rebuild, UAT walk,
+label management, bug-filing — is automated.
