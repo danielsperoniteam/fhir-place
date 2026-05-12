@@ -16,6 +16,7 @@ import { PatientCompartmentLinks } from "../../../components/PatientCompartmentL
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { PATIENT_COMPARTMENT } from "../../../compartment.js";
 import { patientFieldOptions } from "../../../patientFields.js";
+import { RESOURCE_LIST_CONFIG } from "../../../resourceListConfig.js";
 
 const PATIENT_FIELDS_KEY = "fhir-place-demo-patient-detail-fields";
 
@@ -78,6 +79,16 @@ export function ResourceDetailPage() {
     () => (patientSdQuery.data ? patientFieldOptions(patientSdQuery.data) : []),
     [patientSdQuery.data],
   );
+  // Curated default-visible Patient fields from `resourceListConfig` so the
+  // Fields picker opens on a small clinician-relevant subset. Falls back to
+  // every walked field if Patient ever drops out of `RESOURCE_LIST_CONFIG`
+  // — the existing behaviour and what the picker did pre-curation.
+  const patientDefaultFields = useMemo(() => {
+    const cfg = RESOURCE_LIST_CONFIG.Patient;
+    if (!cfg?.defaultDetailFields) return patientFields.map((f) => f.path);
+    const allPaths = new Set(patientFields.map((f) => f.path));
+    return cfg.defaultDetailFields.filter((p) => allPaths.has(p));
+  }, [patientFields]);
   const [visibleFields, setVisibleFields] = useState<string[] | null>(null);
 
   const onReferenceClick = (ref: Reference) => {
@@ -128,9 +139,11 @@ export function ResourceDetailPage() {
           {isPatient && patientFields.length > 0 && (
             <ColumnPicker
               options={patientFields}
+              defaultSelected={patientDefaultFields}
               onChange={setVisibleFields}
               storageKey={PATIENT_FIELDS_KEY}
               buttonLabel="Fields"
+              searchPlaceholder="Filter fields…"
             />
           )}
           <Link
