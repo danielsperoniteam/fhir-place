@@ -139,38 +139,40 @@ function unitLabel(unit: string | undefined, count: number): string {
 const V3_GTS_ABBREVIATION_SYSTEM =
   "http://terminology.hl7.org/CodeSystem/v3-GTSAbbreviation";
 
+function timingCadence(code: Timing["code"]): string {
+  if (!code) return "";
+  const v3 = code.coding?.find(
+    (c) =>
+      c.system === V3_GTS_ABBREVIATION_SYSTEM && c.code && TIMING_ABBREVIATION_LABELS[c.code],
+  );
+  if (v3) return TIMING_ABBREVIATION_LABELS[v3.code!]!;
+  return code.text ?? code.coding?.find((c) => c.display)?.display ?? "";
+}
+
 export function formatTiming(t: Timing | undefined): string {
   if (!t) return "";
-  const code = t.code;
-  if (code) {
-    for (const c of code.coding ?? []) {
-      if (c.system !== V3_GTS_ABBREVIATION_SYSTEM) continue;
-      const label = c.code ? TIMING_ABBREVIATION_LABELS[c.code] : undefined;
-      if (label) return label;
-    }
-    if (code.text) return code.text;
-    const display = code.coding?.find((c) => c.display)?.display;
-    if (display) return display;
-  }
   const r = t.repeat;
   const parts: string[] = [];
-  if (r?.frequency != null || r?.period != null) {
+
+  // Cadence: an explicit Timing.code wins over a repeat-derived phrase.
+  let cadence = timingCadence(t.code);
+  if (!cadence && (r?.frequency != null || r?.period != null)) {
     const freq = r.frequency ?? 1;
     const period = r.period ?? 1;
     const freqStr = r.frequencyMax ? `${freq}–${r.frequencyMax}` : `${freq}`;
-    const timesWord =
-      freq === 1 && !r.frequencyMax ? "once" : `${freqStr} times`;
+    const timesWord = freq === 1 && !r.frequencyMax ? "once" : `${freqStr} times`;
     const periodStr = r.periodMax ? `${period}–${r.periodMax}` : `${period}`;
     if (!r.periodUnit) {
-      parts.push(timesWord);
+      cadence = timesWord;
     } else if (period === 1 && !r.periodMax) {
-      parts.push(`${timesWord} per ${unitLabel(r.periodUnit, 1)}`);
+      cadence = `${timesWord} per ${unitLabel(r.periodUnit, 1)}`;
     } else {
-      parts.push(
-        `${timesWord} every ${periodStr} ${unitLabel(r.periodUnit, r.periodMax ?? period)}`,
-      );
+      cadence = `${timesWord} every ${periodStr} ${unitLabel(r.periodUnit, r.periodMax ?? period)}`;
     }
-  } else if (r?.duration != null && r.durationUnit) {
+  }
+  if (cadence) parts.push(cadence);
+
+  if (r?.duration != null && r.durationUnit) {
     parts.push(`over ${r.duration} ${unitLabel(r.durationUnit, r.duration)}`);
   }
   if (r?.when?.length) {
@@ -184,16 +186,15 @@ export function formatTiming(t: Timing | undefined): string {
     const plural = (r.countMax ?? count) === 1 ? "" : "s";
     parts.push(`for ${countStr} dose${plural}`);
   }
-  if (!parts.length && r) {
-    if (r.boundsPeriod) parts.push(formatPeriod(r.boundsPeriod));
-    else if (r.boundsRange) parts.push(formatRange(r.boundsRange));
-    else if (r.boundsDuration) parts.push(`over ${formatQuantity(r.boundsDuration)}`);
-  }
+  if (r?.boundsPeriod) parts.push(formatPeriod(r.boundsPeriod));
+  else if (r?.boundsRange) parts.push(`for ${formatRange(r.boundsRange)}`);
+  else if (r?.boundsDuration) parts.push(`for ${formatQuantity(r.boundsDuration)}`);
+
   const phrase = parts.join(" ").trim();
   if (phrase) return phrase;
   if (t.event?.length) return t.event.join(", ");
   // Last resort: surface the raw code so coded-only timings aren't lost.
-  return code?.coding?.find((c) => c.code)?.code ?? "";
+  return t.code?.coding?.find((c) => c.code)?.code ?? "";
 }
 
 function formatRange(r: { low?: Quantity; high?: Quantity } | undefined): string {

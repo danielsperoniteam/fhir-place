@@ -265,12 +265,33 @@ describe("formatTiming", () => {
     ).toBe("2024-01-01 → 2024-03-01");
     expect(
       formatTiming({ repeat: { boundsDuration: { value: 14, unit: "days" } } }),
-    ).toBe("over 14 days");
+    ).toBe("for 14 days");
     expect(
       formatTiming({
         repeat: { boundsRange: { low: { value: 7, unit: "d" }, high: { value: 10, unit: "d" } } },
       }),
-    ).toBe("7 d–10 d");
+    ).toBe("for 7 d–10 d");
+  });
+
+  it("appends bounds to a coded cadence", () => {
+    expect(
+      formatTiming({
+        code: {
+          coding: [
+            { system: "http://terminology.hl7.org/CodeSystem/v3-GTSAbbreviation", code: "BID" },
+          ],
+        },
+        repeat: { boundsDuration: { value: 10, unit: "days" } },
+      }),
+    ).toBe("twice daily for 10 days");
+  });
+
+  it("keeps per-occurrence duration alongside a frequency cadence", () => {
+    expect(
+      formatTiming({
+        repeat: { frequency: 3, period: 1, periodUnit: "d", duration: 30, durationUnit: "min" },
+      }),
+    ).toBe("3 times per day over 30 minutes");
   });
 
   it("ignores abbreviation codes from non-v3-GTS systems", () => {
