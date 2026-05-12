@@ -24,10 +24,19 @@ just billed against the Claude Max subscription.
   staging" checklist against `/staging/`, sets `uat: passed` /
   `uat: failed` labels. Runs at :15.
 
-The event-triggered prompts (PR review on open / ready, issue review
-on new issue, `/dispatch-engineer` and `/resolve-conflicts` slash
-commands) need a polling daemon rather than a cron job — see the
-follow-up `poll-events.sh` (forthcoming).
+Event-triggered prompts are dispatched by the polling daemon at
+[`../poll-events.sh`](../poll-events.sh). It polls GitHub every
+60s and fires the per-event drivers in this directory:
+
+- `event-issue-review.sh <issue-number>` — new issue opened
+- `event-pr-review.sh <pr-number>` — non-draft PR without a bot review
+- `event-dispatch-engineer.sh <issue-number>` — `/dispatch-engineer` comment
+- `event-resolve-conflicts.sh <pr-number>` — `/resolve-conflicts` comment
+
+The poll daemon has its own launchd plist:
+`scripts/launchd/com.fhir-place.poll-events.plist`. Install it the
+same way as the cron plists; it runs as `KeepAlive: true` so it
+restarts if it crashes.
 
 ## One-time setup
 
@@ -97,7 +106,7 @@ log in.
 | Billing | Claude Max subscription | per-token API spend |
 | Always-on | needs your machine awake | always |
 | Logs | `$REPO_ROOT/logs/*.log` | Actions tab |
-| Trigger | launchd cron + (forthcoming) poll daemon | GitHub events directly |
+| Trigger | launchd cron + `poll-events.sh` daemon | GitHub events directly |
 | Security | runs as you, with your secrets in keychain | runs in sandboxed runner with repo secrets |
 
 The pattern is: when a workflow is steady and predictable (the cron

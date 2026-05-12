@@ -34,10 +34,29 @@ set -Eeuo pipefail
 
 PROMPT_FILE="${1:-}"
 if [[ -z "$PROMPT_FILE" ]]; then
-  echo "usage: $0 <prompt-file> [--allowedTools ...] [--max-turns N] [--extra-arg ...]" >&2
+  echo "usage: $0 <prompt-file> [--for <target>] [--allowedTools ...] [--max-turns N] [extra-arg ...]" >&2
   exit 2
 fi
 shift
+
+# Optional --for <target>: prepended as a one-line prologue before the
+# prompt body, telling claude what specific issue/PR this run is for.
+# Used by event-triggered drivers (issue-review, pr-review,
+# dispatch-engineer-on-issue, pr-resolve-conflicts) to scope the run.
+TARGET=""
+CLAUDE_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --for)
+      TARGET="$2"
+      shift 2
+      ;;
+    *)
+      CLAUDE_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
 
 REPO_ROOT="${REPO_ROOT:-$HOME/src/fhir-place}"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/logs}"
@@ -65,10 +84,14 @@ if [[ -z "$GITHUB_TOKEN" ]]; then
 fi
 
 PROMPT_BASENAME="$(basename "$PROMPT_FILE" .md)"
-LOCK_NAME="${LOCK_NAME:-$PROMPT_BASENAME}"
+# When a target is set (event-triggered run), namespace the lock and log
+# by target too so two event runs against different PRs/issues don't
+# block each other.
+TARGET_SLUG="$(echo "$TARGET" | tr -c 'A-Za-z0-9' '-' | sed 's/-\+/-/g; s/^-//; s/-$//')"
+LOCK_NAME="${LOCK_NAME:-${PROMPT_BASENAME}${TARGET_SLUG:+-$TARGET_SLUG}}"
 LOCK_DIR="/tmp/fhir-place-${LOCK_NAME}.lock"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-LOG_FILE="$LOG_DIR/${PROMPT_BASENAME}-${RUN_ID}.log"
+LOG_FILE="$LOG_DIR/${PROMPT_BASENAME}${TARGET_SLUG:+-$TARGET_SLUG}-${RUN_ID}.log"
 
 mkdir -p "$LOG_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -128,15 +151,26 @@ WORKTREE_PARENT="$(dirname "$REPO_ROOT")"
 unset ANTHROPIC_API_KEY
 
 echo "prompt: $RESOLVED_PROMPT"
-echo "claude args: $*"
+[[ -n "$TARGET" ]] && echo "target: $TARGET"
+echo "claude args: ${CLAUDE_ARGS[*]:-(none)}"
+
+# Compose stdin: optional prologue line (when --for was set) + the
+# prompt file. The prologue is what tells claude "execute for #N";
+# the prompt body has the per-prompt instructions.
+build_stdin() {
+  if [[ -n "$TARGET" ]]; then
+    echo "Execute the instructions in the prompt below for $TARGET. Do not modify the prompt file itself."
+    echo
+  fi
+  cat "$RESOLVED_PROMPT"
+}
 
 set +e
-claude \
+build_stdin | claude \
   --print \
   --add-dir "$WORKTREE_PARENT" \
   --dangerously-skip-permissions \
-  "$@" \
-  < "$RESOLVED_PROMPT"
+  "${CLAUDE_ARGS[@]}"
 RC=$?
 set -e
 

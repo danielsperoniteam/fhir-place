@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Long-running poll-events daemon. Replaces the GHA workflows that
+  trigger on issue_open / pull_request / issue_comment slash commands.
+
+  Install:
+    cp scripts/launchd/com.fhir-place.poll-events.plist ~/Library/LaunchAgents/
+    sed -i '' "s#__HOME__#$HOME#g" ~/Library/LaunchAgents/com.fhir-place.poll-events.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.fhir-place.poll-events.plist
+
+  Verify:
+    launchctl print gui/$(id -u)/com.fhir-place.poll-events
+    tail -f ~/src/fhir-place/logs/poll-events.log
+
+  Pause every local runner (cron and this daemon):
+    touch ~/.fhir-place-pause
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.fhir-place.poll-events</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/src/fhir-place/scripts/poll-events.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__HOME__/src/fhir-place</string>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/src/fhir-place/logs/launchd-poll-events.out</string>
+
+  <key>StandardErrorPath</key>
+  <string>__HOME__/src/fhir-place/logs/launchd-poll-events.err</string>
+
+  <!-- Keep the daemon alive; restart 60s after exit if it dies. -->
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
