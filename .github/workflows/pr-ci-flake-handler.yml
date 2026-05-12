@@ -1,0 +1,144 @@
+# Handles CI failures on PR branches.
+#
+# Closes SDLC gap #3 from PR #479: `on-failure-issue.yml` only watches
+# `main` and `staging`, so transient flakes on PR branches were
+# invisible to automation. Filing a `[CI]` bug for every flake would
+# either drown the backlog or push the engineer dispatcher to debug
+# transients. This workflow retries the failing jobs once; if they
+# fail a second time on the same commit, it escalates by commenting
+# and labeling `status: needs-human` so the dispatcher can investigate.
+#
+# Retry policy:
+# - 1st failure on a given head_sha → re-run failed jobs (attempt #2)
+# - 2nd failure on the same head_sha → re-run again (attempt #3)
+# - 3rd failure on the same head_sha → comment + label, hand off to agents
+#
+# Two retries weed out genuine flakes (most resolve on the 1st re-run,
+# some take 2). After 3 consecutive failures on the same commit, it's
+# almost always a real bug — escalate by adding `status: needs-human`,
+# which `pr-fixup-dispatch` picks up on its next fire and dispatches
+# the engineer subagent against the existing branch.
+#
+# Deterministic — no LLM. The retry uses the workflow_run rerun API
+# which only re-runs the failed jobs, not the whole workflow.
+#
+# Skip rules:
+# - Failures on `main` / `staging` (handled by on-failure-issue.yml)
+# - Failures of dispatcher / self-modifying workflows (avoid loops)
+# - PRs from forks (cannot post comments or labels without write token)
+
+name: PR CI flake handler
+
+on:
+  workflow_run:
+    # Listen on every workflow that runs on PRs. The job's `if` filters
+    # to failures, PR branches, and non-dispatcher workflows.
+    workflows:
+      - CI
+      - PR review
+      - Sync labels
+      - Integration tests (live FHIR)
+    types: [completed]
+
+permissions:
+  actions: write        # rerun-failed-jobs
+  pull-requests: write  # post escalation comment, add label
+  contents: read
+
+concurrency:
+  # Serialize per head_sha so two near-simultaneous failures on the
+  # same commit don't both kick a rerun. Cancel the older — newer one
+  # has fresher state.
+  group: pr-ci-flake-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch != 'main' &&
+      github.event.workflow_run.head_branch != 'staging' &&
+      github.event.workflow_run.name != 'File issue on CI failure' &&
+      github.event.workflow_run.name != 'Hourly engineer dispatch' &&
+      github.event.workflow_run.name != 'PR — resolve merge conflicts' &&
+      github.event.workflow_run.name != 'PR — address review comments' &&
+      github.event.workflow_run.name != 'PR CI flake handler' &&
+      github.event.workflow_run.name != 'Auto-update PR branches'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Retry-or-escalate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+            const headSha = run.head_sha;
+            const workflowId = run.workflow_id;
+
+            // Find the PR this branch belongs to. `pull_requests` on
+            // the workflow_run payload is populated for same-repo
+            // branches; for forks it's empty (we skip below).
+            let prNumber = run.pull_requests?.[0]?.number;
+            if (!prNumber) {
+              const search = await github.rest.search.issuesAndPullRequests({
+                q: `repo:${owner}/${repo} is:pr is:open head:${run.head_branch}`,
+                per_page: 1,
+              });
+              prNumber = search.data.items?.[0]?.number;
+            }
+            if (!prNumber) {
+              core.info(`no associated PR for ${run.head_branch}@${headSha.slice(0,7)} — skipping`);
+              return;
+            }
+
+            // Count completed failure runs on this head_sha for this
+            // workflow. This is the same workflow's failure count, so
+            // a 2nd failure here means "the retry also failed."
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner, repo,
+              workflow_id: workflowId,
+              head_sha: headSha,
+              per_page: 100,
+            });
+            const failures = runs.filter(r => r.conclusion === 'failure').length;
+            core.info(`workflow ${run.name} on ${headSha.slice(0,7)}: ${failures} failure(s)`);
+
+            // Two retries before escalation: re-run on failure #1 and
+            // failure #2. After failure #3 (three consecutive failures
+            // on the same commit), hand off to agents.
+            if (failures < 3) {
+              core.info(`failure ${failures}/3 — issuing rerun-failed-jobs on run ${run.id}`);
+              try {
+                await github.rest.actions.reRunWorkflowFailedJobs({
+                  owner, repo, run_id: run.id,
+                });
+              } catch (err) {
+                core.warning(`rerun failed: ${err.message}`);
+              }
+              return;
+            }
+
+            core.info(`failure ${failures}/3 — handing off to pr-fixup-dispatch for PR #${prNumber}`);
+            // Intentionally NO label here. pr-fixup-dispatch's queue
+            // filter already picks up PRs with red CI (it queries the
+            // latest workflow_run conclusion directly), so we don't
+            // need a label to attract it. We also avoid `status: needs-human`
+            // — that label is the "agent should NOT touch this" signal,
+            // not "agent should try harder." The engineer subagent will
+            // self-apply `status: needs-human` if its own fixup attempt
+            // hits a wall.
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: prNumber,
+              body: [
+                `### CI flake handler — handing off to agent`,
+                ``,
+                `Workflow **${run.name}** has failed ${failures} times on \`${headSha.slice(0,7)}\`. Two auto-retries didn't clear it, so this is almost certainly a real bug (not a transient flake).`,
+                ``,
+                `- Failing run: ${run.html_url}`,
+                `- \`pr-fixup-dispatch\` picks this up on its next fire (09:30 / 14:30 ET) and dispatches the engineer subagent against \`${run.head_branch}\`.`,
+                ``,
+                `If you want the agent to skip this PR (e.g. you're debugging it yourself), add \`status: needs-human\`.`,
+              ].join('\n'),
+            }).catch(err => core.warning(`createComment: ${err.message}`));
