@@ -16,6 +16,8 @@ import type {
   ValueSet,
 } from "fhir/r4";
 import type { FhirClient, SearchParams } from "../client/types.js";
+import type { SearchableResource } from "../client/searchBuilder.js";
+import { SearchBuilder } from "../client/searchBuilder.js";
 import { coreValueSet, lookupCoreConcept } from "../structure/core/valuesets.js";
 import { resolveStructureDefinition } from "../structure/resolve.js";
 import { useFhirClient, useOptionalTerminologyClient, useTerminologyClient } from "./FhirClientProvider.js";
@@ -86,6 +88,56 @@ export function useSearch<T extends Resource = Resource>(
     queryFn: ({ signal }) => client.search<T>(type, params, { signal }),
     ...options,
   });
+}
+
+/**
+ * Typed search hook backed by a {@link SearchBuilder} instance.
+ *
+ * The builder supplies both the resource type and the search parameters;
+ * the query key reuses {@link fhirQueryKeys}.search so that mutations via
+ * {@link useUpdateResource} or {@link useCreateResource} trigger the same
+ * cache invalidation path as plain {@link useSearch} calls.
+ *
+ * @example
+ * ```tsx
+ * const { data } = useTypedSearch(
+ *   searchBuilder('Patient')
+ *     .where('name', 'Smith')
+ *     .include('Patient:general-practitioner'),
+ * );
+ * ```
+ */
+export function useTypedSearch<
+  R extends SearchableResource,
+  T extends Resource = Resource,
+>(
+  builder: SearchBuilder<R>,
+  options?: ReadQueryOpts<Bundle<T>>,
+) {
+  const client = useFhirClient();
+  // Extract (resourceType, params) from the builder so the query key is
+  // structurally equivalent to fhirQueryKeys.search and invalidations work.
+  const resourceType = builder.resourceType;
+  const params = builderToSearchParams(builder);
+  return useQuery({
+    queryKey: fhirQueryKeys.search(client.baseUrl, resourceType, params),
+    queryFn: ({ signal }) => client.search<T>(resourceType, params, { signal }),
+    ...options,
+  });
+}
+
+/** @internal Converts a SearchBuilder's entries to a SearchParams object for use as a query key and fetch arg. */
+function builderToSearchParams(builder: SearchBuilder<SearchableResource>): SearchParams {
+  const result: Record<string, string[]> = {};
+  for (const [k, v] of builder.entries) {
+    (result[k] ??= []).push(v);
+  }
+  // Flatten single-item arrays to bare strings (matches FetchFhirClient conventions).
+  const out: SearchParams = {};
+  for (const [k, arr] of Object.entries(result)) {
+    out[k] = arr.length === 1 ? arr[0]! : arr;
+  }
+  return out;
 }
 
 /** Returns the absolute URL of a Bundle's next page, or undefined when done. */

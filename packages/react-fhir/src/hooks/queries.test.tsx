@@ -11,6 +11,7 @@ import {
   createBundledSpecFetcher,
   setCoreStructureDefinitionFetcher,
 } from "../structure/core/index.js";
+import { searchBuilder } from "../client/searchBuilder.js";
 import { FhirClientProvider } from "./FhirClientProvider.js";
 import {
   fhirQueryKeys,
@@ -26,6 +27,7 @@ import {
   useSearch,
   useSearchParameter,
   useStructureDefinition,
+  useTypedSearch,
   useUpdateResource,
   useValueSet,
   useValueSetExpansion,
@@ -957,6 +959,90 @@ describe("query hooks", () => {
         { wrapper },
       );
       expect(result.current.fetchStatus).toBe("idle");
+    });
+  });
+
+  describe("useTypedSearch", () => {
+    it("sends the builder's params to the server and returns a Bundle", async () => {
+      let captured: URLSearchParams | null = null;
+      server.use(
+        http.get(`${BASE}/Patient`, ({ request }) => {
+          captured = new URL(request.url).searchParams;
+          return HttpResponse.json({
+            resourceType: "Bundle",
+            type: "searchset",
+            total: 1,
+            entry: [{ resource: { resourceType: "Patient", id: "p1", gender: "female" } }],
+          });
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const builder = searchBuilder("Patient").where("name", "Smith").include("Patient:general-practitioner");
+      const { result } = renderHook(() => useTypedSearch<"Patient", Patient>(builder), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(captured!.get("name")).toBe("Smith");
+      expect(captured!.get("_include")).toBe("Patient:general-practitioner");
+      expect(result.current.data?.resourceType).toBe("Bundle");
+      expect(result.current.data?.entry?.[0]?.resource?.id).toBe("p1");
+    });
+
+    it("uses the same query key shape as useSearch for cache-invalidation parity", () => {
+      const { wrapper, qc, client } = mkWrapper();
+      const params = { name: "Jones", _include: "Patient:general-practitioner" };
+      qc.setQueryData(
+        fhirQueryKeys.search(client.baseUrl, "Patient", params),
+        {
+          resourceType: "Bundle",
+          type: "searchset",
+          total: 1,
+          entry: [{ resource: { resourceType: "Patient", id: "cached" } }],
+        },
+      );
+      const builder = searchBuilder("Patient")
+        .where("name", "Jones")
+        .include("Patient:general-practitioner");
+      const { result } = renderHook(
+        () => useTypedSearch<"Patient", Patient>(builder, { staleTime: Infinity }),
+        { wrapper },
+      );
+      // Data served from cache — no network request needed.
+      expect(result.current.data?.entry?.[0]?.resource?.id).toBe("cached");
+      expect(result.current.fetchStatus).toBe("idle");
+    });
+
+    it("cache is invalidated by useUpdateResource<Patient>", async () => {
+      let searchCalls = 0;
+      server.use(
+        http.get(`${BASE}/Patient`, () => {
+          searchCalls += 1;
+          return HttpResponse.json({
+            resourceType: "Bundle",
+            type: "searchset",
+            total: 0,
+            entry: [],
+          });
+        }),
+        http.put(`${BASE}/Patient/p99`, async ({ request }) => {
+          const body = (await request.json()) as Patient;
+          return HttpResponse.json({ ...body, meta: { versionId: "2" } });
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const builder = searchBuilder("Patient").where("name", "Smith");
+      const { result: searchResult } = renderHook(
+        () => useTypedSearch<"Patient", Patient>(builder),
+        { wrapper },
+      );
+      await waitFor(() => expect(searchResult.current.isSuccess).toBe(true));
+      expect(searchCalls).toBe(1);
+
+      const { result: mutResult } = renderHook(() => useUpdateResource<Patient>(), { wrapper });
+      await act(async () => {
+        await mutResult.current.mutateAsync({ resourceType: "Patient", id: "p99", gender: "male" });
+      });
+
+      // The mutation invalidates the Patient search key, causing a refetch.
+      await waitFor(() => expect(searchCalls).toBeGreaterThan(1));
     });
   });
 
