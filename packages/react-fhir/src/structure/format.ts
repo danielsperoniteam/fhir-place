@@ -154,37 +154,43 @@ export function formatTiming(t: Timing | undefined): string {
   const r = t.repeat;
   const parts: string[] = [];
 
-  // Cadence: an explicit Timing.code wins over a repeat-derived phrase.
-  let cadence = timingCadence(t.code);
-  if (!cadence && (r?.frequency != null || r?.period != null)) {
-    const freq = r.frequency ?? 1;
-    const period = r.period ?? 1;
-    const freqStr = r.frequencyMax ? `${freq}–${r.frequencyMax}` : `${freq}`;
-    const timesWord = freq === 1 && !r.frequencyMax ? "once" : `${freqStr} times`;
-    const periodStr = r.periodMax ? `${period}–${r.periodMax}` : `${period}`;
-    if (!r.periodUnit) {
-      cadence = timesWord;
-    } else if (period === 1 && !r.periodMax) {
-      cadence = `${timesWord} per ${unitLabel(r.periodUnit, 1)}`;
-    } else {
-      cadence = `${timesWord} every ${periodStr} ${unitLabel(r.periodUnit, r.periodMax ?? period)}`;
+  // A populated Timing.code is the complete schedule statement; only
+  // repeat.bounds[x] is layered on top of it (per the FHIR spec).
+  const codeCadence = timingCadence(t.code);
+  if (codeCadence) {
+    parts.push(codeCadence);
+  } else if (r) {
+    if (r.frequency != null || r.period != null) {
+      const freq = r.frequency ?? 1;
+      const period = r.period ?? 1;
+      const freqStr = r.frequencyMax ? `${freq}–${r.frequencyMax}` : `${freq}`;
+      const timesWord = freq === 1 && !r.frequencyMax ? "once" : `${freqStr} times`;
+      const periodStr = r.periodMax ? `${period}–${r.periodMax}` : `${period}`;
+      if (!r.periodUnit) {
+        parts.push(timesWord);
+      } else if (period === 1 && !r.periodMax) {
+        parts.push(`${timesWord} per ${unitLabel(r.periodUnit, 1)}`);
+      } else {
+        parts.push(
+          `${timesWord} every ${periodStr} ${unitLabel(r.periodUnit, r.periodMax ?? period)}`,
+        );
+      }
     }
-  }
-  if (cadence) parts.push(cadence);
-
-  if (r?.duration != null && r.durationUnit) {
-    parts.push(`over ${r.duration} ${unitLabel(r.durationUnit, r.duration)}`);
-  }
-  if (r?.when?.length) {
-    parts.push(r.when.map((w) => WHEN_LABELS[w] ?? w).join(", "));
-  }
-  if (r?.timeOfDay?.length) parts.push(`at ${r.timeOfDay.join(", ")}`);
-  if (r?.dayOfWeek?.length) parts.push(`on ${r.dayOfWeek.join(", ")}`);
-  if (r?.count != null || r?.countMax != null) {
-    const count = r.count ?? 1;
-    const countStr = r.countMax ? `${count}–${r.countMax}` : `${count}`;
-    const plural = (r.countMax ?? count) === 1 ? "" : "s";
-    parts.push(`for ${countStr} dose${plural}`);
+    if (r.duration != null && r.durationUnit) {
+      const durStr = r.durationMax ? `${r.duration}–${r.durationMax}` : `${r.duration}`;
+      parts.push(`over ${durStr} ${unitLabel(r.durationUnit, r.durationMax ?? r.duration)}`);
+    }
+    if (r.when?.length) {
+      parts.push(r.when.map((w) => WHEN_LABELS[w] ?? w).join(", "));
+    }
+    if (r.timeOfDay?.length) parts.push(`at ${r.timeOfDay.join(", ")}`);
+    if (r.dayOfWeek?.length) parts.push(`on ${r.dayOfWeek.join(", ")}`);
+    if (r.count != null || r.countMax != null) {
+      const count = r.count ?? 1;
+      const countStr = r.countMax ? `${count}–${r.countMax}` : `${count}`;
+      const plural = (r.countMax ?? count) === 1 ? "" : "s";
+      parts.push(`for ${countStr} dose${plural}`);
+    }
   }
   if (r?.boundsPeriod) parts.push(formatPeriod(r.boundsPeriod));
   else if (r?.boundsRange) parts.push(`for ${formatRange(r.boundsRange)}`);

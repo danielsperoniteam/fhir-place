@@ -294,6 +294,32 @@ describe("formatTiming", () => {
     ).toBe("3 times per day over 30 minutes");
   });
 
+  it("renders durationMax as a range", () => {
+    expect(
+      formatTiming({ repeat: { duration: 20, durationMax: 30, durationUnit: "min" } }),
+    ).toBe("over 20–30 minutes");
+  });
+
+  it("treats a populated Timing.code as the complete schedule (ignoring repeat modifiers)", () => {
+    expect(
+      formatTiming({
+        code: {
+          coding: [
+            { system: "http://terminology.hl7.org/CodeSystem/v3-GTSAbbreviation", code: "TID" },
+          ],
+        },
+        repeat: { when: ["AC"], count: 9, frequency: 5, period: 1, periodUnit: "h" },
+      }),
+    ).toBe("three times daily");
+    // …but bounds[x] is still layered on top.
+    expect(
+      formatTiming({
+        code: { text: "with meals" },
+        repeat: { when: ["PC"], boundsDuration: { value: 5, unit: "days" } },
+      }),
+    ).toBe("with meals for 5 days");
+  });
+
   it("ignores abbreviation codes from non-v3-GTS systems", () => {
     // A code "BID" from some unrelated terminology must not become "twice daily".
     expect(
