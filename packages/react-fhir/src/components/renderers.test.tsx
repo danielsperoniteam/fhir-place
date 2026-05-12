@@ -447,6 +447,28 @@ describe("Dosage renderer", () => {
     expect(container.textContent).toContain("Route");
   });
 
+  it("surfaces bounds variants and the lifetime max dose", () => {
+    const duration: Dosage = {
+      text: "course",
+      timing: { repeat: { boundsDuration: { value: 10, unit: "days" } } },
+      maxDosePerLifetime: { value: 4, unit: "g" },
+    };
+    const a = render(<>{renderer(duration, ctx)}</>);
+    expect(a.container.textContent).toContain("Duration");
+    expect(a.container.textContent).toContain("10");
+    expect(a.container.textContent).toContain("Max / lifetime");
+    expect(a.container.textContent).toContain("4");
+
+    const range: Dosage = {
+      text: "course",
+      timing: { repeat: { boundsRange: { low: { value: 7, unit: "d" }, high: { value: 14, unit: "d" } } } },
+    };
+    const b = render(<>{renderer(range, ctx)}</>);
+    expect(b.container.textContent).toContain("Duration");
+    expect(b.container.textContent).toContain("7");
+    expect(b.container.textContent).toContain("14");
+  });
+
   it("renders an em-dash for an empty dosage", () => {
     const { container } = render(<>{renderer({} as Dosage, ctx)}</>);
     expect(container.textContent).toBe("—");

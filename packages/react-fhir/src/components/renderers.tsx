@@ -482,8 +482,14 @@ const DosageRenderer: FhirTypeRenderer = (value, ctx) => {
   }
   const schedule = formatTiming(d.timing);
   if (schedule) rows.push({ label: "Schedule", node: <span>{schedule}</span> });
-  const bounds = d.timing?.repeat?.boundsPeriod;
-  if (bounds) rows.push({ label: "Duration", node: PeriodRenderer(bounds, ctx) });
+  const repeat = d.timing?.repeat;
+  if (repeat?.boundsPeriod) {
+    rows.push({ label: "Duration", node: PeriodRenderer(repeat.boundsPeriod, ctx) });
+  } else if (repeat?.boundsDuration) {
+    rows.push({ label: "Duration", node: QuantityRenderer(repeat.boundsDuration, ctx) });
+  } else if (repeat?.boundsRange) {
+    rows.push({ label: "Duration", node: RangeRenderer(repeat.boundsRange, ctx) });
+  }
   if (d.route) rows.push({ label: "Route", node: CodeableConceptRenderer(d.route, ctx) });
   if (d.site) rows.push({ label: "Site", node: CodeableConceptRenderer(d.site, ctx) });
   if (d.method) rows.push({ label: "Method", node: CodeableConceptRenderer(d.method, ctx) });
@@ -494,6 +500,9 @@ const DosageRenderer: FhirTypeRenderer = (value, ctx) => {
   if (d.maxDosePerPeriod) rows.push({ label: "Max / period", node: RatioRenderer(d.maxDosePerPeriod, ctx) });
   if (d.maxDosePerAdministration) {
     rows.push({ label: "Max / dose", node: QuantityRenderer(d.maxDosePerAdministration, ctx) });
+  }
+  if (d.maxDosePerLifetime) {
+    rows.push({ label: "Max / lifetime", node: QuantityRenderer(d.maxDosePerLifetime, ctx) });
   }
   for (const ai of d.additionalInstruction ?? []) {
     rows.push({ label: "Also", node: CodeableConceptRenderer(ai, ctx) });
