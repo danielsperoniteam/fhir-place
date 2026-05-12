@@ -447,6 +447,19 @@ describe("Dosage renderer", () => {
     expect(container.textContent).toContain("Route");
   });
 
+  it("labels dose/rate rows with their doseAndRate.type", () => {
+    const d: Dosage = {
+      text: "infusion",
+      doseAndRate: [
+        { type: { text: "ordered" }, doseQuantity: { value: 500, unit: "mg" } },
+        { type: { text: "calculated" }, doseQuantity: { value: 480, unit: "mg" } },
+      ],
+    };
+    const { container } = render(<>{renderer(d, ctx)}</>);
+    expect(container.textContent).toContain("Dose (ordered)");
+    expect(container.textContent).toContain("Dose (calculated)");
+  });
+
   it("surfaces bounds variants and the lifetime max dose", () => {
     const duration: Dosage = {
       text: "course",

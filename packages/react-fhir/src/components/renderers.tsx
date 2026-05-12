@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 import { Fragment } from "react";
 import {
   formatAddress,
+  formatCodeableConcept,
   formatDosage,
   formatHumanName,
   formatReferenceLabel,
@@ -467,17 +468,19 @@ const DosageRenderer: FhirTypeRenderer = (value, ctx) => {
   const rows: { label: string; node: ReactNode }[] = [];
 
   for (const dr of d.doseAndRate ?? []) {
+    const typeText = formatCodeableConcept(dr.type);
+    const suffix = typeText ? ` (${typeText})` : "";
     if (dr.doseQuantity) {
-      rows.push({ label: "Dose", node: QuantityRenderer(dr.doseQuantity, ctx) });
+      rows.push({ label: `Dose${suffix}`, node: QuantityRenderer(dr.doseQuantity, ctx) });
     } else if (dr.doseRange) {
-      rows.push({ label: "Dose", node: RangeRenderer(dr.doseRange, ctx) });
+      rows.push({ label: `Dose${suffix}`, node: RangeRenderer(dr.doseRange, ctx) });
     }
     if (dr.rateQuantity) {
-      rows.push({ label: "Rate", node: QuantityRenderer(dr.rateQuantity, ctx) });
+      rows.push({ label: `Rate${suffix}`, node: QuantityRenderer(dr.rateQuantity, ctx) });
     } else if (dr.rateRatio) {
-      rows.push({ label: "Rate", node: RatioRenderer(dr.rateRatio, ctx) });
+      rows.push({ label: `Rate${suffix}`, node: RatioRenderer(dr.rateRatio, ctx) });
     } else if (dr.rateRange) {
-      rows.push({ label: "Rate", node: RangeRenderer(dr.rateRange, ctx) });
+      rows.push({ label: `Rate${suffix}`, node: RangeRenderer(dr.rateRange, ctx) });
     }
   }
   const schedule = formatTiming(d.timing);
