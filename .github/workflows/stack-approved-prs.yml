@@ -21,7 +21,7 @@
 #     → main advanced; rebuild from new HEAD so direct-to-main commits
 #       propagate to /staging/ automatically (no separate sync needed)
 #
-# Concurrency: one rebuild at a time per branch. Rapid events coalesce.
+# Concurrency: one rebuild at a time. Rapid events coalesce.
 
 name: Stack approved PRs onto staging
 
@@ -42,7 +42,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Preflight: refuse to run when the workflow file isn't yet on main.
+  # GitHub will run a workflow added in a PR branch when the PR receives
+  # a pull_request_review or pull_request event — so a workflow that
+  # mutates a shared ref like `staging` can fire from an unmerged PR
+  # branch and wreck production. This job verifies the running workflow's
+  # SHA is reachable from main; the rebuild job only runs when it is.
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      on_main: ${{ steps.check.outputs.on_main }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 200
+      - id: check
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          if git merge-base --is-ancestor "$WORKFLOW_SHA" origin/main 2>/dev/null \
+              || git merge-base --is-ancestor "$WORKFLOW_SHA" main 2>/dev/null; then
+            echo "on_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Workflow SHA $WORKFLOW_SHA is not on main; skipping staging rebuild (this is the expected path when an unmerged PR is being tested via pull_request_review)."
+            echo "on_main=false" >> "$GITHUB_OUTPUT"
+          fi
+
   rebuild:
+    needs: preflight
+    if: needs.preflight.outputs.on_main == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
