@@ -181,7 +181,11 @@ export function formatTiming(t: Timing | undefined): string {
       parts.push(`over ${durStr} ${unitLabel(r.durationUnit, r.durationMax ?? r.duration)}`);
     }
     if (r.when?.length) {
-      parts.push(r.when.map((w) => WHEN_LABELS[w] ?? w).join(", "));
+      const whenPhrase = r.when.map((w) => WHEN_LABELS[w] ?? w).join(", ");
+      const offset = r.offset
+        ? `${r.offset} minute${r.offset === 1 ? "" : "s"} `
+        : "";
+      parts.push(`${offset}${whenPhrase}`);
     }
     if (r.timeOfDay?.length) parts.push(`at ${r.timeOfDay.join(", ")}`);
     if (r.dayOfWeek?.length) parts.push(`on ${r.dayOfWeek.join(", ")}`);

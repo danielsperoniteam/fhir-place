@@ -467,6 +467,7 @@ const DosageRenderer: FhirTypeRenderer = (value, ctx) => {
   const headline = d.text ?? formatDosage(d);
   const rows: { label: string; node: ReactNode }[] = [];
 
+  if (d.sequence != null) rows.push({ label: "Step", node: <span>{d.sequence}</span> });
   for (const dr of d.doseAndRate ?? []) {
     const typeText = formatCodeableConcept(dr.type);
     const suffix = typeText ? ` (${typeText})` : "";

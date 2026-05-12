@@ -447,6 +447,14 @@ describe("Dosage renderer", () => {
     expect(container.textContent).toContain("Route");
   });
 
+  it("shows the dosage step number from Dosage.sequence", () => {
+    const { container } = render(
+      <>{renderer({ sequence: 2, text: "then..." } as Dosage, ctx)}</>,
+    );
+    expect(container.textContent).toContain("Step");
+    expect(container.textContent).toContain("2");
+  });
+
   it("labels dose/rate rows with their doseAndRate.type", () => {
     const d: Dosage = {
       text: "infusion",

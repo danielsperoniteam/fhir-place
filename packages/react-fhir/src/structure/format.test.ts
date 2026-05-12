@@ -226,6 +226,12 @@ describe("formatTiming", () => {
     expect(formatTiming({ repeat: { count: 3, countMax: 5 } })).toBe("for 3–5 doses");
   });
 
+  it("includes repeat.offset with the when phrase", () => {
+    expect(
+      formatTiming({ repeat: { when: ["AC"], offset: 30 } }),
+    ).toBe("30 minutes before meals");
+  });
+
   it("appends when / count modifiers", () => {
     expect(
       formatTiming({
