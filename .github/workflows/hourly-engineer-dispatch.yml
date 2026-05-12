@@ -1,4 +1,4 @@
-# Hourly engineer-dispatch routine.
+# Hourly engineer-dispatch routine. :)
 #
 # Picks up to 3 ready issues from the backlog, hands each to the engineer
 # subagent (.claude/agents/engineer.md), opens draft PRs, and updates a
