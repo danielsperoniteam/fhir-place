@@ -42,37 +42,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Preflight: refuse to run when the workflow file isn't yet on main.
-  # GitHub will run a workflow added in a PR branch when the PR receives
-  # a pull_request_review or pull_request event — so a workflow that
-  # mutates a shared ref like `staging` can fire from an unmerged PR
-  # branch and wreck production. This job verifies the running workflow's
-  # SHA is reachable from main; the rebuild job only runs when it is.
+  # Preflight: refuse to run when the workflow file at the triggering ref
+  # differs from main's. GitHub will run a workflow added in a PR branch
+  # when the PR receives a pull_request_review or pull_request event —
+  # so a workflow that mutates a shared ref like `staging` can fire from
+  # an unmerged PR branch and wreck production. This job blob-compares
+  # the workflow file: if the running ref's version of
+  # `stack-approved-prs.yml` is byte-identical to main's, we trust it
+  # and proceed; if a PR modified the workflow, we skip until that PR
+  # merges.
   preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     outputs:
-      on_main: ${{ steps.check.outputs.on_main }}
+      safe: ${{ steps.check.outputs.safe }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
-          fetch-depth: 200
+          ref: ${{ github.sha }}
+          sparse-checkout: |
+            .github/workflows/stack-approved-prs.yml
+          sparse-checkout-cone-mode: false
       - id: check
         env:
-          WORKFLOW_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git merge-base --is-ancestor "$WORKFLOW_SHA" origin/main 2>/dev/null \
-              || git merge-base --is-ancestor "$WORKFLOW_SHA" main 2>/dev/null; then
-            echo "on_main=true" >> "$GITHUB_OUTPUT"
+          if [ ! -f .github/workflows/stack-approved-prs.yml ]; then
+            echo "::warning::Workflow file doesn't exist at the triggering ref; skipping."
+            echo "safe=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RUNNING_HASH=$(git hash-object .github/workflows/stack-approved-prs.yml)
+          MAIN_HASH=$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/stack-approved-prs.yml?ref=main" --jq '.sha')
+          if [ "$RUNNING_HASH" = "$MAIN_HASH" ]; then
+            echo "safe=true" >> "$GITHUB_OUTPUT"
+            echo "Workflow file at triggering ref matches main — proceeding."
           else
-            echo "::warning::Workflow SHA $WORKFLOW_SHA is not on main; skipping staging rebuild (this is the expected path when an unmerged PR is being tested via pull_request_review)."
-            echo "on_main=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Workflow file at triggering ref differs from main (running: $RUNNING_HASH vs main: $MAIN_HASH). Skipping to avoid running an unreviewed staging-rebuild script."
+            echo "safe=false" >> "$GITHUB_OUTPUT"
           fi
 
   rebuild:
     needs: preflight
-    if: needs.preflight.outputs.on_main == 'true'
+    if: needs.preflight.outputs.safe == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
