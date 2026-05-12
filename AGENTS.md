@@ -1,5 +1,12 @@
 # Codex Notes
 
+## Where work lives
+
+- **Project board:** <https://github.com/orgs/danielsperoniteam/projects/1>
+- Two-week sprints. Pull from the current sprint sorted by Priority (P0 first).
+- Issues are still the source of truth; the board is the lens.
+- See `README.md` § Sprint board for the current focus and what's deferred.
+
 ## General
 
 - Keep context small; read only files relevant to the active issue.

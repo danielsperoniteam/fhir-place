@@ -71,6 +71,18 @@ See [`apps/goals-tasks/README.md`](apps/goals-tasks/README.md) for the full brea
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | PR workflow, testing, changesets, bump conventions |
 | [`docs/decisions/`](docs/decisions/) | Architecture Decision Records |
 | [Open issues](https://github.com/danielsperoniteam/fhir-place/issues) | Tracked gaps and roadmap items |
+| [Project board](https://github.com/orgs/danielsperoniteam/projects/1) | Sprint board — pull work from the current sprint, sorted by Priority |
+
+## Sprint board
+
+Work is tracked on the [fhir-place project board](https://github.com/orgs/danielsperoniteam/projects/1). Two-week sprints. Pull from the current sprint sorted by Priority (P0 first), assign yourself, move to **In Progress**, open a PR, merge moves to **Done**. Bot dispatchers and human contributors share the same board.
+
+- **Sprint 1 (May 10 – May 24, 2026)** — agent process and SDLC hardening. Get CI green (#319, #320, #323), fix the XSS in the JSON viewer (#360), enforce the staging-only rule mechanically (#425), make the dispatcher's failure modes legible (#429), kill switch wired (#284).
+- **Sprint 2 (May 24 – Jun 7, 2026)** — high-priority bug burndown plus clinical-safety guardrails (#254, #269 carved into 5 issues via #433). Validates that Sprint 1's SDLC changes actually hold under bug-fix volume.
+
+SMART, big new features, and net-new resource-type support are deferred until Sprint 1 SDLC work has stuck for at least one sprint.
+
+The plan was written by the four-agent retro on 2026-05-06 (`docs/retros/2026-05-06-dev-process.md`). Next retro: 2026-05-20.
 
 ## License
 
