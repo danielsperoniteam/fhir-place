@@ -133,6 +133,11 @@ describe("formatDateTime", () => {
     expect(formatDateTime(undefined)).toBe("");
     expect(formatDateTime("")).toBe("");
   });
+
+  it("does not normalise an out-of-range full date", () => {
+    expect(formatDateTime("2021-02-31")).toBe("2021-02-31");
+    expect(formatDateTime("2021-13-01")).toBe("2021-13-01");
+  });
 });
 
 describe("formatPeriod", () => {

@@ -79,14 +79,20 @@ export function formatDateTime(value: string | undefined): string {
   if (!value) return "";
   if (/^\d{4}(-\d{2})?$/.test(value)) return value;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const d = new Date(`${value}T00:00:00`);
-    return Number.isNaN(d.getTime())
-      ? value
-      : d.toLocaleDateString(undefined, {
+    const [y, mo, day] = value.split("-").map(Number) as [number, number, number];
+    const d = new Date(y, mo - 1, day);
+    // `new Date` silently rolls over out-of-range parts (2021-02-31 → Mar 3),
+    // so a malformed date would otherwise render as a different day. Only
+    // format when the components round-trip; otherwise keep the raw string.
+    const roundTrips =
+      d.getFullYear() === y && d.getMonth() === mo - 1 && d.getDate() === day;
+    return roundTrips
+      ? d.toLocaleDateString(undefined, {
           year: "numeric",
           month: "short",
           day: "numeric",
-        });
+        })
+      : value;
   }
   const d = new Date(value);
   return Number.isNaN(d.getTime())
