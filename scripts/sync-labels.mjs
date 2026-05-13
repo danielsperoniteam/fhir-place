@@ -45,6 +45,9 @@ const CANONICAL = [
   { name: 'priority: P1', color: 'fbca04', description: 'Default priority.' },
   { name: 'priority: P2', color: '0e8a16', description: 'Nice-to-have.' },
   { name: 'priority: P3', color: 'BFD4F2', description: 'Deferred — someday / out of current sprint.' },
+  // flag: (per ADR 0006)
+  { name: 'flag: required', color: '1d76db', description: 'Engineer must wrap this change in a default-off feature flag (see ADR 0006).' },
+  { name: 'flag: optional', color: 'c5def5', description: 'Engineer should bail to needs-human; a person decides whether to wrap (see ADR 0006).' },
   // status:
   { name: 'status: blocked', color: '000000', description: 'Cannot progress until a referenced blocker resolves.' },
   { name: 'status: needs-triage', color: 'cccccc', description: 'No type/area/priority set, or PM agent unsure — needs human review.' },

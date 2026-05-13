@@ -17,10 +17,12 @@
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "release": "pnpm --filter @fhir-place/react-fhir build && changeset publish",
-    "check:readme-goal-task": "node scripts/check-readme-goal-task.mjs"
+    "check:readme-goal-task": "node scripts/check-readme-goal-task.mjs",
+    "ld:smoke": "node scripts/ld-smoke.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
+    "@launchdarkly/node-server-sdk": "^9.10.14",
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"
   },

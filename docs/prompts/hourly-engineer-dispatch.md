@@ -119,8 +119,11 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
    `status: needs-human` comment if it cannot complete the work."
 
 3. **Dispatch:** invoke the `engineer` subagent with worktree isolation,
-   passing `{issue_number: <N>, acceptance_criteria: <restated>, branch_name: bot/issue-<N>-<slug>}`.
+   passing `{issue_number: <N>, acceptance_criteria: <restated>, branch_name: bot/issue-<N>-<slug>, flag_label: <"required"|"optional"|null>}`.
    The subagent's hard rules apply — see `.claude/agents/engineer.md`.
+   `flag_label` comes from the issue's labels (`flag: required` /
+   `flag: optional`) per [ADR 0006](../decisions/0006-feature-flagging.md);
+   the engineer wraps the change accordingly or bails to `needs-human`.
 
 4. **Reconcile on return:**
 

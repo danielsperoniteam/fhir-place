@@ -66,6 +66,16 @@ Apply the labels via `mcp__github__issue_write method=update labels=[...]`. Note
 
 If you cannot infer with confidence, add `status: needs-triage` and surface in the report.
 
+### 1b. Feature-flag labeling (per ADR 0006)
+
+For every open issue that has at least one `type:` and `area:` label (i.e. is past basic triage), check whether it needs a `flag:` label per [ADR 0006](../decisions/0006-feature-flagging.md). The default is **no flag** — only apply a label when a trigger from the ADR clearly fires.
+
+- **Apply `flag: required`** if the issue body or title clearly indicates: a new user-visible surface in `apps/demo`, a new autonomous behavior in the dispatch loop, a change to data fetch/write affecting rendered output, or a security-model change (additive — not a security fix).
+- **Apply `flag: optional`** if the situation is ambiguous and a human should decide. Include a one-line comment naming the trigger you considered.
+- **No `flag:` label** otherwise. Bug fixes for shipped behavior, docs, internal refactors, tests, CI, copy edits → ship unwrapped.
+
+Do **not** override an existing `flag:` label set by a human. Surface conflicts in the report.
+
 ### 2. Title-convention violations
 
 For every open issue, check the title. If it starts with `[anything]`:
