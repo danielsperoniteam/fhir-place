@@ -293,8 +293,11 @@ describe("ResourceTable", () => {
       { wrapper: wrap() },
     );
     // Each row is now a list item with a label/value pair per column.
-    const rows = screen.getAllByTestId("resource-row-card");
+    const rows = screen.getAllByTestId("resource-row");
     expect(rows).toHaveLength(2);
+    // Cards are list items (not table rows). Disambiguate by tag — the table
+    // layout would use `<tr>`.
+    expect(rows[0]!.tagName).toBe("LI");
     // Headers don't render in card mode; instead each cell is paired with
     // its column label inline.
     expect(within(rows[0]!).getByText("Name")).toBeInTheDocument();
@@ -318,7 +321,7 @@ describe("ResourceTable", () => {
       />,
       { wrapper: wrap() },
     );
-    const firstRow = screen.getAllByTestId("resource-row-card")[0]!;
+    const firstRow = screen.getAllByTestId("resource-row")[0]!;
     firstRow.focus();
     await user.keyboard("{Enter}");
     expect(onRowClick).toHaveBeenCalledWith(patients[0]);
@@ -544,7 +547,10 @@ describe("ResourceTable", () => {
   });
 
   describe("responsive layouts", () => {
-    it("auto layout (default) renders both a table and a card stack", () => {
+    it("auto layout (default) renders the table tree in jsdom (no matchMedia)", () => {
+      // jsdom doesn't implement window.matchMedia, so the narrow-viewport
+      // hook falls back to its desktop default. Auto mode renders exactly one
+      // tree per viewport — the table here, the card stack on real phones.
       render(
         <ResourceTable<Patient>
           resources={patients}
@@ -554,11 +560,43 @@ describe("ResourceTable", () => {
         { wrapper: wrap() },
       );
       expect(screen.getByTestId("resource-table-table")).toBeInTheDocument();
-      expect(screen.getByTestId("resource-table-cards")).toBeInTheDocument();
-      // jsdom doesn't apply CSS, so both layouts are in the DOM. Existing
-      // unit tests counting `resource-row` still see only the table rows.
+      expect(screen.queryByTestId("resource-table-cards")).not.toBeInTheDocument();
       expect(screen.getAllByTestId("resource-row")).toHaveLength(2);
-      expect(screen.getAllByTestId("resource-row-card")).toHaveLength(2);
+    });
+
+    it("auto layout flips to the card stack when matchMedia reports narrow", () => {
+      const matches = vi.fn().mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      });
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: matches,
+      });
+      try {
+        render(
+          <ResourceTable<Patient>
+            resources={patients}
+            columns={["name", "gender"]}
+            structureDefinition={sd}
+          />,
+          { wrapper: wrap() },
+        );
+        // After effect runs, the cards tree replaces the table tree.
+        expect(screen.getByTestId("resource-table-cards")).toBeInTheDocument();
+        expect(screen.queryByTestId("resource-table-table")).not.toBeInTheDocument();
+        // The `<li>` cards carry the `resource-row` testid so e2e tests that
+        // look for "any row" find them on phone-width viewports — this is the
+        // regression captured for issue #509.
+        expect(screen.getAllByTestId("resource-row")).toHaveLength(2);
+      } finally {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any).matchMedia;
+      }
     });
 
     it('layout="table" omits the card stack entirely', () => {
@@ -573,7 +611,6 @@ describe("ResourceTable", () => {
       );
       expect(screen.getByTestId("resource-table-table")).toBeInTheDocument();
       expect(screen.queryByTestId("resource-table-cards")).not.toBeInTheDocument();
-      expect(screen.queryAllByTestId("resource-row-card")).toHaveLength(0);
     });
 
     it('layout="cards" omits the table entirely', () => {
@@ -588,9 +625,8 @@ describe("ResourceTable", () => {
       );
       expect(screen.queryByTestId("resource-table-table")).not.toBeInTheDocument();
       expect(screen.getByTestId("resource-table-cards")).toBeInTheDocument();
-      expect(screen.getAllByTestId("resource-row-card")).toHaveLength(2);
-      // No table rows.
-      expect(screen.queryAllByTestId("resource-row")).toHaveLength(0);
+      // Cards carry the `resource-row` testid — they are the row on this layout.
+      expect(screen.getAllByTestId("resource-row")).toHaveLength(2);
     });
 
     it("renders each card as a label/value list and dispatches the same renderers", () => {
@@ -603,7 +639,7 @@ describe("ResourceTable", () => {
         />,
         { wrapper: wrap() },
       );
-      const card = screen.getAllByTestId("resource-row-card")[0]!;
+      const card = screen.getAllByTestId("resource-row")[0]!;
       // Labels (column headers) + values render side by side in the dl.
       expect(within(card).getByText("Name")).toBeInTheDocument();
       expect(within(card).getByText(/Ada Lovelace/)).toBeInTheDocument();
@@ -626,7 +662,7 @@ describe("ResourceTable", () => {
         />,
         { wrapper: wrap() },
       );
-      const card = screen.getAllByTestId("resource-row-card")[1]!;
+      const card = screen.getAllByTestId("resource-row")[1]!;
       card.focus();
       expect(card.tabIndex).toBe(0);
       await user.keyboard("{Enter}");
@@ -651,7 +687,7 @@ describe("ResourceTable", () => {
         />,
         { wrapper: wrap() },
       );
-      const card = screen.getByTestId("resource-row-card");
+      const card = screen.getByTestId("resource-row");
       expect(within(card).getByText(/86/)).toBeInTheDocument();
       expect(within(card).getByText(/beats\/minute/)).toBeInTheDocument();
       expect(within(card).queryByText(/"value":/)).not.toBeInTheDocument();
