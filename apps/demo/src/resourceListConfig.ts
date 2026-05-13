@@ -179,6 +179,7 @@ export const genericFormatMeta = (r: Resource): Array<string | undefined | null>
     stringField(any.recordedDate) ??
     stringField(any.onsetDateTime) ??
     stringField(any.performedDateTime) ??
+    stringField((any.performedPeriod as { start?: string } | undefined)?.start) ??
     stringField(period?.start) ??
     stringField(any.date) ??
     stringField(any.issued) ??
@@ -317,7 +318,7 @@ const PROCEDURE: ResourceListConfig<Procedure> = {
   ],
   defaultVisibleColumns: ["status", "code", "performed[x]"],
   formatPrimary: (p) => codeText(p.code) ?? "(no code)",
-  formatMeta: (p) => [p.status, p.performedDateTime],
+  formatMeta: (p) => [p.status, p.performedDateTime ?? p.performedPeriod?.start],
 };
 
 const ENCOUNTER: ResourceListConfig<Encounter> = {
