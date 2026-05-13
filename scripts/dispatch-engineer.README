@@ -1,4 +1,12 @@
-# dispatch-engineer.sh — local driver
+# dispatch-engineer.sh — local driver (legacy)
+
+> **Legacy.** Pre-#479 monolithic driver. The current pattern is
+> `scripts/local/engineer-dispatch.sh` plus `scripts/run-prompt-locally.sh`
+> as the shared wrapper, with launchd plists in `scripts/launchd/`. See
+> [`scripts/local/README.md`](local/README.md) for the canonical docs.
+>
+> This script and its launchd plist (`com.danielsperoni.fhir-place-dispatch.plist`)
+> are kept working for now but should not be used for new installs.
 
 Local equivalent of `.github/workflows/hourly-engineer-dispatch.yml`. Picks
 ready issues, hands them to the `engineer` subagent in isolated worktrees,
