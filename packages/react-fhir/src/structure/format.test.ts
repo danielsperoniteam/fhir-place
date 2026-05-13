@@ -157,6 +157,12 @@ describe("formatDateTime", () => {
     );
   });
 
+  it("rejects year 0000 and other out-of-range years", () => {
+    // FHIR date/dateTime years are 0001..9999.
+    expect(formatDateTime("0000-01-01")).toBe("0000-01-01");
+    expect(formatDateTime("0000-01-01T00:00:00Z")).toBe("0000-01-01T00:00:00Z");
+  });
+
   it("does not remap low years (0001-0099) onto the 20th century", () => {
     // `new Date(yy, …)` would map year 99 → 1999; the helper must not.
     const low = formatDateTime("0099-12-31");

@@ -73,10 +73,12 @@ function localDate(y: number, mo: number, day: number): Date {
   return d;
 }
 
-// True when `Y-M-D` denotes a real calendar day. `new Date` rolls overflow
-// parts forward (2021-02-31 → Mar 3), so we reject anything that doesn't
-// round-trip rather than silently render a different day.
+// True when `Y-M-D` denotes a real calendar day inside the FHIR-permitted
+// year range (0001-9999). `new Date` rolls overflow parts forward
+// (2021-02-31 → Mar 3) and accepts year 0, so reject anything that doesn't
+// round-trip or that falls outside the spec range.
 function isRealCalendarDay(y: number, mo: number, day: number): boolean {
+  if (y < 1 || y > 9999) return false;
   const d = localDate(y, mo, day);
   return d.getFullYear() === y && d.getMonth() === mo - 1 && d.getDate() === day;
 }
