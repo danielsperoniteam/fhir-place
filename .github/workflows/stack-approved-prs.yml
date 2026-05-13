@@ -34,8 +34,8 @@ on:
     branches: [main]
 
 permissions:
-  contents: write     # force-push staging
-  pull-requests: read
+  contents: write       # force-push staging
+  pull-requests: write  # edit `uat:` labels after stacking
 
 concurrency:
   group: stack-approved-prs
