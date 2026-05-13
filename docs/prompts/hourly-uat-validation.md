@@ -97,6 +97,11 @@ already covered by `live-site-monitor.yml`.
 
 Drop any PR labelled `status: agent-paused`.
 
+**Drop any PR labelled `uat: skip`** — these declare "no user-visible
+change" in their UAT section and don't need validation. Leave the
+label as-is; do not post a comment. The PR will merge on CI green +
+CODEOWNER approval alone.
+
 For each remaining candidate, decide whether its changes are live on
 `/staging/` by checking whether its head SHA is reachable from the
 `staging` branch tip:
@@ -117,17 +122,26 @@ PR's existing comments for one whose body starts with the marker
 than 50 minutes **and** its `sha=<head-sha>` matches the current head
 SHA, skip the PR silently — nothing has changed since the last run.
 
-For each not-on-staging PR that is **not** silently deduped, post:
+For each not-on-staging PR that is **not** silently deduped, post the
+marker comment AND set the `uat: unable` label (removing any other
+`uat:` state). This signals that the PR is not yet validatable:
 
 ```
 <!-- uat-validation:run sha=<head-sha> at=<ISO> reason=not-on-staging -->
 
 UAT validation — <YYYY-MM-DD HH:MM UTC>
 
-PR head `<head-sha-short>` is not yet on the `staging` branch. Engineer
-needs to merge `<head-branch>` into `staging` so its changes deploy to
-`/staging/`; this routine will then validate the UAT items on the next
-hourly run. Run: <workflow run URL>
+PR head `<head-sha-short>` is not yet on the `staging` branch. PR needs
+CODEOWNER approval first; then `stack-approved-prs.yml` will rebuild
+staging with it stacked, and this routine will validate the UAT items
+on the next hourly run. Run: <workflow run URL>
+```
+
+Then transition labels (best-effort):
+
+```
+gh pr edit <N> --remove-label "uat: requested" --remove-label "uat: complete" --remove-label "uat: needs-changes"
+gh pr edit <N> --add-label    "uat: unable"
 ```
 
 Sort the on-staging survivors by oldest `updated_at` first and take
@@ -240,6 +254,30 @@ Rules for the checklist:
   both ends if needed.
 - Never include screenshots in the comment body. Reference the workflow
   run URL where artifacts are uploaded.
+
+### 3d.1 — set the outcome label
+
+After posting the checklist comment, transition the PR's `uat:` label
+based on what was walked. Remove all other `uat:` labels first
+(except `uat: skip` — never overwrite that, see Step 2):
+
+| Outcome | Label to set |
+| --- | --- |
+| Every checked UAT item passed AND no checklist box was left empty | `uat: complete` |
+| Any UAT item failed (a `[ ]` line in the "UAT items walked on staging" section with a note) | `uat: needs-changes` |
+| The PR declares `N/A — no user-visible change` and the engineer agent missed labelling `uat: skip` on open | `uat: skip` (also note in the comment "applied uat: skip retroactively") |
+| Subagent failed mid-walk (see 3e bail-out) | Leave existing label as-is; do not move to `needs-changes` on a failed walk |
+
+Best-effort commands; label-missing errors are non-fatal:
+
+```
+gh pr edit <N> --remove-label "uat: unable" --remove-label "uat: requested" --remove-label "uat: needs-changes" --remove-label "uat: complete"
+gh pr edit <N> --add-label    "uat: complete"   # or "uat: needs-changes"
+```
+
+The `uat: needs-changes` label is what `pr-fixup-dispatch.md` watches
+for to pick up the next fix — leaving it set is the handoff. The
+`uat: complete` label is the merge gate signal for Daniel.
 
 ### 3e. Bail-out conditions
 

@@ -202,19 +202,34 @@ these as embedded in issue bodies — do not repeat that mistake.
     steps for your change, the change is not ready — exit
     `needs-human` instead of opening the PR.
 
-11. **Request the preview deploy.** Apply the `uat: requested` label to
-    the PR. A downstream workflow watches for that label and pushes
-    your branch's build into the `/staging/` slot for UAT. Do not push
-    to `staging` yourself — branch discipline (rule 1) forbids it, and
-    the preview-deploy workflow serializes requests so two PRs don't
-    fight for the slot.
+11. **Apply the initial UAT label.** Two cases:
+    - **`uat: skip`** — the PR's UAT section reads `N/A — no
+      user-visible change` (pure infra / CI / docs / internal
+      refactor of unexported code). Apply `uat: skip` and you're done
+      with this step.
+    - **`uat: unable`** — the PR has real UAT steps. Apply
+      `uat: unable` to mark "opened but not yet on staging." The
+      label transitions to `uat: requested` after a CODEOWNER
+      approves the PR and `stack-approved-prs.yml` rebuilds staging
+      with it included; then the hourly UAT walker sets
+      `uat: complete` or `uat: needs-changes`.
 
-12. **Comment the link.** On the issue:
-    `Opened #<PR> — base: main, ready for review. Requested preview
-    deploy via \`uat: requested\` label; UAT will walk it against
-    https://danielsperoniteam.github.io/fhir-place/staging/ once the
-    deploy lands. PR will merge to main when CI is green and
-    \`uat: passed\` is set.`
+    Never apply `uat: requested` yourself — that label is owned by
+    the stack workflow.
+
+12. **Comment the link.** On the issue. For `uat: unable` PRs:
+    `Opened #<PR> — base: main, ready for review. Labeled \`uat: unable\`
+    (not yet on staging). Approval → \`stack-approved-prs.yml\` rebuilds
+    staging with this PR stacked → label flips to \`uat: requested\` →
+    hourly UAT walker validates against
+    https://danielsperoniteam.github.io/fhir-place/staging/ and sets
+    \`uat: complete\` or \`uat: needs-changes\` per outcome. PR merges
+    to main when CI is green and \`uat: complete\` is set.`
+
+    For `uat: skip` PRs:
+    `Opened #<PR> — base: main, ready for review. Labeled \`uat: skip\`
+    (no user-visible change). UAT walker skips this PR; merges to main
+    on CI green + CODEOWNER approval.`
 
 ## Exit table
 

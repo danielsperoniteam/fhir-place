@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  PR fixup dispatcher at 09:30 and 14:30 ET (twice daily).
-
-  Staggered 30 minutes after the issue-mode engineer-dispatch (09:00 /
-  14:00) so the issue-mode run finishes first — both share the engineer
-  subagent and the same Claude Max OAuth session, so concurrent runs
-  risk rate-limiting. See `docs/prompts/pr-fixup-dispatch.md` for what
-  it does.
+  PR fixup dispatcher at 09:00 and 14:00 ET (twice daily). Runs
+  BEFORE the issue-mode engineer-dispatch in each window
+  (engineer-dispatch is at 09:30 / 14:30) so red-CI / unresolved-thread
+  / uat: needs-changes PRs are addressed before new work gets pulled
+  from the backlog. The 30-minute stagger keeps both runs off the
+  same Claude Max OAuth session simultaneously (rate-limit avoidance).
+  See `docs/prompts/pr-fixup-dispatch.md` for what it does.
 
   See com.fhir-place.daily-pm-triage.plist for install steps.
 -->
@@ -19,11 +19,11 @@
   <array>
     <dict>
       <key>Hour</key><integer>9</integer>
-      <key>Minute</key><integer>30</integer>
+      <key>Minute</key><integer>0</integer>
     </dict>
     <dict>
       <key>Hour</key><integer>14</integer>
-      <key>Minute</key><integer>30</integer>
+      <key>Minute</key><integer>0</integer>
     </dict>
   </array>
   <key>WorkingDirectory</key><string>__HOME__/src/fhir-place</string>
