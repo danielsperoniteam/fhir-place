@@ -10,8 +10,9 @@ See also:
 
 - `.github/workflows/address-comments.yml` — the workflow that invokes you
 - `docs/prompts/pr-resolve-conflicts.md` — sibling prompt, same shape
-- `.claude/agents/engineer.md` — the safety rules also apply here when
-  you're using the engineer subagent for bulk edits
+- `.claude/agents/engineer.md` / `.codex/agents/engineer.toml` — the
+  safety rules also apply here when you are using the engineer
+  implementation role for bulk edits
 
 ---
 
@@ -96,8 +97,9 @@ Group fixes by file. For each file:
 2. Apply the smallest edit that satisfies the comment.
 3. Save.
 
-After all files are edited, run the contract from
-`.claude/agents/engineer.md` § "Run the contract":
+After all files are edited, run the contract from the matching
+implementation-role rules (`.claude/agents/engineer.md` or
+`.codex/agents/engineer.toml`):
 
 ```
 pnpm -r typecheck     # 2 retries
@@ -119,12 +121,11 @@ git commit -m "fix: address review comments
 
 <one-line per thread fixed>
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+<provider-specific co-author trailer if the active provider normally adds one>"
 git push
 ```
 
-Use the same secret-scan check from `.claude/agents/engineer.md` rule 6
-before pushing.
+Use the same secret-scan check from the active engineer role before pushing.
 
 Capture the resulting commit SHA — you'll cite it in the inline replies.
 

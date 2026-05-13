@@ -5,14 +5,16 @@ from the backlog, hands each to the `engineer` subagent in an isolated
 worktree, opens draft PRs, and updates a rolling tracking issue.
 
 This prompt **orchestrates only** — it never edits source code itself.
-The `engineer` subagent (`.claude/agents/engineer.md`) does all editing,
-testing, and pushing under its own hard rules. Read both prompts together;
-defense-in-depth is the design.
+The `engineer` implementation role does all editing, testing, and pushing
+under its own hard rules. Under Claude, that role is
+`.claude/agents/engineer.md`; under Codex, it is
+`.codex/agents/engineer.toml`. Read the matching implementation-role file
+with this prompt; defense-in-depth is the design.
 
 See also:
 
 - `docs/decisions/0003-agent-safety-rules.md` — the ADR this routine implements
-- `.claude/agents/engineer.md` — what the subagent is allowed to do
+- `.claude/agents/engineer.md` / `.codex/agents/engineer.toml` — what the implementation role is allowed to do
 - `CONTRIBUTING.md` "Issue & label conventions" — the label vocabulary
 - `docs/prompts/daily-pm-triage.md` — the analogue PM routine, same shape
 
@@ -27,7 +29,7 @@ See also:
   responder. Pick a tool and proceed; if a tool fails, log the failure
   and try the alternative.
 - Never modify code yourself. You only orchestrate; the `engineer`
-  subagent does all editing and pushing.
+  implementation role does all editing and pushing.
 - Never assign issues — the bot has no GitHub user identity. Use the
   `status: in-progress` label as the atomic claim.
 - Never close an issue. PR merges close issues via `Closes #N`.
@@ -120,7 +122,8 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
 
 3. **Dispatch:** invoke the `engineer` subagent with worktree isolation,
    passing `{issue_number: <N>, acceptance_criteria: <restated>, branch_name: bot/issue-<N>-<slug>}`.
-   The subagent's hard rules apply — see `.claude/agents/engineer.md`.
+   The implementation role's hard rules apply — see the matching
+   `.claude/agents/engineer.md` or `.codex/agents/engineer.toml`.
 
 4. **Reconcile on return:**
 
@@ -192,5 +195,5 @@ section and note "Last 24h: rollup skipped this run (api budget)."
 - If your run is killed mid-ticket, Step 1 of the next run releases stuck
   `status: in-progress` claims.
 - If you find yourself wanting to fix something in this prompt, in
-  `.claude/agents/engineer.md`, or in `.github/workflows/`, **stop**. Open
+  `.claude/agents/engineer.md`, `.codex/agents/engineer.toml`, or in `.github/workflows/`, **stop**. Open
   a regular human-authored PR. Self-modifying agents are out of scope.

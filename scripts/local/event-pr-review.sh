@@ -11,7 +11,7 @@ if [[ -z "$PR" ]]; then
   exit 2
 fi
 
-exec "$(dirname "$0")/../run-prompt-locally.sh" pr-review \
+exec "$(dirname "$0")/../run-agent-prompt-locally.sh" pr-review \
   --for "PR #$PR" \
   --max-turns 40 \
   --allowedTools "Read,Grep,Glob,Agent,mcp__github__*,Bash(gh pr review:*)"

@@ -12,7 +12,7 @@
 # See scripts/run-prompt-locally.sh for the shared runner.
 
 set -Eeuo pipefail
-exec "$(dirname "$0")/../run-prompt-locally.sh" pr-fixup-dispatch \
+exec "$(dirname "$0")/../run-agent-prompt-locally.sh" pr-fixup-dispatch \
   --max-turns 250 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*" \
   --disallowedTools "AskUserQuestion,ExitPlanMode"

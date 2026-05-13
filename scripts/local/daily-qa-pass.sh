@@ -64,6 +64,6 @@ for i in $(seq 1 90); do
   sleep 1
 done
 
-"$REPO_ROOT/scripts/run-prompt-locally.sh" daily-qa-pass \
+"$REPO_ROOT/scripts/run-agent-prompt-locally.sh" daily-qa-pass \
   --max-turns 200 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*"

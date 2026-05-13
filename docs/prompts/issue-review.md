@@ -14,10 +14,14 @@ orchestrator's prompt as `#<N>`.
 
 ## Your task
 
-You are the orchestrator. Use the GitHub MCP tools (`mcp__github__*`) to
-read the issue, dispatch two subagents in parallel, then post their
-feedback as comments. **Do not modify any files.** Do not open a branch
-or PR. Do not change labels — the daily PM triage owns labeling.
+You are the orchestrator. Use the available GitHub tools to read the
+issue and post feedback. Under Claude this usually means
+`mcp__github__*`; under Codex this can mean the GitHub connector or `gh`
+CLI with `GITHUB_TOKEN` / `GH_TOKEN`. Dispatch the two reviewer roles
+when the runtime supports subagents; otherwise produce the two bounded
+reviews yourself using the same briefs. **Do not modify any files.** Do
+not open a branch or PR. Do not change labels — the daily PM triage owns
+labeling.
 
 ### Hard rules (do not violate)
 

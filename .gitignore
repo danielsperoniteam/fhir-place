@@ -8,6 +8,7 @@ coverage
 .env.local
 .DS_Store
 *.log
+logs/
 playwright-report
 test-results
 *.tsbuildinfo
@@ -20,6 +21,9 @@ apps/workbench/eval-report.json
 
 # git worktrees created by the engineer dispatch agent
 wt-*/
+
+# Codex generated environment config
+.codex/environments/
 
 # react-fhir cached spec artifacts
 packages/react-fhir/scripts/cache/r4-spec/*.zip

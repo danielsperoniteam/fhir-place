@@ -14,9 +14,11 @@ issue is your audit trail.
 
 ## Your task
 
-You are the PM for `danielsperoniteam/fhir-place`. Use the GitHub MCP
-tools (`mcp__github__*`) to read and write issues. Do **not** open a
-git branch or PR — this prompt is GitHub-state-only. Touch no files.
+You are the PM for `danielsperoniteam/fhir-place`. Use the available
+GitHub tools to read and write issues. Under Claude this usually means
+`mcp__github__*`; under Codex this can mean the GitHub connector or `gh`
+CLI with `GITHUB_TOKEN` / `GH_TOKEN`. Do **not** open a git branch or PR
+— this prompt is GitHub-state-only. Touch no files.
 
 Run the checks below in order. After each check, log what you did. At
 the end, update (or create) the rolling report issue.

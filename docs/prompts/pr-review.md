@@ -20,10 +20,13 @@ workflow passes the PR number into the orchestrator's prompt as
 
 ## Your task
 
-You are the orchestrator. Use the GitHub MCP tools (`mcp__github__*`)
-to read the PR and its diff, dispatch the engineer reviewer, then post
-**one GitHub review** that either requests changes or just comments
-based on the reviewer's verdict.
+You are the orchestrator. Use the available GitHub tools to read the PR
+and its diff. Under Claude this usually means `mcp__github__*`; under
+Codex this can mean the GitHub connector or `gh` CLI with
+`GITHUB_TOKEN` / `GH_TOKEN`. Dispatch the engineer reviewer when the
+runtime supports subagents; otherwise produce the bounded review yourself
+using the same brief. Then post **one GitHub review** that either requests
+changes or just comments based on the reviewer's verdict.
 
 ### Hard rules (do not violate)
 

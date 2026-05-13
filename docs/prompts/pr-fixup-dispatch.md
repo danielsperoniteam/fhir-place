@@ -3,20 +3,22 @@
 Sibling to `docs/prompts/hourly-engineer-dispatch.md`. That prompt picks
 **new issues** off the backlog and opens **new** PRs. This one looks at
 **existing** bot-authored PRs that have stalled — red CI, unresolved
-review threads — and dispatches the engineer subagent to push a fix
+review threads — and dispatches the engineer implementation role to push a fix
 commit to the **existing** branch.
 
 Closes SDLC gap #4 from PR #479: the dispatcher only ever picked fresh
 issues. Once a bot PR was opened, nothing kept it moving.
 
 This prompt **orchestrates only** — it never edits source code itself.
-The `engineer` subagent does all editing, testing, and pushing under
-its own hard rules (`.claude/agents/engineer.md`).
+The `engineer` implementation role does all editing, testing, and pushing
+under its own hard rules. Under Claude, that role is
+`.claude/agents/engineer.md`; under Codex, it is
+`.codex/agents/engineer.toml`.
 
 See also:
 
 - `docs/prompts/hourly-engineer-dispatch.md` — the issue-mode sibling
-- `.claude/agents/engineer.md` — what the subagent is allowed to do
+- `.claude/agents/engineer.md` / `.codex/agents/engineer.toml` — what the implementation role is allowed to do
 - `docs/prompts/address-comments.md` — what to do when the work is
   responding to unresolved review threads (you delegate to it via the
   `Agent` tool, you don't re-implement its logic)
@@ -31,8 +33,8 @@ See also:
   or `ExitPlanMode`** — this workflow is headless.
 - Never modify code yourself. You only orchestrate.
 - Never push to `main`, `staging`, `release/*`, or `gh-pages`. The
-  engineer subagent's branch-discipline rule already covers this; you
-  enforce it by not bypassing the subagent.
+  engineer implementation role's branch-discipline rule already covers
+  this; you enforce it by not bypassing that role.
 - Never close a PR.
 - Kill switch: if the **tracking issue** carries the
   `status: agent-paused` label, post a one-line comment "Paused —
@@ -110,7 +112,7 @@ Pick the **action** based on what made the PR fixup-eligible:
 | Unresolved threads only | Read `docs/prompts/address-comments.md` and execute its Steps 1–6 against the PR. (Don't re-fire the `/address-comments` workflow — that costs another turn and creates a dispatch loop.) |
 | Mixed triggers | Address them in this order: `uat: needs-changes` → unresolved threads → red CI. The first commit may resolve later triggers — re-check before dispatching the next action. |
 
-In every case the engineer subagent's hard rules apply — branch
+In every case the engineer implementation role's hard rules apply — branch
 discipline, no force-push, no deny-list paths, blast-radius caps,
 secret scan. PR-mode work pushes to the **existing** head branch (not
 a new `bot/issue-N-slug` one). That's the only meaningful difference
@@ -166,8 +168,8 @@ If today produced zero changes, still update the timestamp.
 ## Operational notes
 
 - Run sequentially with the issue-mode dispatcher — never in parallel.
-  Both share the engineer subagent under the same OAuth session;
-  concurrent runs risk Claude Max rate-limiting.
+  Both share the engineer implementation role under the same local
+  provider session; concurrent runs risk provider rate-limiting.
 - This prompt's launchd plist fires at **09:30 and 14:30 ET** —
   staggered 30 minutes after the issue-mode dispatcher (09:00, 14:00)
   so the issue-mode run has time to finish first.

@@ -11,7 +11,7 @@ if [[ -z "$PR" ]]; then
   exit 2
 fi
 
-exec "$(dirname "$0")/../run-prompt-locally.sh" pr-resolve-conflicts \
+exec "$(dirname "$0")/../run-agent-prompt-locally.sh" pr-resolve-conflicts \
   --for "PR #$PR" \
   --max-turns 100 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,mcp__github__*"

@@ -9,6 +9,6 @@
 # See scripts/run-prompt-locally.sh for the shared runner.
 
 set -Eeuo pipefail
-exec "$(dirname "$0")/../run-prompt-locally.sh" hourly-uat-validation \
+exec "$(dirname "$0")/../run-agent-prompt-locally.sh" hourly-uat-validation \
   --max-turns 200 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*"

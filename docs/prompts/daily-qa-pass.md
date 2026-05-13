@@ -23,9 +23,10 @@ signals from `docs/qa-agent.md` as the rubric.
   i.e. it talks to the SMART Health IT public sandbox, not MSW. Treat it as
   shared infrastructure: do not write data unless the docs/qa-agent.md
   playbook explicitly calls for a CRUD assertion on a fresh patient.
-- The GitHub MCP tools (`mcp__github__*`) are configured. Use them to
-  search and file issues. Do **not** use `gh` or open a branch/PR — this
-  prompt is run-state-only.
+- GitHub tools are configured. Under Claude this usually means
+  `mcp__github__*`; under Codex this can mean the GitHub connector or
+  `gh` CLI with `GITHUB_TOKEN` / `GH_TOKEN`. Use them to search and file
+  issues. Do not open a branch/PR — this prompt is run-state-only.
 
 ## Your task
 
@@ -137,7 +138,7 @@ For each distinct bug:
 
 ### Step 5 — Report a summary
 
-At the end of the run, print (to stdout — Claude's normal output, no
+At the end of the run, print (to stdout — the agent's normal output, no
 issue filing) a short summary:
 
 - Routes visited

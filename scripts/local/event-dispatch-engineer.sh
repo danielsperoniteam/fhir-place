@@ -11,7 +11,7 @@ if [[ -z "$ISSUE" ]]; then
   exit 2
 fi
 
-exec "$(dirname "$0")/../run-prompt-locally.sh" dispatch-engineer-on-issue \
+exec "$(dirname "$0")/../run-agent-prompt-locally.sh" dispatch-engineer-on-issue \
   --for "issue #$ISSUE" \
   --max-turns 200 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*"

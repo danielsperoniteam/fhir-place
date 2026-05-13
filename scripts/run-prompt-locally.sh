@@ -79,7 +79,7 @@ export GITHUB_TOKEN="${GITHUB_TOKEN:-$(security find-generic-password -s github-
 export GH_TOKEN="$GITHUB_TOKEN"
 
 if [[ -z "$GITHUB_TOKEN" ]]; then
-  echo "missing GITHUB_TOKEN (try: security add-generic-password -s github-pat-fhir-place -a \"$USER\" -w '<your-PAT>')" >&2
+  echo "missing GITHUB_TOKEN (try: security add-generic-password -U -s github-pat-fhir-place -a \"$USER\" -w '<your-PAT>')" >&2
   exit 2
 fi
 

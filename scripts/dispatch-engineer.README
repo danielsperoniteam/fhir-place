@@ -39,7 +39,7 @@ Same prompt, same engineer subagent, same safety rules. Different wallet.
    Required scopes: `repo`, `workflow`, `read:org`. PAT must have access to
    `danielsperoniteam/fhir-place`.
    ```
-   security add-generic-password -s github-pat-fhir-place -a "$USER" -w
+   security add-generic-password -U -s github-pat-fhir-place -a "$USER" -w
    # paste the PAT at the prompt; -w hides it from history
    ```
    Verify (rc=0 means item exists; this command does NOT print the secret):

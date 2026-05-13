@@ -79,8 +79,10 @@ Apply the same check to:
 ### 4. Roadmap table — closed issues
 
 Read the roadmap table in `packages/react-fhir/README.md` (the table under
-`## Roadmap / known gaps`). For each issue number listed, use the GitHub MCP
-tools to check whether the issue is still open.
+`## Roadmap / known gaps`). For each issue number listed, use the available
+GitHub tools to check whether the issue is still open. Under Claude this
+usually means `mcp__github__*`; under Codex this can mean the GitHub
+connector or `gh` CLI with `GITHUB_TOKEN` / `GH_TOKEN`.
 
 For any issue that is **closed**, remove its row from the table and add a
 brief note at the bottom of the section: `<!-- #NNN closed YYYY-MM-DD -->`.

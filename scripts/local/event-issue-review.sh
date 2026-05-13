@@ -10,7 +10,7 @@ if [[ -z "$ISSUE" ]]; then
   exit 2
 fi
 
-exec "$(dirname "$0")/../run-prompt-locally.sh" issue-review \
+exec "$(dirname "$0")/../run-agent-prompt-locally.sh" issue-review \
   --for "issue #$ISSUE" \
   --max-turns 60 \
   --allowedTools "Read,Grep,Glob,Agent,mcp__github__*"

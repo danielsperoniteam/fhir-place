@@ -62,9 +62,10 @@ See also:
 - Repo is checked out and `pnpm install --frozen-lockfile` has run.
 - Playwright `chromium` is installed with deps. Use it via a temporary
   Node script in `/tmp/uat-<run-id>.mjs` — do not commit it.
-- The GitHub MCP tools (`mcp__github__*`) are configured. Use them to
-  read PRs, post comments, and file issues. Do not use `gh`. Do not open
-  a branch or PR.
+- GitHub tools are configured. Under Claude this usually means
+  `mcp__github__*`; under Codex this can mean the GitHub connector or
+  `gh` CLI with `GITHUB_TOKEN` / `GH_TOKEN`. Use them to read PRs, post
+  comments, and file issues. Do not open a branch or PR.
 - No local dev server. You hit staging directly over the public network.
   If staging is unreachable, log it to stdout, update the tracking issue
   with "Staging unreachable — skipping run", and exit cleanly.
