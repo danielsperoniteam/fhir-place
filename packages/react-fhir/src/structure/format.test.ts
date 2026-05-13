@@ -144,6 +144,13 @@ describe("formatDateTime", () => {
     expect(formatDateTime("2021-04-06T25:01:00Z")).toBe("2021-04-06T25:01:00Z");
   });
 
+  it("requires seconds and a timezone offset on FHIR date-times", () => {
+    // Per FHIR R4: when a time is present, seconds + tz are required.
+    expect(formatDateTime("2021-01-01T09:30")).toBe("2021-01-01T09:30");
+    expect(formatDateTime("2021-01-01T09:30:00")).toBe("2021-01-01T09:30:00");
+    expect(formatDateTime("2021-01-01T09:30Z")).toBe("2021-01-01T09:30Z");
+  });
+
   it("rejects out-of-range timezone offsets", () => {
     // Hour 14 only valid with :00 minutes; +14:30 is not a real FHIR offset.
     expect(formatDateTime("2021-01-01T00:00:00+14:30")).toBe(

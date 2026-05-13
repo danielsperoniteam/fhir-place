@@ -83,12 +83,13 @@ function isRealCalendarDay(y: number, mo: number, day: number): boolean {
   return d.getFullYear() === y && d.getMonth() === mo - 1 && d.getDate() === day;
 }
 
-// FHIR `dateTime` / `instant` with a time component:
-//   YYYY-MM-DDThh:mm[:ss[.sss]][Z|±hh:mm]
-// Timezone offset matches the FHIR R4 spec: hours 00-13 with minutes 00-59,
-// or exactly 14:00 (https://hl7.org/fhir/R4/datatypes.html#dateTime).
+// FHIR `dateTime` / `instant` with a time component, per FHIR R4
+// (https://hl7.org/fhir/R4/datatypes.html#dateTime):
+//   YYYY-MM-DDThh:mm:ss[.sss](Z|±hh:mm)
+// Seconds and timezone are required when a time is present; the offset is
+// hours 00-13 with minutes 00-59, or exactly 14:00.
 const FHIR_DATE_TIME_RE =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](?:(?:0\d|1[0-3]):[0-5]\d|14:00))?$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](?:(?:0\d|1[0-3]):[0-5]\d|14:00))$/;
 
 /**
  * Human-readable rendering of a FHIR `date` / `dateTime` / `instant` value.
@@ -121,7 +122,7 @@ export function formatDateTime(value: string | undefined): string {
   const day = Number(ds);
   const hour = Number(hs);
   const minute = Number(mins);
-  const sec = ss === undefined ? 0 : Number(ss);
+  const sec = Number(ss);
   // `new Date` would roll these forward too; validate before trusting it.
   if (!isRealCalendarDay(y, mo, day) || hour > 23 || minute > 59 || sec > 60) {
     return value;
