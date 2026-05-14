@@ -74,6 +74,19 @@ jobs:
           reporter: local
           filter_mode: nofilter
           fail_on_error: true
+          # Ignore two pre-existing findings that this PR intentionally
+          # does not fix (the scope is the lint gate, not workflow
+          # cleanup). Each one has a follow-up tracked in the PR body.
+          #
+          #   SC2129  — discover-test-patients.yml uses repeated
+          #             `>> $GITHUB_STEP_SUMMARY` redirects; shellcheck
+          #             prefers `{ cmd1; cmd2; } >> file`. Cosmetic.
+          #   expression — project-sync.yml uses `${{ secrets.* }}` in a
+          #             job-level `if:`, which GitHub silently evaluates
+          #             to false. The job has never actually run; fixing
+          #             it is a behavior change separate from this lint
+          #             PR.
+          actionlint_flags: -ignore SC2129 -ignore "is not allowed here"
 
       - name: Run lint-workflow-permissions self-tests
         run: node --test scripts/lint-workflow-permissions.test.mjs
