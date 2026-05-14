@@ -34,8 +34,8 @@ on:
     branches: [main]
 
 permissions:
-  contents: write     # force-push staging
-  pull-requests: read
+  contents: write       # force-push staging
+  pull-requests: write  # edit `uat:` labels after stacking
 
 concurrency:
   group: stack-approved-prs
@@ -151,17 +151,19 @@ jobs:
               # the hourly UAT walker. Skip when the PR carries `uat: skip`
               # (no user-visible change → no validation needed). Otherwise
               # remove any prior `uat: unable` / `uat: needs-changes` /
-              # `uat: complete` so only `uat: requested` is set. Best-
-              # effort; label-missing errors are non-fatal.
-              if gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name] | any(. == "uat: skip")' 2>/dev/null | grep -q true; then
+              # `uat: complete` so only `uat: requested` is set.
+              LABELS=$(gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name]')
+              if echo "$LABELS" | jq -e 'index("uat: skip") != null' >/dev/null; then
                 echo "  PR #$NUM has uat: skip — leaving label as-is"
               else
-                gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" \
-                  --remove-label "uat: unable" \
-                  --remove-label "uat: needs-changes" \
-                  --remove-label "uat: complete" 2>/dev/null || true
-                gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" \
-                  --add-label "uat: requested" 2>/dev/null || true
+                for LABEL in "uat: unable" "uat: needs-changes" "uat: complete"; do
+                  if echo "$LABELS" | jq -e --arg label "$LABEL" 'index($label) != null' >/dev/null; then
+                    gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
+                  fi
+                done
+                if echo "$LABELS" | jq -e 'index("uat: requested") == null' >/dev/null; then
+                  gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" --add-label "uat: requested"
+                fi
               fi
             else
               echo "::warning::PR #$NUM conflicts with staging; skipping. Manual rebase needed."
