@@ -19,6 +19,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:readme-goal-task
+      # Node-script unit tests (e.g. scripts/staging/*.test.mjs). These
+      # cover automation logic that runs inside GitHub Actions and isn't
+      # part of any workspace package, so the standard `pnpm -r test:run`
+      # doesn't reach them.
+      - run: node --test scripts/staging/*.test.mjs
       # Build the library first so the demo app can resolve its .d.ts files
       # during typecheck (demo depends on @fhir-place/react-fhir via workspace).
       - run: pnpm --filter @fhir-place/react-fhir build

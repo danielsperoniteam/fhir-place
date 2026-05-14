@@ -147,24 +147,13 @@ jobs:
             fi
             if git merge --no-edit --no-ff -m "stage: include PR #$NUM" "$REF"; then
               echo "Stacked PR #$NUM"
-              # Transition the PR's UAT state: it's now on staging, awaiting
-              # the hourly UAT walker. Skip when the PR carries `uat: skip`
-              # (no user-visible change → no validation needed). Otherwise
-              # remove any prior `uat: unable` / `uat: needs-changes` /
-              # `uat: complete` so only `uat: requested` is set.
-              LABELS=$(gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name]')
-              if echo "$LABELS" | jq -e 'index("uat: skip") != null' >/dev/null; then
-                echo "  PR #$NUM has uat: skip — leaving label as-is"
-              else
-                for LABEL in "uat: unable" "uat: needs-changes" "uat: complete"; do
-                  if echo "$LABELS" | jq -e --arg label "$LABEL" 'index($label) != null' >/dev/null; then
-                    gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
-                  fi
-                done
-                if echo "$LABELS" | jq -e 'index("uat: requested") == null' >/dev/null; then
-                  gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" --add-label "uat: requested"
-                fi
-              fi
+              # Transition the PR's `uat:` label. The script preserves
+              # walker verdicts (`uat: complete`, `uat: needs-changes`)
+              # and the opt-out (`uat: skip`); only new PRs and ones
+              # carrying `uat: unable` move to `uat: requested`. See
+              # `scripts/staging/transition-uat-label.mjs` for the full
+              # state machine and its unit tests.
+              node "$GITHUB_WORKSPACE/scripts/staging/transition-uat-label.mjs" "$NUM"
             else
               echo "::warning::PR #$NUM conflicts with staging; skipping. Manual rebase needed."
               git merge --abort
