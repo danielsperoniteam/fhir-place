@@ -53,14 +53,27 @@ jobs:
       # actionlint — community-maintained workflow + shellcheck linter.
       # Pinned to the v1.72.0 release commit SHA so a tag move cannot
       # smuggle in a behaviour change. Bump intentionally via PR.
+      #
+      # reviewdog config:
+      #   reporter: local        — prints findings to the job log; no
+      #                            external posting (we don't grant
+      #                            `checks: write` to this lint job).
+      #   filter_mode: nofilter  — don't try to diff against base; the
+      #                            default `added` mode needs a git diff
+      #                            source that local-reporter doesn't
+      #                            have, which makes the action error
+      #                            with "diff command is empty".
+      #   fail_on_error: true    — exit non-zero on any finding so the
+      #                            workflow fails (instead of just
+      #                            warning silently — the whole point of
+      #                            this PR).
       - name: actionlint
         uses: reviewdog/action-actionlint@6fb7acc99f4a1008869fa8a0f09cfca740837d9d # v1.72.0
         with:
           fail_level: error
-          # Default reporter is github-pr-check, which requires
-          # `checks: write`. Switch to local — surfaces findings in the
-          # job log without granting any write scope.
           reporter: local
+          filter_mode: nofilter
+          fail_on_error: true
 
       - name: Run lint-workflow-permissions self-tests
         run: node --test scripts/lint-workflow-permissions.test.mjs
