@@ -64,8 +64,20 @@ export function CCSidebar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [pickerOpen]);
 
+  // Re-read servers + active id on every render so a Settings-page change
+  // (or any other Use action) is reflected here without a full page reload.
+  // The `active-server-changed` event below bumps a counter to force the
+  // re-render after the localStorage write that updateActiveServer performs.
+  const [, setActiveServerTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setActiveServerTick((n) => n + 1);
+    window.addEventListener("fhir-place:active-server-changed", onChange);
+    return () => window.removeEventListener("fhir-place:active-server-changed", onChange);
+  }, []);
   const servers = loadServers();
   const activeServerId = loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id;
+  const displayServer =
+    servers.find((s) => s.id === activeServerId) ?? ACTIVE_SERVER_CONFIG;
 
   const client = useFhirClient();
   const countQueries = useQueries({
@@ -95,6 +107,7 @@ export function CCSidebar() {
   const switchServer = (id: string) => {
     saveActiveServerId(id);
     setPickerOpen(false);
+    window.dispatchEvent(new CustomEvent("fhir-place:active-server-changed"));
     window.location.reload();
   };
 
@@ -139,8 +152,11 @@ export function CCSidebar() {
             }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}>
-              {ACTIVE_SERVER_CONFIG.label}
+            <div
+              data-testid="active-server-label"
+              style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}
+            >
+              {displayServer.label}
             </div>
             <div
               data-testid="base-url"
@@ -155,7 +171,7 @@ export function CCSidebar() {
                 whiteSpace: "nowrap",
               }}
             >
-              {ACTIVE_SERVER_CONFIG.baseUrl}
+              {displayServer.baseUrl}
             </div>
           </div>
           <svg
