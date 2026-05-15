@@ -38,12 +38,26 @@ test("Patient list shows at least one row", async ({ page }) => {
 
 test("Patient detail page renders without an error wall", async ({ page }) => {
   await page.goto("./#/Patient");
-  const firstRow = page.getByTestId("resource-row").first();
+  // ResourceTable's `auto` layout renders a `<table>` (testid `resource-row`)
+  // on `>=sm` viewports and a card stack (testid `resource-row-card`) below
+  // `sm` (Tailwind's 640px breakpoint). Both DOM trees exist; the wrong one is
+  // hidden by CSS. Pick whichever is visible at this viewport so the smoke
+  // contract holds on both `chromium-desktop` and `iphone` projects.
+  const viewport = page.viewportSize();
+  const rowTestId =
+    viewport && viewport.width < 640 ? "resource-row-card" : "resource-row";
+  const firstRow = page.getByTestId(rowTestId).first();
   await expect(firstRow).toBeVisible({ timeout: 30_000 });
   await firstRow.click();
 
-  // Detail pages render a Patient resource view + compartment chips.
-  await expect(page.getByText(/^Patient/i).first()).toBeVisible();
+  // Detail pages render a Patient resource view + compartment chips. The
+  // ResourceView's `<h2>Patient</h2>` is stable across desktop and mobile
+  // layouts; the bare `getByText(/^Patient/i).first()` used previously
+  // matched the topbar tab label, which is collapsed behind the hamburger
+  // menu at `<sm` and tripped the iphone project.
+  await expect(
+    page.getByRole("heading", { level: 2, name: /^Patient$/i }),
+  ).toBeVisible();
   // No red error wall: assert "Failed to" / "Could not resolve" don't appear.
   const errorBanner = page.getByText(
     /failed to load|could not resolve structuredefinition|Cannot read properties of/i,

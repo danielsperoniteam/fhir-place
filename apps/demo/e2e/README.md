@@ -24,6 +24,7 @@ server backed by the in-browser MSW mock, so no live FHIR server is needed.
 | `allergy-intolerance-patient-filter.spec.ts` | AllergyIntolerance list is filtered to the current patient compartment |
 | `procedure-performed-period.spec.ts` | Procedure list "Performed" column renders both `performedDateTime` and `performedPeriod` variants (#476) |
 | `docs.spec.ts` | `/docs` redirects to default doc, sidebar TOC renders, slug deep-links work, unknown slug shows not-found, sidebar Docs button navigates |
+| `patient-detail.mobile.spec.ts` | iPhone-viewport regression for #510: card row is visible and tap navigates to the detail page without an error wall. Runs in the `iphone` Playwright project. |
 
 ### Live-site monitor (`../e2e-live/`)
 
@@ -41,6 +42,9 @@ pnpm --filter @fhir-place/demo e2e
 
 # Screenshot-comparison project only
 pnpm --filter @fhir-place/demo e2e:screenshot
+
+# iPhone-viewport regressions only (specs named `*.mobile.spec.ts`)
+pnpm --filter @fhir-place/demo exec playwright test --project=iphone
 
 # Single file
 pnpm --filter @fhir-place/demo exec playwright test e2e/smoke.spec.ts
@@ -96,7 +100,7 @@ flow needs a corresponding test update in the same PR.
 
 | File | Purpose |
 |------|---------|
-| `playwright.config.ts` | Local dev-server suite (chromium + screenshots) |
+| `playwright.config.ts` | Local dev-server suite (chromium + screenshots + iphone) |
 | `playwright.live.config.ts` | Live-site monitor config (`e2e-live/`) |
 
 Key settings in `playwright.config.ts`:
