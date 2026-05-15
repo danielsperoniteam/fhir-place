@@ -1,9 +1,11 @@
 # 0007 Testing and Hardening SDLC Infrastructure
 
 ## Status
+
 Accepted
 
 ## Context
+
 The SDLC pipeline is itself code: 22 workflows under `.github/workflows/`,
 a handful of bash blocks embedded in YAML, and prompt files in
 `docs/prompts/` that drive Claude routines. It has no static checks, no
@@ -19,7 +21,7 @@ in the wrong state until a human notices.
 
 1. `stack-approved-prs.yml` was missing `pull-requests: write`. Every
    `gh pr edit` returned 403; output was swallowed by `2>/dev/null ||
-   true`. PRs stacked onto staging but labels never flipped. Fixed in
+true`. PRs stacked onto staging but labels never flipped. Fixed in
    #545.[^1]
 2. The same workflow was missing `GH_TOKEN` on the rebuild step.
    Identical silent-failure pattern. Fixed in #517.
@@ -74,6 +76,26 @@ two pieces that hide bugs today. Both are pure functions hiding inside
 bash. Extract them to scripts under `scripts/sdlc/` with a Vitest unit
 suite. Bug #4 (label clobber) becomes a failing test, then a passing
 one.
+
+First shipped slice: `stack-approved-prs.yml` delegates UAT label
+transitioning to `scripts/staging/transition-uat-label.mjs`, covered by
+`node:test` via `pnpm test:scripts`. The script preserves
+`uat: complete`, `uat: needs-changes`, and `uat: skip` across staging
+rebuilds. Only PRs without a durable UAT state are moved into
+`uat: requested`.
+
+The default transition is configurable in
+`scripts/staging/uat-policy.json`. Normal mode is:
+
+```json
+{
+  "stackedPrUatDefault": "request"
+}
+```
+
+For a short "ship fast, do not queue UAT cards by default" period,
+change that value to `"skip"`. In that mode, stacked PRs without a
+durable UAT state get `uat: skip` instead of `uat: requested`.
 
 ### Layer 3: end-to-end smoke against a test-PR fixture
 
@@ -212,7 +234,8 @@ Each issue is sized to one PR and labelled `type: tech-debt` (mostly),
 `area: infra`, with a `human-review-needed:` level per
 `docs/sdlc/gaps.md`.
 
-[^1]: Receipts. PRs #545 and #517 carry the post-mortems for bugs #1
+[^1]:
+    Receipts. PRs #545 and #517 carry the post-mortems for bugs #1
     and #2. Bug #3 is visible in the timeline of any PR opened before
     #545 that received an approval after it merged: the workflow run
     was attached to the PR's head SHA, not main. Bug #4 is reproducible
