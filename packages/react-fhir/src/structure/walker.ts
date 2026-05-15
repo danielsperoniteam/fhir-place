@@ -20,6 +20,117 @@ export interface WalkedElement {
   value: unknown;
 }
 
+export type ClinicalSafetyGuardrailId =
+  | "required-patient-reference"
+  | "observation-valuequantity-ucum"
+  | "unsafe-dose-unit-abbreviation"
+  | "allergy-criticality-visibility"
+  | "patient-context-change";
+
+export type ClinicalSafetyGuardrailPhase = "save" | "render" | "edit-context";
+
+export type ClinicalSafetyGuardrailOutcome =
+  | "block-save"
+  | "warn"
+  | "always-display";
+
+export type ClinicalSafetyElementPath = `${Resource["resourceType"]}.${string}`;
+
+export interface ClinicalSafetyGuardrail {
+  id: ClinicalSafetyGuardrailId;
+  phase: ClinicalSafetyGuardrailPhase;
+  outcome: ClinicalSafetyGuardrailOutcome;
+  resourceTypes: readonly Resource["resourceType"][];
+  elementPaths: readonly ClinicalSafetyElementPath[];
+}
+
+// Design registry only: guardrail behavior is implemented by focused follow-up tickets.
+export const RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS = [
+  {
+    id: "required-patient-reference",
+    phase: "save",
+    outcome: "block-save",
+    resourceTypes: [
+      "AllergyIntolerance",
+      "Condition",
+      "DiagnosticReport",
+      "Encounter",
+      "MedicationAdministration",
+      "MedicationRequest",
+      "MedicationStatement",
+      "Observation",
+      "Procedure",
+    ],
+    elementPaths: [
+      "AllergyIntolerance.patient",
+      "Condition.subject",
+      "DiagnosticReport.subject",
+      "Encounter.subject",
+      "MedicationAdministration.subject",
+      "MedicationRequest.subject",
+      "MedicationStatement.subject",
+      "Observation.subject",
+      "Procedure.subject",
+    ],
+  },
+  {
+    id: "observation-valuequantity-ucum",
+    phase: "save",
+    outcome: "block-save",
+    resourceTypes: ["Observation"],
+    elementPaths: ["Observation.valueQuantity.code"],
+  },
+  {
+    id: "unsafe-dose-unit-abbreviation",
+    phase: "render",
+    outcome: "always-display",
+    resourceTypes: ["MedicationRequest", "MedicationAdministration", "MedicationStatement"],
+    elementPaths: [
+      "MedicationRequest.dosageInstruction",
+      "MedicationAdministration.dosage",
+      "MedicationStatement.dosage",
+    ],
+  },
+  {
+    id: "allergy-criticality-visibility",
+    phase: "render",
+    outcome: "always-display",
+    resourceTypes: ["AllergyIntolerance"],
+    elementPaths: [
+      "AllergyIntolerance.reaction",
+      "AllergyIntolerance.criticality",
+      "AllergyIntolerance.verificationStatus",
+    ],
+  },
+  {
+    id: "patient-context-change",
+    phase: "edit-context",
+    outcome: "warn",
+    resourceTypes: [
+      "AllergyIntolerance",
+      "Condition",
+      "DiagnosticReport",
+      "Encounter",
+      "MedicationAdministration",
+      "MedicationRequest",
+      "MedicationStatement",
+      "Observation",
+      "Procedure",
+    ],
+    elementPaths: [
+      "AllergyIntolerance.patient",
+      "Condition.subject",
+      "DiagnosticReport.subject",
+      "Encounter.subject",
+      "MedicationAdministration.subject",
+      "MedicationRequest.subject",
+      "MedicationStatement.subject",
+      "Observation.subject",
+      "Procedure.subject",
+    ],
+  },
+] as const satisfies readonly ClinicalSafetyGuardrail[];
+
 const capitalize = (s: string): string => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
 const labelFromPath = (path: string, short?: string): string => {

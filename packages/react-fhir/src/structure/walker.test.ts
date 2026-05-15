@@ -2,6 +2,7 @@ import type { Patient } from "fhir/r4";
 import { describe, expect, it } from "vitest";
 import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
 import {
+  RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS,
   directChildren,
   findChoiceVariant,
   findElement,
@@ -175,5 +176,32 @@ describe("isPrimitive", () => {
     expect(isPrimitive("HumanName")).toBe(false);
     expect(isPrimitive("BackboneElement")).toBe(false);
     expect(isPrimitive(undefined)).toBe(false);
+  });
+});
+
+describe("RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS", () => {
+  it("names the five ResourceEditor follow-up guardrails", () => {
+    expect(RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS.map((g) => g.id)).toEqual([
+      "required-patient-reference",
+      "observation-valuequantity-ucum",
+      "unsafe-dose-unit-abbreviation",
+      "allergy-criticality-visibility",
+      "patient-context-change",
+    ]);
+  });
+
+  it("keeps patient-reference guardrails aligned on the same element paths", () => {
+    const requiredPatient = RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS.find(
+      (g) => g.id === "required-patient-reference",
+    );
+    const contextChange = RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS.find(
+      (g) => g.id === "patient-context-change",
+    );
+
+    expect(requiredPatient?.outcome).toBe("block-save");
+    expect(contextChange?.outcome).toBe("warn");
+    expect(requiredPatient?.elementPaths).toEqual(contextChange?.elementPaths);
+    expect(requiredPatient?.elementPaths).toContain("Observation.subject");
+    expect(requiredPatient?.elementPaths).toContain("AllergyIntolerance.patient");
   });
 });
