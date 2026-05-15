@@ -100,6 +100,12 @@ export function SettingsPage() {
   const applyAndReload = (id: string) => {
     saveActiveServerId(id);
     setActiveId(id);
+    // Sidebar/topbar listens for this and re-renders against the new active
+    // id so the active-server label updates even if window.location.reload()
+    // is suppressed (some iframed/staging contexts). The reload still fires
+    // so the singleton FetchFhirClient + React Query cache rebuild against
+    // the new base URL.
+    window.dispatchEvent(new CustomEvent("fhir-place:active-server-changed"));
     window.location.reload();
   };
 
