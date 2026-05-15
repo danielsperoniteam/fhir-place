@@ -41,7 +41,8 @@ test.describe("fhir-place demo", () => {
 
     // Spec-driven rendering: labels come from the StructureDefinition short text.
     await expect(view).toContainText("Ada Lovelace");
-    await expect(view).toContainText("1815-12-10");
+    // Date renderer humanises the value; the raw ISO stays on <time dateTime>.
+    await expect(view).toContainText("Dec 10, 1815");
     await expect(view).toContainText("ada@example.com");
     await expect(view).toContainText("1 Workhouse Lane");
     // Narrative (sanitised via DOMPurify) is shown.
