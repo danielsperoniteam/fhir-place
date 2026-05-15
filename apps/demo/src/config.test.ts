@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ServerConfig,
   BUILTIN_SERVERS,
+  DEFAULT_ACTIVE_SERVER_ID,
   buildRequestHeaders,
   loadActiveServerId,
   loadServers,
@@ -224,17 +225,60 @@ describe("active server id", () => {
 
 describe("resolveActiveServer", () => {
   it("returns the active server when its id is stored", () => {
-    saveActiveServerId("builtin-smart");
+    saveActiveServerId("builtin-hapi");
+    expect(resolveActiveServer().id).toBe("builtin-hapi");
+  });
+
+  it("defaults a fresh visitor (no localStorage) to SMART Health IT R4", () => {
+    // Issue #496: the hosted Pages build (a non-localhost origin) must not
+    // land on a server the browser cannot reach. SMART Health IT R4 is the
+    // safe cross-origin default for cold loads.
+    expect(DEFAULT_ACTIVE_SERVER_ID).toBe("builtin-smart");
+    expect(resolveActiveServer().id).toBe("builtin-smart");
+    expect(resolveActiveServer().baseUrl).toBe("https://r4.smarthealthit.org");
+  });
+
+  it("uses the default id even when SMART is not first in BUILTIN_SERVERS", () => {
+    // Verifies the default is pinned by id, not by array position — so a
+    // future reorder of the picker can't silently change cold-load behavior.
+    const smart = BUILTIN_SERVERS.find((s) => s.id === "builtin-smart");
+    expect(smart).toBeDefined();
+    installLocalStorage({
+      "fhir-place:servers": JSON.stringify([
+        {
+          id: "custom-localhost",
+          label: "Local HAPI (Docker)",
+          baseUrl: "http://localhost:8080/fhir",
+          authMode: "none",
+        },
+        ...BUILTIN_SERVERS,
+      ]),
+    });
     expect(resolveActiveServer().id).toBe("builtin-smart");
   });
 
-  it("falls back to the first server when no active id is stored", () => {
-    expect(resolveActiveServer().id).toBe(BUILTIN_SERVERS[0]!.id);
+  it("preserves an explicit user selection of a localhost custom server", () => {
+    // Acceptance criteria #496: explicit user choice always wins, even when
+    // the chosen server is a private address the public origin cannot reach.
+    installLocalStorage({
+      "fhir-place:servers": JSON.stringify([
+        {
+          id: "custom-localhost",
+          label: "Local HAPI (Docker)",
+          baseUrl: "http://localhost:8080/fhir",
+          authMode: "none",
+        },
+      ]),
+      "fhir-place:active-server": "custom-localhost",
+    });
+    const active = resolveActiveServer();
+    expect(active.id).toBe("custom-localhost");
+    expect(active.baseUrl).toBe("http://localhost:8080/fhir");
   });
 
-  it("falls back to the first server when active id matches nothing", () => {
+  it("falls back to the default id when active id matches nothing", () => {
     saveActiveServerId("never-existed");
-    expect(resolveActiveServer().id).toBe(BUILTIN_SERVERS[0]!.id);
+    expect(resolveActiveServer().id).toBe(DEFAULT_ACTIVE_SERVER_ID);
   });
 });
 
