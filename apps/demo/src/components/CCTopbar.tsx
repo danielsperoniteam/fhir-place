@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { ACTIVE_SERVER_CONFIG } from "../config.js";
 import { useTheme } from "../context/ThemeContext.js";
 import { usePinned } from "../state/pinned.js";
 import { CC_FONT, CC_MONO, ccBtn } from "./ccStyles.js";
@@ -107,8 +108,52 @@ export function CCTopbar({ onMobileNavOpen }: CCTopbarProps) {
         <MenuIcon />
       </button>
 
+      {/* Mobile server pill — surfaces which server you're talking to when
+          the desktop sidebar's server card is collapsed behind the drawer.
+          Hidden at >640px because the sidebar already shows it. */}
+      <div
+        className="topbar-server-pill"
+        data-testid="topbar-server-pill"
+        title={ACTIVE_SERVER_CONFIG.baseUrl}
+        style={{
+          alignItems: "center",
+          gap: 6,
+          padding: "4px 9px",
+          border: "1px solid var(--border)",
+          borderRadius: 999,
+          background: "var(--sunken)",
+          fontSize: 12,
+          color: "var(--text)",
+          fontFamily: CC_FONT,
+          minWidth: 0,
+          maxWidth: "60%",
+          flexShrink: 1,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            background: "var(--success)",
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontWeight: 500,
+          }}
+        >
+          {ACTIVE_SERVER_CONFIG.label}
+        </span>
+      </div>
+
       {/* Breadcrumb */}
       <div
+        className="topbar-breadcrumb"
         style={{
           display: "flex",
           alignItems: "center",
@@ -173,6 +218,7 @@ export function CCTopbar({ onMobileNavOpen }: CCTopbarProps) {
         </button>
         <Link
           to="/fhir-ui/settings"
+          className="topbar-settings-link"
           style={{
             ...ccBtn("ghost"),
             color: isSettings ? "var(--accent-text)" : "var(--text-muted)",
