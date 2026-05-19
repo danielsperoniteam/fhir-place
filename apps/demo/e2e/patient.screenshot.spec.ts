@@ -57,8 +57,29 @@ test.describe("fhir-place demo", () => {
     const context = await browser.newContext({ ...devices["iPhone 13"] });
     const page = await context.newPage();
     await page.goto("/Patient/ada");
-    await expect(page.getByTestId("resource-view")).toBeVisible();
+
+    const structured = page.getByTestId("resource-view");
+    const json = page.getByTestId("resource-json-pane");
+    await expect(structured).toBeVisible();
+    await expect(json).toBeVisible();
     await expect(page.getByText("Ada Lovelace")).toBeVisible();
+
+    // Below 800px the layout must collapse to a single stacked column:
+    // the structured view sits entirely above the JSON viewer.
+    const structuredBox = await structured.boundingBox();
+    const jsonBox = await json.boundingBox();
+    if (!structuredBox || !jsonBox) {
+      throw new Error("expected both detail panes to have a bounding box");
+    }
+    // Structured pane ends before the JSON pane begins (vertical stack).
+    expect(structuredBox.y + structuredBox.height).toBeLessThanOrEqual(jsonBox.y);
+    // They share the column, so they overlap horizontally rather than sit
+    // side by side — a 50/50 split would put them in disjoint x-ranges.
+    const overlapX =
+      Math.min(structuredBox.x + structuredBox.width, jsonBox.x + jsonBox.width) -
+      Math.max(structuredBox.x, jsonBox.x);
+    expect(overlapX).toBeGreaterThan(0);
+
     await page.screenshot({
       path: "../../screenshots/04-patient-detail-mobile.png",
       fullPage: true,
