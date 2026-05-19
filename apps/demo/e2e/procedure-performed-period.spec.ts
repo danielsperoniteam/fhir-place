@@ -1,10 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-// Regression coverage for #476. Procedures whose performed time is carried
-// in `performedPeriod` (not `performedDateTime`) used to render `—` in the
-// list view's "Performed" column because the column was hard-pinned to
-// `performedDateTime`. The fix routes the column through `performed[x]` so
-// either choice variant materialises per row; this spec asserts both.
+// Regression coverage for #476 and #564. Procedures whose performed time is
+// carried in `performedPeriod` (not `performedDateTime`) used to render `—`
+// in the list view's "Performed" column because the column was hard-pinned
+// to `performedDateTime` (#476). The fix routes the column through
+// `performed[x]` so either choice variant materialises per row.
+// #564: the Period branch then rendered raw ISO-8601 strings while the
+// DateTime branch rendered locale-formatted text; both branches now use the
+// same human-readable locale format. This spec asserts both.
 test.describe("Procedure list — Performed column", () => {
   test("renders performedPeriod.start, not '—', for period-only procedures", async ({
     page,
@@ -32,16 +35,19 @@ test.describe("Procedure list — Performed column", () => {
     );
 
     // performedPeriod-only row — the row this bug was filed for.
-    // PeriodRenderer emits `<time>start</time> → <time>end</time>` with
-    // the raw start/end date strings; this is what used to render `—`
-    // before the column was switched to `performed[x]`.
+    // PeriodRenderer emits `<time>start</time> → <time>end</time>`. The
+    // raw ISO value stays on the `datetime` attribute (machine-readable)
+    // while the visible text is locale-formatted (#564), matching the
+    // DateTime branch above.
     const periodRow = table
       .getByTestId("resource-row")
       .filter({ hasText: "Physical therapy" });
     await expect(periodRow).toBeVisible();
     const times = periodRow.locator("time");
-    await expect(times.first()).toContainText("2022-02-01");
-    await expect(times.nth(1)).toContainText("2022-06-30");
+    await expect(times.first()).toHaveAttribute("datetime", "2022-02-01");
+    await expect(times.nth(1)).toHaveAttribute("datetime", "2022-06-30");
+    // The visible text must NOT be the raw ISO string — it is locale-formatted.
+    await expect(times.first()).not.toHaveText("2022-02-01");
 
     // The Performed cell specifically must not collapse to the `—` placeholder.
     // Asserting against the whole row would still pass if only this cell

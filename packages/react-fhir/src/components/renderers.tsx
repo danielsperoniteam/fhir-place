@@ -24,6 +24,7 @@ import {
   formatAddress,
   formatCodeableConcept,
   formatDosage,
+  formatFhirDateTime,
   formatHumanName,
   formatReferenceLabel,
   formatTiming,
@@ -65,13 +66,7 @@ const Date_: FhirTypeRenderer = (value) => (
 );
 const DateTime_: FhirTypeRenderer = (value) => {
   const s = String(value);
-  let formatted = s;
-  try {
-    formatted = new Date(s).toLocaleString();
-  } catch {
-    // keep raw
-  }
-  return <time dateTime={s}>{formatted}</time>;
+  return <time dateTime={s}>{formatFhirDateTime(s)}</time>;
 };
 const Code_: FhirTypeRenderer = (value) => (
   <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{String(value)}</code>
@@ -299,9 +294,9 @@ const PeriodRenderer: FhirTypeRenderer = (value) => {
   const p = value as Period;
   return (
     <span>
-      <time>{p.start ?? "…"}</time>
+      <time dateTime={p.start}>{p.start ? formatFhirDateTime(p.start) : "…"}</time>
       <span className="mx-1 text-slate-400">→</span>
-      <time>{p.end ?? "…"}</time>
+      <time dateTime={p.end}>{p.end ? formatFhirDateTime(p.end) : "…"}</time>
     </span>
   );
 };
