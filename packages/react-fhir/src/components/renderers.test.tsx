@@ -512,3 +512,34 @@ describe("Timing renderer", () => {
     expect(container.textContent).toBe("—");
   });
 });
+
+describe("Period renderer", () => {
+  const renderer = defaultTypeRenderers.Period!;
+  const ctx = { path: "Procedure.performedPeriod", typeCode: "Period" };
+
+  it("locale-formats both bounds like the DateTime renderer", () => {
+    // Regression for #564: the Period branch must render each side of the
+    // range with the same human-readable locale format as a single
+    // performedDateTime — not the raw ISO-8601 string. The `→` separator
+    // is spaced via CSS margin, so the concatenated textContent has no
+    // surrounding whitespace.
+    const start = "2026-03-09T06:20:00Z";
+    const end = "2026-03-09T06:35:00Z";
+    const { container } = render(<>{renderer({ start, end }, ctx)}</>);
+    expect(container.textContent).toBe(
+      `${new Date(start).toLocaleString()}→${new Date(end).toLocaleString()}`,
+    );
+    // The raw ISO value stays machine-readable on the <time> element.
+    const times = container.querySelectorAll("time");
+    expect(times[0]?.getAttribute("datetime")).toBe(start);
+    expect(times[1]?.getAttribute("datetime")).toBe(end);
+  });
+
+  it("keeps the ellipsis fallback for a missing bound", () => {
+    const start = "2026-03-09T06:20:00Z";
+    const { container } = render(<>{renderer({ start }, ctx)}</>);
+    expect(container.textContent).toBe(
+      `${new Date(start).toLocaleString()}→…`,
+    );
+  });
+});

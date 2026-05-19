@@ -437,8 +437,19 @@ describe("ResourceTable", () => {
         { wrapper: wrap() },
       );
       const row = screen.getByTestId("resource-row");
-      // PeriodRenderer shows start and end
-      expect(within(row).getByText(/2023-03-01/)).toBeInTheDocument();
+      // PeriodRenderer emits a <time dateTime="..."> per bound; the visible
+      // text is locale-formatted (environment-dependent), so match the raw
+      // ISO value on the dateTime attribute.
+      expect(
+        within(row).getByText(
+          (_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2023-03-01",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        within(row).getByText(
+          (_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2023-05-31",
+        ),
+      ).toBeInTheDocument();
       expect(within(row).queryByText(/"start":/)).not.toBeInTheDocument();
     });
 
@@ -488,7 +499,14 @@ describe("ResourceTable", () => {
         { wrapper: wrap() },
       );
       const row = screen.getByTestId("resource-row");
-      expect(within(row).getByText(/2022-02-01/)).toBeInTheDocument();
+      // PeriodRenderer emits a <time dateTime="..."> per bound; the visible
+      // text is locale-formatted (environment-dependent), so match the raw
+      // ISO value on the dateTime attribute.
+      expect(
+        within(row).getByText(
+          (_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2022-02-01",
+        ),
+      ).toBeInTheDocument();
       expect(within(row).queryByText(/"start":/)).not.toBeInTheDocument();
     });
 

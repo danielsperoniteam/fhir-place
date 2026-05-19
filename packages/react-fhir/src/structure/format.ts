@@ -67,10 +67,24 @@ export function formatQuantity(q: Quantity | undefined): string {
   return `${comparator}${num}${unit ? ` ${unit}` : ""}`.trim();
 }
 
+/**
+ * Locale-format a FHIR `dateTime`/`instant` string. Falls back to the raw
+ * input when it is not a parseable date so malformed strings are surfaced
+ * as-is rather than dropped. Shared by the read-side renderers and
+ * `formatPeriod` so a single date and each side of a Period range come out
+ * in the same format.
+ */
+export function formatFhirDateTime(value: string | undefined): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
 export function formatPeriod(p: Period | undefined): string {
   if (!p) return "";
-  const start = p.start ?? "…";
-  const end = p.end ?? "…";
+  const start = p.start ? formatFhirDateTime(p.start) : "…";
+  const end = p.end ? formatFhirDateTime(p.end) : "…";
   return `${start} → ${end}`;
 }
 

@@ -4,6 +4,7 @@ import {
   formatCodeableConcept,
   formatCoding,
   formatDosage,
+  formatFhirDateTime,
   formatHumanName,
   formatPeriod,
   formatQuantity,
@@ -112,12 +113,37 @@ describe("formatQuantity", () => {
   });
 });
 
+describe("formatFhirDateTime", () => {
+  it("locale-formats a parseable dateTime", () => {
+    const iso = "2026-03-09T06:20:00Z";
+    expect(formatFhirDateTime(iso)).toBe(new Date(iso).toLocaleString());
+  });
+
+  it("returns the raw value for unparseable input", () => {
+    expect(formatFhirDateTime("not-a-date")).toBe("not-a-date");
+  });
+
+  it("returns an empty string for undefined", () => {
+    expect(formatFhirDateTime(undefined)).toBe("");
+  });
+});
+
 describe("formatPeriod", () => {
-  it("renders start → end with ellipsis fallbacks", () => {
-    expect(formatPeriod({ start: "2024-01-01", end: "2024-12-31" })).toBe(
-      "2024-01-01 → 2024-12-31",
+  it("locale-formats each side of the range like a single dateTime", () => {
+    const start = "2026-03-09T06:20:00Z";
+    const end = "2026-03-09T06:35:00Z";
+    // Regression for #564: the Period branch must use the same human-readable
+    // locale format as the single performedDateTime branch, not raw ISO.
+    expect(formatPeriod({ start, end })).toBe(
+      `${new Date(start).toLocaleString()} → ${new Date(end).toLocaleString()}`,
     );
-    expect(formatPeriod({ start: "2024-01-01" })).toBe("2024-01-01 → …");
+  });
+
+  it("renders ellipsis fallbacks for a missing bound", () => {
+    const start = "2024-01-01T00:00:00Z";
+    expect(formatPeriod({ start })).toBe(
+      `${new Date(start).toLocaleString()} → …`,
+    );
     expect(formatPeriod({})).toBe("… → …");
     expect(formatPeriod(undefined)).toBe("");
   });
@@ -283,9 +309,13 @@ describe("formatTiming", () => {
   });
 
   it("renders bounds-only timings instead of an em-dash", () => {
+    const boundsStart = "2024-01-01T00:00:00Z";
+    const boundsEnd = "2024-03-01T00:00:00Z";
     expect(
-      formatTiming({ repeat: { boundsPeriod: { start: "2024-01-01", end: "2024-03-01" } } }),
-    ).toBe("2024-01-01 → 2024-03-01");
+      formatTiming({ repeat: { boundsPeriod: { start: boundsStart, end: boundsEnd } } }),
+    ).toBe(
+      `${new Date(boundsStart).toLocaleString()} → ${new Date(boundsEnd).toLocaleString()}`,
+    );
     expect(
       formatTiming({ repeat: { boundsDuration: { value: 14, unit: "days" } } }),
     ).toBe("for 14 days");
