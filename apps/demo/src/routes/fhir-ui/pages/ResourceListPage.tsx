@@ -4,7 +4,7 @@ import {
   ResourceTable,
   SortPicker,
   useFhirClient,
-  useInfiniteSearch,
+  usePagedSearch,
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
 import type { Reference, Resource } from "fhir/r4";
@@ -272,23 +272,21 @@ export function ResourceListPage() {
   const formKey = searchParams.toString();
 
   const {
-    data,
+    bundle,
     isLoading,
+    isFetching,
     isError,
     error,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-  } = useInfiniteSearch<Resource>(resourceType, params);
+    links,
+    goTo,
+  } = usePagedSearch<Resource>(resourceType, params);
 
   const resources = useMemo(
-    () =>
-      data?.pages.flatMap(
-        (b) => b.entry?.flatMap((e) => (e.resource ? [e.resource] : [])) ?? [],
-      ) ?? [],
-    [data?.pages],
+    () => bundle?.entry?.flatMap((e) => (e.resource ? [e.resource] : [])) ?? [],
+    [bundle?.entry],
   );
-  const totalAdvertised = data?.pages[0]?.total;
+  const totalAdvertised = bundle?.total;
+  const receivedCount = resources.length;
 
   const { data: structureDefinition } = useStructureDefinition(resourceType, {
     enabled: !config && Boolean(resourceType),
@@ -371,9 +369,31 @@ export function ResourceListPage() {
   const priorityParams = config?.priorityParams;
 
   const totalStr = (() => {
-    if (!data) return "…";
+    if (!bundle) return "…";
     if (totalAdvertised !== undefined) return `${totalAdvertised.toLocaleString()} records`;
-    return `${resources.length} loaded`;
+    return `${receivedCount} loaded`;
+  })();
+
+  // "Showing X–Y of Z" when Bundle.total is present and we can recover an
+  // offset (HAPI-style _getpagesoffset, or first-page implicit zero); else
+  // "Showing N of Z"; else "Loaded N" (cursor servers commonly omit total).
+  const showingStr = (() => {
+    if (!bundle) return "…";
+    if (totalAdvertised === undefined) return `Loaded ${receivedCount}`;
+    const total = totalAdvertised.toLocaleString();
+    if (receivedCount === 0) return `Showing 0 of ${total}`;
+    const self = bundle.link?.find((l) => l.relation === "self")?.url;
+    let offset: number | null = null;
+    try {
+      const raw = self ? new URL(self).searchParams.get("_getpagesoffset") : null;
+      const parsed = raw === null ? NaN : Number(raw);
+      if (Number.isFinite(parsed) && parsed >= 0) offset = parsed;
+      else if (!links.previous) offset = 0; // first-page implicit offset
+    } catch {
+      if (!links.previous) offset = 0;
+    }
+    if (offset === null) return `Showing ${receivedCount} of ${total}`;
+    return `Showing ${offset + 1}–${offset + receivedCount} of ${total}`;
   })();
 
   return (
@@ -566,13 +586,15 @@ export function ResourceListPage() {
 
         <div style={{ flex: 1 }} />
 
-        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-          {data
-            ? `Showing ${resources.length}${totalAdvertised !== undefined ? ` of ${totalAdvertised.toLocaleString()}` : ""}`
-            : "…"}
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }} data-testid="results-showing">
+          {showingStr}
         </span>
 
-        <PageSizePicker value={pageSize} onChange={setPageSize} />
+        <PageSizePicker
+          value={pageSize}
+          onChange={setPageSize}
+          received={bundle ? receivedCount : undefined}
+        />
 
         {layout === "table" && (
           <ColumnPicker
@@ -701,23 +723,64 @@ export function ResourceListPage() {
 
       </div>
 
-      {/* Load more */}
-      {hasNextPage && (
-        <div style={{ display: "flex", justifyContent: "center", padding: "12px 24px" }}>
+      {/* Pagination — adaptive to Bundle.link rels the server actually emits */}
+      {bundle && (
+        <PagedNav links={links} onGoTo={goTo} isFetching={isFetching} />
+      )}
+    </div>
+  );
+}
+
+// ─── Pagination nav ──────────────────────────────────────────────────────────
+
+interface PagedNavProps {
+  links: { first?: string; previous?: string; next?: string; last?: string };
+  onGoTo: (url: string | undefined) => void;
+  isFetching: boolean;
+}
+
+// First / Prev / Next / Last buttons, each disabled when the server didn't
+// advertise the matching `Bundle.link` rel. Cursor-paginated servers
+// naturally degrade to "Next" only — we never synthesise a link the server
+// didn't send, because `next` URLs may be opaque continuation tokens.
+function PagedNav({ links, onGoTo, isFetching }: PagedNavProps) {
+  const buttons: Array<{ label: string; testId: string; url: string | undefined }> = [
+    { label: "« First", testId: "page-first", url: links.first },
+    { label: "‹ Prev", testId: "page-prev", url: links.previous },
+    { label: "Next ›", testId: "page-next", url: links.next },
+    { label: "Last »", testId: "page-last", url: links.last },
+  ];
+  return (
+    <div
+      data-testid="pagination-controls"
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        gap: 6,
+        padding: "12px 24px",
+        flexWrap: "wrap",
+      }}
+    >
+      {buttons.map(({ label, testId, url }) => {
+        const disabled = !url || isFetching;
+        return (
           <button
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-            data-testid="load-more"
+            key={testId}
+            data-testid={testId}
+            onClick={() => onGoTo(url)}
+            disabled={disabled}
+            aria-disabled={disabled}
             style={{
               ...ccBtn("secondary"),
               fontSize: 12,
-              opacity: isFetchingNextPage ? 0.6 : 1,
+              opacity: disabled ? 0.4 : 1,
+              cursor: disabled ? "not-allowed" : "pointer",
             }}
           >
-            {isFetchingNextPage ? "Loading…" : "Load more"}
+            {label}
           </button>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -727,9 +790,15 @@ export function ResourceListPage() {
 interface PageSizePickerProps {
   value: number;
   onChange: (size: number) => void;
+  /**
+   * Entries the server actually returned for the current page. Surfaced
+   * alongside the requested `value` when they differ so the user sees that
+   * the server capped `_count` (Epic ~50–100, HAPI default 20, etc.).
+   */
+  received?: number;
 }
 
-function PageSizePicker({ value, onChange }: PageSizePickerProps) {
+function PageSizePicker({ value, onChange, received }: PageSizePickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -742,15 +811,25 @@ function PageSizePicker({ value, onChange }: PageSizePickerProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Surface server-side capping. `_count` is a hint per FHIR R4 §3.1.0.5 —
+  // Epic caps at 50–100, Cerner ~100, HealthLake 100. When we asked for more
+  // than we got, show what we got so the user isn't misled.
+  const capped = received !== undefined && received < value;
+  const tooltip = capped
+    ? `Requested ${value}, server returned ${received}. The server may cap _count.`
+    : "Server may cap this value — actual page size comes from Bundle.entry.";
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-label={tooltip}
+        title={tooltip}
         data-testid="page-size-picker"
         style={{ ...ccBtn("ghost"), fontSize: 12 }}
       >
-        {value} / page
+        {capped ? `${received} of ${value} / page` : `${value} / page`}
         <svg
           style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 120ms" }}
           width="10"
