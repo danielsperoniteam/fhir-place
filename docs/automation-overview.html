@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>fhir-place local automation</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      margin: 0;
+      padding: 24px;
+    }
+    h1 { font-size: 1.2rem; font-weight: 600; color: #7ee787; margin-bottom: 4px; }
+    p.sub { font-size: 0.85rem; color: #8b949e; margin: 0 0 24px; }
+    .diagram-wrap {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+    .diagram-wrap h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8b949e;
+      margin: 0 0 16px;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: #8b949e;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>fhir-place local automation</h1>
+<p class="sub">How launchd, poll-events, and the claude CLI wire together on the Mac mini.</p>
+
+<div class="diagram-wrap">
+  <h2>Scheduled jobs (launchd → scripts/launchd/)</h2>
+  <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117'}}}%%
+flowchart TD
+    LD[launchd\nmacOS service manager]:::scheduler
+
+    LD -->|"09:30 & 14:30 UTC"| ED[engineer-dispatch.sh]:::script
+    LD -->|"09:00 & 14:00 UTC"| PFD[pr-fixup-dispatch.sh]:::script
+    LD -->|":15 every hour"| UAT[hourly-uat-validation.sh]:::script
+    LD -->|"05:00 UTC daily"| QA[daily-qa-pass.sh]:::script
+    LD -->|"07:00 UTC daily"| PM[daily-pm-triage.sh]:::script
+    LD -->|"06:00 UTC daily"| DS[daily-doc-sync.sh]:::script
+
+    ED -->|via| RUN[run-prompt-locally.sh\ngeneric runner]:::runner
+    PFD -->|via| RUN
+    UAT -->|via| RUN
+    QA -->|via| RUN
+    PM -->|via| RUN
+    DS -->|via| RUN
+
+    RUN -->|reads| PROMPT[docs/prompts/*.md\nprompt files]:::file
+    RUN -->|"claude --print\n(no ANTHROPIC_API_KEY)"| CLAUDE[claude CLI\nOAuth session]:::claude
+    CLAUDE -->|bills against| SUB[Claude Max subscription]:::external
+
+    RUN -->|on failure| IMSG[iMessage alert\n+15082827897]:::notify
+
+    classDef scheduler fill:#1f6feb,stroke:#388bfd,color:#e6edf3
+    classDef script fill:#238636,stroke:#2ea043,color:#e6edf3
+    classDef runner fill:#6e40c9,stroke:#a371f7,color:#e6edf3
+    classDef file fill:#2d333b,stroke:#444c56,color:#8b949e
+    classDef claude fill:#d29922,stroke:#e3b341,color:#0d1117
+    classDef external fill:#161b22,stroke:#388bfd,color:#8b949e,stroke-dasharray:4
+    classDef notify fill:#da3633,stroke:#f85149,color:#e6edf3
+  </div>
+</div>
+
+<div class="diagram-wrap">
+  <h2>Event-driven jobs (poll-events daemon → scripts/local/)</h2>
+  <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117'}}}%%
+flowchart TD
+    LD2[launchd\npoll-events.plist]:::scheduler
+    LD2 -->|"every 60s\nrestart-on-exit"| PE[poll-events.sh\nlong-running daemon]:::daemon
+
+    PE -->|polls| GH[GitHub API\ndanielsperoniteam/fhir-place]:::external
+
+    GH -->|new issues| IR[event-issue-review.sh]:::script
+    GH -->|PR ready for review| PRR[event-pr-review.sh]:::script
+    GH -->|"/dispatch-engineer comment"| DE[event-dispatch-engineer.sh]:::script
+    GH -->|"/resolve-conflicts comment"| RC[event-resolve-conflicts.sh]:::script
+    GH -->|"/address-comments comment"| AC[event-address-comments.sh]:::script
+
+    PE -->|"👀 reaction = ack\n(dedup)"| GH
+    PE -->|"~/.fhir-place-state/\npoll-events.json"| STATE[watermark state\nlast-seen timestamps]:::file
+    PE -->|"MAX_CONCURRENT=3\nbackpressure"| CAP[concurrency cap]:::note
+
+    IR -->|via| RUN2[run-prompt-locally.sh]:::runner
+    PRR -->|via| RUN2
+    DE -->|via| RUN2
+    RC -->|via| RUN2
+    AC -->|via| RUN2
+
+    RUN2 -->|"--for issue/PR #N\nprologue + prompt body"| CLAUDE2[claude CLI\nOAuth session]:::claude
+    CLAUDE2 --> SUB2[Claude Max subscription]:::external
+
+    PE -->|kill switch| KS["~/.fhir-place-pause\n(touch to silence all)"]:::killswitch
+
+    classDef scheduler fill:#1f6feb,stroke:#388bfd,color:#e6edf3
+    classDef daemon fill:#1f6feb,stroke:#388bfd,color:#e6edf3,stroke-width:3px
+    classDef script fill:#238636,stroke:#2ea043,color:#e6edf3
+    classDef runner fill:#6e40c9,stroke:#a371f7,color:#e6edf3
+    classDef file fill:#2d333b,stroke:#444c56,color:#8b949e
+    classDef claude fill:#d29922,stroke:#e3b341,color:#0d1117
+    classDef external fill:#161b22,stroke:#388bfd,color:#8b949e,stroke-dasharray:4
+    classDef note fill:#2d333b,stroke:#444c56,color:#8b949e,stroke-dasharray:2
+    classDef killswitch fill:#da3633,stroke:#f85149,color:#e6edf3
+  </div>
+</div>
+
+<div class="diagram-wrap">
+  <h2>Safety &amp; auth model</h2>
+  <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117'}}}%%
+flowchart LR
+    KC[macOS Keychain\ngithub-pat-fhir-place]:::secure -->|security find-generic-password| ENV[GITHUB_TOKEN\nin process env]:::env
+    OAUTH[~/.claude/\nOAuth credentials]:::secure -->|claude login\none-time setup| CLI[claude CLI\nbills Max sub]:::claude
+
+    ENV --> GH_API[gh / GitHub API calls]:::external
+    CLI --> AI[Anthropic API\nvia subscription]:::external
+
+    PAUSE["~/.fhir-place-pause\nkill switch"]:::killswitch -->|checked by every script| ALL[all runners]:::runner
+    LOCK["/tmp/fhir-place-*.lock\natomic mkdir lock"]:::lock -->|prevents double-runs| ALL
+    DIRTY[git diff check\ndirty tree guard]:::lock -->|skips run if\nworkdir has edits| ALL
+
+    classDef secure fill:#238636,stroke:#2ea043,color:#e6edf3
+    classDef env fill:#2d333b,stroke:#444c56,color:#8b949e
+    classDef claude fill:#d29922,stroke:#e3b341,color:#0d1117
+    classDef external fill:#161b22,stroke:#388bfd,color:#8b949e,stroke-dasharray:4
+    classDef killswitch fill:#da3633,stroke:#f85149,color:#e6edf3
+    classDef lock fill:#6e40c9,stroke:#a371f7,color:#e6edf3
+    classDef runner fill:#6e40c9,stroke:#a371f7,color:#e6edf3
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="swatch" style="background:#1f6feb"></div> launchd / daemon</div>
+  <div class="legend-item"><div class="swatch" style="background:#238636"></div> shell script</div>
+  <div class="legend-item"><div class="swatch" style="background:#6e40c9"></div> generic runner / lock</div>
+  <div class="legend-item"><div class="swatch" style="background:#d29922"></div> claude CLI (subscription)</div>
+  <div class="legend-item"><div class="swatch" style="background:#da3633"></div> kill switch / alert</div>
+  <div class="legend-item"><div class="swatch" style="background:#2d333b;border:1px solid #444c56"></div> file / state</div>
+  <div class="legend-item"><div class="swatch" style="background:#161b22;border:1px solid #388bfd"></div> external (GitHub / Anthropic)</div>
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+</script>
+</body>
+</html>
