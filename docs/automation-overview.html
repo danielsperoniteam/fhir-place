@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fhir-place local automation</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; background: #0d1117; color: #e6edf3; padding: 20px; font-size: 13px; }
+  h1 { font-size: 15px; font-weight: 600; color: #7ee787; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 12px; margin-bottom: 24px; }
+  .section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .section-title { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8b949e; margin-bottom: 14px; }
+
+  /* flow grid */
+  .flow { display: flex; flex-direction: column; gap: 0; align-items: center; }
+  .flow-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: flex-start; width: 100%; }
+  .arrow { color: #444c56; font-size: 16px; line-height: 1; text-align: center; padding: 2px 0; }
+  .arrow-label { font-size: 10px; color: #8b949e; text-align: center; }
+
+  /* node boxes */
+  .node { border-radius: 6px; padding: 7px 10px; font-size: 11px; line-height: 1.4; text-align: center; min-width: 110px; max-width: 160px; }
+  .node .name { font-weight: 600; }
+  .node .detail { font-size: 10px; opacity: .75; margin-top: 2px; }
+
+  .scheduler { background: #1c2d4a; border: 1px solid #388bfd; color: #79c0ff; }
+  .script    { background: #1a2e1f; border: 1px solid #2ea043; color: #56d364; }
+  .runner    { background: #261d40; border: 1px solid #a371f7; color: #c9a7f7; }
+  .file      { background: #2d333b; border: 1px solid #444c56; color: #8b949e; }
+  .claude    { background: #2d2008; border: 1px solid #e3b341; color: #e3b341; }
+  .external  { background: #161b22; border: 1px dashed #388bfd; color: #8b949e; }
+  .alert     { background: #3a1414; border: 1px solid #f85149; color: #ff7b72; }
+  .safety    { background: #2d1a00; border: 1px solid #d29922; color: #e3b341; }
+  .state     { background: #1e1e2e; border: 1px solid #6e40c9; color: #c9a7f7; }
+
+  /* two-column layout for auth section */
+  .two-col { display: flex; gap: 16px; flex-wrap: wrap; }
+  .col { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0; align-items: center; }
+
+  /* side-by-side for scripts row */
+  .scripts-grid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+
+  /* small connector line */
+  .vline { width: 1px; height: 14px; background: #444c56; margin: 0 auto; }
+
+  /* legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #21262d; }
+  .li { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #8b949e; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<h1>fhir-place local automation</h1>
+<p class="subtitle">How launchd, poll-events, and the claude CLI wire together on the Mac mini.</p>
+
+<!-- SCHEDULED JOBS -->
+<div class="section">
+  <div class="section-title">Scheduled jobs — scripts/launchd/</div>
+  <div class="flow">
+
+    <div class="flow-row">
+      <div class="node scheduler"><div class="name">launchd</div><div class="detail">macOS service manager</div></div>
+    </div>
+
+    <div class="vline"></div>
+
+    <div class="scripts-grid">
+      <div class="node script"><div class="name">engineer-dispatch.sh</div><div class="detail">09:30 &amp; 14:30 UTC</div></div>
+      <div class="node script"><div class="name">pr-fixup-dispatch.sh</div><div class="detail">09:00 &amp; 14:00 UTC</div></div>
+      <div class="node script"><div class="name">hourly-uat-validation.sh</div><div class="detail">:15 every hour</div></div>
+      <div class="node script"><div class="name">daily-qa-pass.sh</div><div class="detail">05:00 UTC daily</div></div>
+      <div class="node script"><div class="name">daily-pm-triage.sh</div><div class="detail">07:00 UTC daily</div></div>
+      <div class="node script"><div class="name">daily-doc-sync.sh</div><div class="detail">06:00 UTC daily</div></div>
+    </div>
+
+    <div class="vline"></div>
+    <div class="arrow-label">all call via</div>
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node runner"><div class="name">run-prompt-locally.sh</div><div class="detail">generic runner</div></div>
+    </div>
+
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node file"><div class="name">docs/prompts/*.md</div><div class="detail">prompt files in repo</div></div>
+      <div style="display:flex;align-items:center;padding:0 4px;color:#444c56;">+</div>
+      <div class="node claude"><div class="name">claude --print</div><div class="detail">no ANTHROPIC_API_KEY<br>OAuth session only</div></div>
+    </div>
+
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node external"><div class="name">Claude Max subscription</div><div class="detail">billed here, not API tokens</div></div>
+      <div class="node alert"><div class="name">iMessage alert</div><div class="detail">+15082827897<br>on failure</div></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- EVENT-DRIVEN JOBS -->
+<div class="section">
+  <div class="section-title">Event-driven jobs — scripts/local/ via poll-events daemon</div>
+  <div class="flow">
+
+    <div class="flow-row">
+      <div class="node scheduler"><div class="name">launchd</div><div class="detail">poll-events.plist<br>restart-on-exit</div></div>
+    </div>
+
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node runner"><div class="name">poll-events.sh</div><div class="detail">long-running daemon<br>polls every 60s</div></div>
+    </div>
+
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node external"><div class="name">GitHub API</div><div class="detail">danielsperoniteam/fhir-place</div></div>
+    </div>
+
+    <div class="vline"></div>
+    <div class="arrow-label">dispatches async (MAX_CONCURRENT=3)</div>
+    <div class="vline"></div>
+
+    <div class="scripts-grid">
+      <div class="node script"><div class="name">event-issue-review.sh</div><div class="detail">new issues opened</div></div>
+      <div class="node script"><div class="name">event-pr-review.sh</div><div class="detail">PR ready for review</div></div>
+      <div class="node script"><div class="name">event-dispatch-engineer.sh</div><div class="detail">/dispatch-engineer comment</div></div>
+      <div class="node script"><div class="name">event-resolve-conflicts.sh</div><div class="detail">/resolve-conflicts comment</div></div>
+      <div class="node script"><div class="name">event-address-comments.sh</div><div class="detail">/address-comments comment</div></div>
+    </div>
+
+    <div class="vline"></div>
+    <div class="arrow-label">each calls via</div>
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node runner"><div class="name">run-prompt-locally.sh</div><div class="detail">--for issue/PR #N<br>prologue + prompt body</div></div>
+    </div>
+
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node claude"><div class="name">claude --print</div><div class="detail">OAuth session</div></div>
+    </div>
+
+    <div class="vline"></div>
+
+    <div class="flow-row">
+      <div class="node external"><div class="name">Claude Max subscription</div></div>
+    </div>
+
+    <div style="height:16px"></div>
+
+    <div class="flow-row">
+      <div class="node state"><div class="name">~/.fhir-place-state/<br>poll-events.json</div><div class="detail">watermark timestamps<br>(last-seen per stream)</div></div>
+      <div class="node state"><div class="name">👀 reaction on comment</div><div class="detail">ack / dedup marker<br>written back to GitHub</div></div>
+      <div class="node alert"><div class="name">~/.fhir-place-pause</div><div class="detail">kill switch<br>touch to silence all</div></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- AUTH & SAFETY -->
+<div class="section">
+  <div class="section-title">Auth &amp; safety model</div>
+  <div class="two-col">
+
+    <div class="col">
+      <div class="node safety" style="width:100%;max-width:100%;text-align:left"><div class="name">Auth</div></div>
+      <div class="vline"></div>
+      <div class="node file" style="width:100%;max-width:100%"><div class="name">macOS Keychain</div><div class="detail">github-pat-fhir-place entry</div></div>
+      <div class="vline"></div>
+      <div class="arrow-label">security find-generic-password</div>
+      <div class="vline"></div>
+      <div class="node script" style="width:100%;max-width:100%"><div class="name">GITHUB_TOKEN / GH_TOKEN</div><div class="detail">injected into process env</div></div>
+      <div class="vline"></div>
+      <div class="node external" style="width:100%;max-width:100%"><div class="name">gh + GitHub API calls</div></div>
+      <div style="height:12px"></div>
+      <div class="node file" style="width:100%;max-width:100%"><div class="name">~/.claude/</div><div class="detail">OAuth credentials<br>set once via claude login</div></div>
+      <div class="vline"></div>
+      <div class="node claude" style="width:100%;max-width:100%"><div class="name">claude --print</div><div class="detail">subscription billing</div></div>
+    </div>
+
+    <div class="col">
+      <div class="node safety" style="width:100%;max-width:100%;text-align:left"><div class="name">Guards (every runner checks these)</div></div>
+      <div style="height:8px"></div>
+      <div class="node alert" style="width:100%;max-width:100%"><div class="name">~/.fhir-place-pause</div><div class="detail">global kill switch<br>touch to stop everything</div></div>
+      <div style="height:6px"></div>
+      <div class="node state" style="width:100%;max-width:100%"><div class="name">/tmp/fhir-place-*.lock</div><div class="detail">atomic mkdir lock<br>stale-PID recovery built in</div></div>
+      <div style="height:6px"></div>
+      <div class="node state" style="width:100%;max-width:100%"><div class="name">git diff check</div><div class="detail">skips run if working tree<br>has uncommitted edits</div></div>
+      <div style="height:6px"></div>
+      <div class="node state" style="width:100%;max-width:100%"><div class="name">MAX_CONCURRENT=3</div><div class="detail">event daemon backpressure<br>waits 2s then retries</div></div>
+      <div style="height:6px"></div>
+      <div class="node file" style="width:100%;max-width:100%"><div class="name">logs/ (14-day retention)</div><div class="detail">tee'd per run, auto-trimmed</div></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="legend">
+  <div class="li"><div class="swatch" style="background:#1c2d4a;border:1px solid #388bfd"></div> launchd / scheduler</div>
+  <div class="li"><div class="swatch" style="background:#1a2e1f;border:1px solid #2ea043"></div> shell script</div>
+  <div class="li"><div class="swatch" style="background:#261d40;border:1px solid #a371f7"></div> runner / daemon</div>
+  <div class="li"><div class="swatch" style="background:#2d2008;border:1px solid #e3b341"></div> claude CLI (subscription)</div>
+  <div class="li"><div class="swatch" style="background:#3a1414;border:1px solid #f85149"></div> alert / kill switch</div>
+  <div class="li"><div class="swatch" style="background:#1e1e2e;border:1px solid #6e40c9"></div> state / locks</div>
+  <div class="li"><div class="swatch" style="background:#161b22;border:1px dashed #388bfd"></div> external (GitHub / Anthropic)</div>
+</div>
+
+</body>
+</html>
