@@ -211,6 +211,19 @@ poll_once() {
     issue_url=$(echo "$row" | jq -r '.issue_url')
     num=$(basename "$issue_url")
 
+    # Staging conflict marker — posted by github-actions[bot], bypass collaborator gate.
+    if echo "$body" | grep -q '<!-- staging-stack-agent-dispatch '; then
+      if echo "$url" | grep -q '/pull/'; then
+        if already_handled "$cid"; then continue; fi
+        local sha
+        sha=$(echo "$body" | grep -o 'sha=[^ >]*' | cut -d= -f2 | head -1)
+        echo "staging-conflict marker on PR #$num (comment $cid sha=$sha) → local resolver"
+        mark_handled "$cid"
+        dispatch_async "$REPO_ROOT/scripts/local/event-staging-conflict.sh" "$num" "$sha"
+      fi
+      continue
+    fi
+
     if ! is_collaborator "$assoc"; then
       continue
     fi
