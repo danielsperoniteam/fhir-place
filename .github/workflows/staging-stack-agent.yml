@@ -65,4 +65,5 @@ jobs:
             --print \
             --max-turns 200 \
             --allowedTools "Read,Edit,Write,Bash,Grep,Glob" \
+            --disallowedTools "AskUserQuestion,ExitPlanMode" \
             --dangerously-skip-permissions
