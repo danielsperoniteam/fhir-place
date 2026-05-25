@@ -10,5 +10,6 @@
 
 set -Eeuo pipefail
 exec "$(dirname "$0")/../run-prompt-locally.sh" hourly-uat-validation \
+  --skip-dirty-check \
   --max-turns 200 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*"

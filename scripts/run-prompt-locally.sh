@@ -44,12 +44,17 @@ shift
 # Used by event-triggered drivers (issue-review, pr-review,
 # dispatch-engineer-on-issue, pr-resolve-conflicts) to scope the run.
 TARGET=""
+SKIP_DIRTY_CHECK=false
 CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --for)
       TARGET="$2"
       shift 2
+      ;;
+    --skip-dirty-check)
+      SKIP_DIRTY_CHECK=true
+      shift
       ;;
     *)
       CLAUDE_ARGS+=("$1")
@@ -117,7 +122,8 @@ cd "$REPO_ROOT"
 
 # Refuse to run with a dirty primary checkout — likely the human is mid-edit.
 # Prompts that need to mutate the tree create worktrees of their own.
-if ! git diff --quiet || ! git diff --cached --quiet; then
+# Pass --skip-dirty-check for prompts that never touch the tree (e.g. uat-validation).
+if [[ "$SKIP_DIRTY_CHECK" != "true" ]] && { ! git diff --quiet || ! git diff --cached --quiet; }; then
   echo "dirty working tree at $REPO_ROOT — skipping"
   exit 0
 fi
