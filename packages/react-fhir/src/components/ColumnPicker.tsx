@@ -20,6 +20,15 @@ export interface ColumnPickerProps {
   storageKey?: string;
   /** Override the trigger button label (default: "Columns"). */
   buttonLabel?: string;
+  /**
+   * Render a search input at the top of the panel. When the user types,
+   * options are filtered by case-insensitive substring match against
+   * `label` and `path`. Defaults to `true` when there are more than
+   * 10 options; pass `false` to force-disable it.
+   */
+  searchable?: boolean;
+  /** Override the search-input placeholder. */
+  searchPlaceholder?: string;
   className?: string;
 }
 
@@ -54,6 +63,9 @@ const writePersisted = (key: string | undefined, value: string[]): void => {
  *
  * Keyboard: Esc closes the panel, ArrowUp / ArrowDown move focus between
  * checkboxes, the trigger button acts as a normal `aria-haspopup` control.
+ * When `searchable` is enabled (default for >10 options) typing in the
+ * filter input narrows the list — the search input is auto-focused on open
+ * and ArrowDown from the input jumps into the checkbox list.
  */
 export function ColumnPicker({
   options,
@@ -62,8 +74,14 @@ export function ColumnPicker({
   onChange,
   storageKey,
   buttonLabel = "Columns",
+  searchable,
+  searchPlaceholder = "Filter columns…",
   className,
 }: ColumnPickerProps) {
+  // Auto-enable the filter input once the picker has enough rows that the
+  // panel needs scrolling — keeps short pickers (Observation, AllergyIntolerance)
+  // visually identical to the pre-search-input layout.
+  const showSearch = searchable ?? options.length > 10;
   const isControlled = selected !== undefined;
   const validPaths = useMemo(() => new Set(options.map((o) => o.path)), [options]);
 
@@ -113,9 +131,19 @@ export function ColumnPicker({
   };
 
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const checkboxRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const panelId = useId();
+  const searchInputId = useId();
+
+  // Reset the filter every time the panel closes so the next open starts
+  // clean — power users searching for "marital" don't carry that state into
+  // a future visit where they want the full list.
+  useEffect(() => {
+    if (!open) setFilter("");
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -133,16 +161,44 @@ export function ColumnPicker({
     };
   }, [open]);
 
+  // Auto-focus the search input on open so the user can start typing
+  // immediately. The keyboard-shortcut contract for the panel becomes:
+  // type → narrow; ArrowDown → jump into the checkbox list.
+  useEffect(() => {
+    if (open && showSearch) searchInputRef.current?.focus();
+  }, [open, showSearch]);
+
+  const filteredOptions = useMemo(() => {
+    if (!showSearch) return options;
+    const needle = filter.trim().toLowerCase();
+    if (!needle) return options;
+    return options.filter(
+      (o) =>
+        o.label.toLowerCase().includes(needle) ||
+        o.path.toLowerCase().includes(needle),
+    );
+  }, [filter, options, showSearch]);
+
   const handleListKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
-    const focusables = checkboxRefs.current.filter(Boolean) as HTMLInputElement[];
+    const focusables = checkboxRefs.current
+      .slice(0, filteredOptions.length)
+      .filter(Boolean) as HTMLInputElement[];
     if (focusables.length === 0) return;
     const active = document.activeElement as HTMLInputElement | null;
     const idx = active ? focusables.indexOf(active) : -1;
     const delta = e.key === "ArrowDown" ? 1 : -1;
     const next = focusables[(idx + delta + focusables.length) % focusables.length];
     next?.focus();
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const first = checkboxRefs.current[0];
+      first?.focus();
+    }
   };
 
   return (
@@ -169,10 +225,29 @@ export function ColumnPicker({
           role="group"
           aria-label="Choose visible columns"
           onKeyDown={handleListKeyDown}
-          className="absolute right-0 z-10 mt-1 max-h-64 min-w-[12rem] overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg"
+          className="absolute right-0 z-10 mt-1 flex max-h-64 min-w-[14rem] flex-col rounded border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg"
         >
-          <ul className="space-y-1">
-            {options.map((opt, i) => {
+          {showSearch && (
+            <div className="mb-1 flex-shrink-0">
+              <label htmlFor={searchInputId} className="sr-only">
+                Filter columns
+              </label>
+              <input
+                id={searchInputId}
+                ref={searchInputRef}
+                type="search"
+                role="searchbox"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={searchPlaceholder}
+                data-testid="column-picker-search"
+                className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              />
+            </div>
+          )}
+          <ul className="space-y-1 overflow-y-auto">
+            {filteredOptions.map((opt, i) => {
               const checked = current.includes(opt.path);
               return (
                 <li key={opt.path}>
@@ -190,6 +265,15 @@ export function ColumnPicker({
                 </li>
               );
             })}
+            {filteredOptions.length === 0 && (
+              <li
+                aria-live="polite"
+                className="px-1 py-0.5 text-sm text-[var(--text-muted)]"
+                data-testid="column-picker-empty"
+              >
+                No matches
+              </li>
+            )}
           </ul>
         </div>
       )}

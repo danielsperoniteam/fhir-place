@@ -102,6 +102,8 @@ function Patients() {
 - **`FhirClient` interface** — `read`, `vread`, `history`, `search`, `create`, `update`, `patch` (JSON Patch), `delete`, `readReference` (relative + absolute), generic `request()` escape hatch
 - **`FetchFhirClient`** — the only shipped implementation. Supports `If-Match` / `If-None-Match` / `If-None-Exist`, static + dynamic headers, `AbortSignal`, custom `fetch`
 - **`FhirError`** — carries status, URL, and `OperationOutcome` from the server when available
+- **`SearchBuilder` / `searchBuilder()`** — typed, chainable search builder with per-resource param-type, include, and revinclude maps. Plays with `useTypedSearch` so the query key matches plain `useSearch`.
+- **`formatSearchRequest()`** — renders a `SearchRequestPreview` (method, URL, body) for logging or showing the caller what wire request a `SearchParams` object will become. Also exports `buildSearchParams()` for the raw `URLSearchParams` step.
 
 ```ts
 import { FetchFhirClient } from "@fhir-place/react-fhir/client";
@@ -114,7 +116,11 @@ const bundle = await fhir.search("Patient", { name: "smith", _count: 20 });
 ### `hooks/`
 
 - **`FhirClientProvider` / `useFhirClient`** — context
+- **`useTerminologyClient` / `useOptionalTerminologyClient`** — opt-in second client for terminology operations (`$expand`, `$lookup`) when the primary server doesn't host the value sets you need
 - **`useResource`, `useSearch`, `useInfiniteSearch`, `useCapabilities`, `useStructureDefinition`, `useSearchParameter`, `useValueSet`, `useReadReference`** — TanStack Query wrappers with stable query keys (`fhirQueryKeys`). `useSearchParameter` resolves a `(base, code)` pair to its canonical `SearchParameter` resource so spec-aware code can prefer `expression` over the kebab→camel naming convention.
+- **`useTypedSearch`** — typed variant backed by a `SearchBuilder` instance; the builder supplies both the resource type and the params, and the query key reuses `fhirQueryKeys.search` so mutations invalidate it the same way as `useSearch`.
+- **`useValueSetExpansion` / `useCodeLookup`** — `$expand` and `$lookup` operations routed through the terminology client when available.
+- **`useResources` / `useReadReferences`** — batch variants of `useResource` / `useReadReference` that fetch many ids or references in one request.
 - **`useCreateResource`, `useUpdateResource`, `useDeleteResource`** — mutations that invalidate matching read queries on success
 
 ```tsx
@@ -131,8 +137,13 @@ function PatientCard({ id }: { id: string }) {
 ### `structure/`
 
 - **`walkResource` / `walkObject`** — iterate a StructureDefinition snapshot, yield present elements in canonical order, resolve `[x]` choice types
-- **`directChildren`, `findElement`** — querying SDs
+- **`directChildren`, `findElement`, `findChoiceVariant`, `isPrimitive`, `PRIMITIVE_TYPES`** — querying SDs and the primitive-type set
 - **`pathGet` / `pathSet` / `pathRemove` / `prune`** — immutable path helpers used by the editor
+- **`resolveStructureDefinition()`** — fetches a StructureDefinition by type or canonical, with optional bundled-types fallback for the R4 core
+- **`bindingFor()`, `codesFromValueSet()`, `isOpenBinding()`** — read the ValueSet binding on an `ElementDefinition` and pull resolved codes
+- **`elementPathForSearchParam()`, `elementPathFromExpression()`, `kebabToCamel()`** — turn a `SearchParameter` into an element path, preferring `expression` over the kebab→camel convention
+- **`formatHumanName`, `formatAddress`, `formatCoding`, `formatCodeableConcept`, `formatQuantity`, `formatPeriod`, `formatReferenceLabel`** — pure datatype formatters used by the renderers
+- **`coreStructureDefinition`, `lookupCoreDisplay`, `lookupCoreDefinition`, `lookupCoreConcept`, `bundledTypes`, `createDefaultSpecFetcher`** — bundled R4 core SDs and value sets, plus the `SpecFetcher` plumbing for offline / custom fetchers
 
 ```ts
 import { walkResource, findElement, pathGet } from "@fhir-place/react-fhir/structure";
@@ -153,6 +164,8 @@ for (const node of walkResource(patient, structureDef)) {
 - **`<SortPicker>`** — popover to choose the `_sort` search parameter, driven by the resource's search params.
 - **`<ReferencePicker>`** — debounced search-and-pick widget for FHIR `Reference` fields. Accepts `targets` (allowed resource types), searches the server live as the user types, and returns a typed `Reference`. Replaces the raw `Type/id` text field that `<ResourceEditor>` generates for Reference elements by default. Also exports `<ReferencePickerFallback>` for when the search fails.
 - **`<Narrative>`** — the *only* place `dangerouslySetInnerHTML` is used. DOMPurify with a FHIR-appropriate allowlist: no `<script>`, no `on*`, no `javascript:`, no forms or inputs.
+- **`<HintedDetail>`** — composes a detail page from a `LayoutHint`. Reads each declared field path, looks up the FHIR type via the StructureDefinition, and dispatches through the same renderer map as `<ResourceView>` and `<ResourceTable>`.
+- **`<CodedValue>`** — renders a `Coding` or `CodeableConcept` with a known-system label, hover popover for full codes, and optional `tone`. Re-exports `FHIR_CODE_SYSTEMS`, `isKnown`, `labelForSystem`, `normalizeSystem`, `partition`, `pickPrimary` from `./registry`.
 - **`defaultTypeRenderers` / `defaultTypeInputs`** — the dispatch maps. Every built-in renderer/input is overridable by passing `renderers` / `inputs` props.
 
 ```tsx
@@ -239,15 +252,16 @@ Tracked items (comment / upvote on the issue, or pick one up — each has a conc
 
 | # | Item |
 | --- | --- |
-| [#4](https://github.com/danielsperoniteam/fhir-place/issues/4) | ValueSet resolution + binding-aware code input |
-| [#121](https://github.com/danielsperoniteam/fhir-place/issues/121) | Typed search builder v0 — core API |
-| [#123](https://github.com/danielsperoniteam/fhir-place/issues/123) | Profile-aware codegen spike (US Core 7 seed) |
 | [#124](https://github.com/danielsperoniteam/fhir-place/issues/124) | Experimental Zod schema generation from `StructureDefinition` |
 | [#125](https://github.com/danielsperoniteam/fhir-place/issues/125) | Interop demo matrix (HAPI + Medplum + Aidbox) |
 | [#127](https://github.com/danielsperoniteam/fhir-place/issues/127) | Inferno (g)(10) CI badge |
-| [#128](https://github.com/danielsperoniteam/fhir-place/issues/128) | Optional `@fhir-place/mcp` package |
 
 See the [full issue list](https://github.com/danielsperoniteam/fhir-place/issues) for the current state — issues are the source of truth and stay up to date as work lands.
+
+<!-- #4 closed 2026-04-22 -->
+<!-- #121 closed 2026-05-04 -->
+<!-- #123 closed 2026-05-01 -->
+<!-- #128 closed 2026-05-10 -->
 
 Deferred (open an issue if you need it): Extensions in the editor, profile-URL support in `useStructureDefinition`, SMART on FHIR v2 auth, R4B / R5, Subscriptions / realtime.
 

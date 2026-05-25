@@ -1,10 +1,10 @@
 # PR conflict-resolution prompt
 
 Invoked by the `pr-resolve-conflicts` workflow when a maintainer comments
-`/resolve-conflicts` on a PR. Your job is to merge the base branch into the
-PR head branch, resolve any conflicts, verify the build still passes, and
-push the result — without altering any behaviour that was intentional in
-either branch.
+`/resolve-conflicts` on a PR, or when `pr-fixup-dispatch` finds a bot PR
+blocked by merge conflicts. Your job is to merge the base branch into the PR
+head branch, resolve any conflicts, verify the build still passes, and push the
+result without altering any behaviour that was intentional in either branch.
 
 See also:
 
@@ -172,7 +172,7 @@ If you must abort:
 2. Post a comment on PR #<pr_number>:
 
 ```
-Conflict resolution requires human judgment.
+@danielsperoni conflict resolution requires human judgment.
 
 **Reason:** <one sentence — e.g. "binary file conflict in
 `public/logo.png`" or "auto-generated file `src/generated/types.ts`
@@ -184,7 +184,8 @@ conflicts; regeneration step unclear">
 To retry after resolving these manually, comment `/resolve-conflicts` again.
 ```
 
-3. Exit without pushing anything.
+3. Add the `status: needs-human` label to the PR.
+4. Exit without pushing anything.
 
 ---
 

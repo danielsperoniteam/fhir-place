@@ -168,6 +168,8 @@ export function CCTopbar({ onMobileNavOpen }: CCTopbarProps) {
           onClick={toggle}
           style={ccBtn("ghost")}
           title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          aria-label={theme === "light" ? "Toggle dark mode" : "Toggle light mode"}
+          data-testid="topbar-theme"
         >
           {theme === "light" ? <MoonIcon /> : <SunIcon />}
         </button>
