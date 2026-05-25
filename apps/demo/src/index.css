@@ -126,6 +126,13 @@ body, .cc-shell * {
   width: 100% !important;
 }
 
+/* Mobile-only server pill in the topbar. Hidden on desktop because the
+   sidebar already shows the active server card; shown on phones so the
+   user always knows which server they're talking to. */
+.topbar-server-pill {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .mobile-nav-trigger {
     display: inline-flex !important;
@@ -136,6 +143,29 @@ body, .cc-shell * {
   }
 
   .cc-sidebar {
+    display: none !important;
+  }
+
+  .topbar-server-pill {
+    display: inline-flex !important;
+  }
+
+  /* The breadcrumb collapses to ellipsized stubs ("FHIR ... / P...") at
+     375px and stops being legible. Drop it on phones — the server pill
+     and tab strip already convey location. */
+  .topbar-breadcrumb {
+    display: none !important;
+  }
+
+  /* Keyboard-shortcut hints in the status bar are pointer-only. Hide
+     them on touch viewports to reclaim vertical real-estate. */
+  .status-bar-hints {
+    display: none !important;
+  }
+
+  /* Settings is reachable through the drawer footer on mobile; the
+     duplicate topbar link just steals room from the server pill. */
+  .topbar-settings-link {
     display: none !important;
   }
 }
