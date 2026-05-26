@@ -165,6 +165,50 @@ describe("ResourceEditor", () => {
     expect(screen.getByRole("button", { name: /saving/i })).toBeDisabled();
   });
 
+  it("disables the Save button when saveDisabled is true", () => {
+    wrap(
+      <ResourceEditor
+        resource={emptyPatient}
+        structureDefinition={PatientStructureDefinition}
+        saveDisabled
+      />,
+    );
+    expect(screen.getByTestId("resource-editor-save")).toBeDisabled();
+  });
+
+  it("enables the Save button when saveDisabled is false", () => {
+    wrap(
+      <ResourceEditor
+        resource={emptyPatient}
+        structureDefinition={PatientStructureDefinition}
+        saveDisabled={false}
+      />,
+    );
+    expect(screen.getByTestId("resource-editor-save")).not.toBeDisabled();
+  });
+
+  it("disables the Save button when validate returns false", () => {
+    wrap(
+      <ResourceEditor
+        resource={emptyPatient}
+        structureDefinition={PatientStructureDefinition}
+        validate={() => false}
+      />,
+    );
+    expect(screen.getByTestId("resource-editor-save")).toBeDisabled();
+  });
+
+  it("enables the Save button when validate returns true", () => {
+    wrap(
+      <ResourceEditor
+        resource={emptyPatient}
+        structureDefinition={PatientStructureDefinition}
+        validate={() => true}
+      />,
+    );
+    expect(screen.getByTestId("resource-editor-save")).not.toBeDisabled();
+  });
+
   it("uses the path-based override for Observation.dataAbsentReason instead of the generic CodeableConcept input", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

@@ -38,6 +38,18 @@ export interface ResourceEditorProps {
   saveLabel?: string;
   /** When true, the Save button shows a spinner and becomes disabled. */
   saving?: boolean;
+  /**
+   * When true, the Save button is disabled (but does not show a spinner).
+   * Use this for static client-side validation gates. When you need a
+   * dynamic gate that depends on the draft contents, use `validate` instead.
+   */
+  saveDisabled?: boolean;
+  /**
+   * Called with the current draft on every render. Return `false` to disable
+   * the Save button. Runs inside ResourceEditor so it sees the live draft
+   * without requiring the parent to track state.
+   */
+  validate?: (draft: Resource) => boolean;
   className?: string;
   profile?: string | null;
 }
@@ -80,7 +92,7 @@ const skipKeys = new Set([
 ]);
 
 export function ResourceEditor(props: ResourceEditorProps) {
-  const { resource, structureDefinition, onChange, onSave, onCancel, profile } = props;
+  const { resource, structureDefinition, onChange, onSave, onCancel, profile, saveDisabled, validate } = props;
   const detectedProfile = profile === undefined ? resource.meta?.profile?.[0] : profile;
   const [draft, setDraft] = useState<Resource>(resource);
 
@@ -168,7 +180,8 @@ export function ResourceEditor(props: ResourceEditorProps) {
         )}
         <button
           type="submit"
-          disabled={props.saving}
+          data-testid="resource-editor-save"
+          disabled={props.saving || saveDisabled || (validate ? !validate(draft) : false)}
           className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
         >
           {props.saving ? "Saving…" : (props.saveLabel ?? "Save")}

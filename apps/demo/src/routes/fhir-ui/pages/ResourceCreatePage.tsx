@@ -1,5 +1,6 @@
 import { ResourceEditor, useCreateResource } from "@fhir-place/react-fhir";
-import type { Resource } from "fhir/r4";
+import type { Patient, Resource } from "fhir/r4";
+import { useCallback } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   RESOURCE_LIST_CONFIG,
@@ -8,13 +9,29 @@ import {
 import { resourceCollectionLabel } from "../resourceLabels.js";
 
 /**
- * Generic create form for any FHIR resource type. Renders the spec-driven
- * `<ResourceEditor>` against an empty `{ resourceType }` seed and POSTs the
- * filled draft. On success, navigates to the new resource's detail page.
- *
- * Configured types (top-N in the sidebar) get a friendly singular noun on the
- * save button and back link; other types fall back to the raw type name.
+ * Returns true when a Patient draft has at least one usable identity field:
+ * a non-empty identifier value, or name.given/name.family/name.text. Used as
+ * the `validate` prop on ResourceEditor to gate Save without requiring the
+ * parent to track draft state.
  */
+function patientHasIdentity(draft: Resource): boolean {
+  if (draft.resourceType !== "Patient") return true;
+  const p = draft as Patient;
+
+  const hasIdentifier = (p.identifier ?? []).some(
+    (id) => id != null && typeof id.value === "string" && id.value.trim() !== "",
+  );
+  if (hasIdentifier) return true;
+
+  return (p.name ?? []).some(
+    (n) =>
+      n != null &&
+      ((typeof n.text === "string" && n.text.trim() !== "") ||
+        (typeof n.family === "string" && n.family.trim() !== "") ||
+        (n.given ?? []).some((g) => typeof g === "string" && g.trim() !== "")),
+  );
+}
+
 export function ResourceCreatePage() {
   const { resourceType = "" } = useParams();
   const navigate = useNavigate();
@@ -24,6 +41,12 @@ export function ResourceCreatePage() {
     ? RESOURCE_LIST_CONFIG[resourceType]
     : undefined;
   const singular = config?.singular ?? resourceType.toLowerCase();
+
+  // Stable reference — only Patient resources get the identity gate.
+  const validate = useCallback(
+    (d: Resource) => patientHasIdentity(d),
+    [],
+  );
 
   return (
     <div className="space-y-4">
@@ -40,6 +63,7 @@ export function ResourceCreatePage() {
         resource={{ resourceType } as Resource}
         saveLabel={`Create ${singular}`}
         saving={create.isPending}
+        validate={validate}
         onCancel={() => navigate(`/fhir-ui/${resourceType}`)}
         onSave={async (draft) => {
           const created = await create.mutateAsync(draft as Resource & { id?: string });
