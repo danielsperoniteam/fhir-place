@@ -126,6 +126,24 @@ describe("formatFhirDateTime", () => {
   it("returns an empty string for undefined", () => {
     expect(formatFhirDateTime(undefined)).toBe("");
   });
+
+  it("preserves date-only precision: YYYY-MM-DD does not shift timezone", () => {
+    // new Date("2022-02-01") is UTC midnight; in ET that becomes Jan 31.
+    // The formatter must keep Feb 1 by parsing the components as local time.
+    const result = formatFhirDateTime("2022-02-01");
+    const expected = new Date(2022, 1, 1).toLocaleDateString(); // local Feb 1
+    expect(result).toBe(expected);
+  });
+
+  it("preserves date-only precision: YYYY-MM returns a local date string", () => {
+    const result = formatFhirDateTime("2022-02");
+    const expected = new Date(2022, 1, 1).toLocaleDateString();
+    expect(result).toBe(expected);
+  });
+
+  it("returns the year string as-is for year-only FHIR dates", () => {
+    expect(formatFhirDateTime("2022")).toBe("2022");
+  });
 });
 
 describe("formatPeriod", () => {

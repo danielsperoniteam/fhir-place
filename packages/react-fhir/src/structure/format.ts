@@ -67,6 +67,12 @@ export function formatQuantity(q: Quantity | undefined): string {
   return `${comparator}${num}${unit ? ` ${unit}` : ""}`.trim();
 }
 
+// FHIR dateTime may be reduced-precision: YYYY, YYYY-MM, or YYYY-MM-DD.
+// new Date("YYYY-MM-DD") parses as UTC midnight; in non-UTC locales that
+// shifts the displayed date (e.g. "2022-02-01" → "1/31/2022 7:00 PM" in ET).
+// Detect these and construct a local Date from the numeric parts instead.
+const DATE_ONLY_RE = /^\d{4}(-\d{2}(-\d{2})?)?$/;
+
 /**
  * Locale-format a FHIR `dateTime`/`instant` string. Falls back to the raw
  * input when it is not a parseable date so malformed strings are surfaced
@@ -76,6 +82,13 @@ export function formatQuantity(q: Quantity | undefined): string {
  */
 export function formatFhirDateTime(value: string | undefined): string {
   if (!value) return "";
+  if (DATE_ONLY_RE.test(value)) {
+    const [yearStr, monthStr, dayStr] = value.split("-");
+    if (!monthStr) return value; // year-only: return as-is
+    const localDate = new Date(Number(yearStr), Number(monthStr) - 1, dayStr ? Number(dayStr) : 1);
+    if (Number.isNaN(localDate.getTime())) return value;
+    return localDate.toLocaleDateString();
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
