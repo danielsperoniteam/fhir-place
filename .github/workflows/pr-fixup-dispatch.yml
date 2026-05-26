@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write       # push to existing bot/* branches
+  actions: write        # dispatch pr-resolve-conflicts.yml for merge conflicts
   issues: write         # labels + comments
   pull-requests: write
   id-token: write
@@ -28,6 +29,7 @@ concurrency:
 
 jobs:
   dispatch:
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -49,8 +51,8 @@ jobs:
             Read the file at docs/prompts/pr-fixup-dispatch.md and execute
             the instructions in it. Do not modify the prompt file itself.
             The MCP github tools are configured; the `engineer` subagent
-            and the `docs/prompts/address-comments.md` prompt are both
-            available.
+            and the `docs/prompts/address-comments.md` and
+            `docs/prompts/pr-resolve-conflicts.md` prompts are available.
           claude_args: "--max-turns 250 --allowedTools Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__* --disallowedTools AskUserQuestion,ExitPlanMode"
           show_full_output: true
         env:

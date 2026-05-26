@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ServerConfig,
   BUILTIN_SERVERS,
+  DEFAULT_ACTIVE_SERVER_ID,
   buildRequestHeaders,
   loadActiveServerId,
   loadServers,
@@ -123,28 +124,61 @@ describe("loadServers", () => {
     );
   });
 
-  it("preserves stored overrides on built-ins (e.g. user-added bearer token)", () => {
+  it("preserves stored auth overrides on built-ins but keeps canonical label/baseUrl", () => {
+    // A built-in's `label` and `baseUrl` are part of the BUILT-IN badge's
+    // trust identity. Anything in storage that disagrees must be ignored —
+    // the merged row reverts to canonical so the badge can't lie.
     installLocalStorage({
       "fhir-place:servers": JSON.stringify([
         {
           id: "builtin-hapi",
-          label: "HAPI (mine)",
-          baseUrl: "https://hapi.fhir.org/baseR4",
+          label: "Renamed Built-In",
+          baseUrl: "https://evil.example.org/fhir",
           authMode: "bearer",
           bearerToken: "tok",
+          headers: [{ key: "X-Tenant", value: "acme" }],
         },
       ]),
     });
     const servers = loadServers();
     const hapi = servers.find((s) => s.id === "builtin-hapi");
     expect(hapi).toMatchObject({
-      label: "HAPI (mine)",
+      // Canonical label + URL win — the storage override is dropped.
+      label: "HAPI Public Test Server",
+      baseUrl: "https://hapi.fhir.org/baseR4",
+      // Auth + headers are still honored.
       authMode: "bearer",
       bearerToken: "tok",
+      headers: [{ key: "X-Tenant", value: "acme" }],
       builtin: true,
     });
     // Other built-ins still present.
     expect(servers.find((s) => s.id === "builtin-smart")).toBeDefined();
+  });
+
+  it("a saved built-in row round-trips with canonical label/baseUrl on reload", () => {
+    // Simulates the bug scenario: user edits a built-in's label/baseUrl in
+    // an older build (or anything that wrote to localStorage directly),
+    // then reloads. The merge must serve the canonical values back.
+    installLocalStorage({
+      "fhir-place:servers": JSON.stringify([
+        {
+          id: "builtin-hapi",
+          label: "Renamed Built-In",
+          baseUrl: "https://hapi.fhir.org/baseR4",
+          authMode: "none",
+        },
+      ]),
+    });
+    const first = loadServers().find((s) => s.id === "builtin-hapi");
+    expect(first?.label).toBe("HAPI Public Test Server");
+    // Re-save what the UI now sees (label + baseUrl untouched) and confirm
+    // the second load still reads canonical.
+    saveServers(loadServers());
+    const second = loadServers().find((s) => s.id === "builtin-hapi");
+    expect(second?.label).toBe("HAPI Public Test Server");
+    expect(second?.baseUrl).toBe("https://hapi.fhir.org/baseR4");
+    expect(second?.builtin).toBe(true);
   });
 
   it("includes user-added custom servers, marking them non-builtin", () => {
@@ -224,17 +258,60 @@ describe("active server id", () => {
 
 describe("resolveActiveServer", () => {
   it("returns the active server when its id is stored", () => {
-    saveActiveServerId("builtin-smart");
+    saveActiveServerId("builtin-hapi");
+    expect(resolveActiveServer().id).toBe("builtin-hapi");
+  });
+
+  it("defaults a fresh visitor (no localStorage) to SMART Health IT R4", () => {
+    // Issue #496: the hosted Pages build (a non-localhost origin) must not
+    // land on a server the browser cannot reach. SMART Health IT R4 is the
+    // safe cross-origin default for cold loads.
+    expect(DEFAULT_ACTIVE_SERVER_ID).toBe("builtin-smart");
+    expect(resolveActiveServer().id).toBe("builtin-smart");
+    expect(resolveActiveServer().baseUrl).toBe("https://r4.smarthealthit.org");
+  });
+
+  it("uses the default id even when SMART is not first in BUILTIN_SERVERS", () => {
+    // Verifies the default is pinned by id, not by array position — so a
+    // future reorder of the picker can't silently change cold-load behavior.
+    const smart = BUILTIN_SERVERS.find((s) => s.id === "builtin-smart");
+    expect(smart).toBeDefined();
+    installLocalStorage({
+      "fhir-place:servers": JSON.stringify([
+        {
+          id: "custom-localhost",
+          label: "Local HAPI (Docker)",
+          baseUrl: "http://localhost:8080/fhir",
+          authMode: "none",
+        },
+        ...BUILTIN_SERVERS,
+      ]),
+    });
     expect(resolveActiveServer().id).toBe("builtin-smart");
   });
 
-  it("falls back to the first server when no active id is stored", () => {
-    expect(resolveActiveServer().id).toBe(BUILTIN_SERVERS[0]!.id);
+  it("preserves an explicit user selection of a localhost custom server", () => {
+    // Acceptance criteria #496: explicit user choice always wins, even when
+    // the chosen server is a private address the public origin cannot reach.
+    installLocalStorage({
+      "fhir-place:servers": JSON.stringify([
+        {
+          id: "custom-localhost",
+          label: "Local HAPI (Docker)",
+          baseUrl: "http://localhost:8080/fhir",
+          authMode: "none",
+        },
+      ]),
+      "fhir-place:active-server": "custom-localhost",
+    });
+    const active = resolveActiveServer();
+    expect(active.id).toBe("custom-localhost");
+    expect(active.baseUrl).toBe("http://localhost:8080/fhir");
   });
 
-  it("falls back to the first server when active id matches nothing", () => {
+  it("falls back to the default id when active id matches nothing", () => {
     saveActiveServerId("never-existed");
-    expect(resolveActiveServer().id).toBe(BUILTIN_SERVERS[0]!.id);
+    expect(resolveActiveServer().id).toBe(DEFAULT_ACTIVE_SERVER_ID);
   });
 });
 

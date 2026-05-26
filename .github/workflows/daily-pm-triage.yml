@@ -27,6 +27,7 @@ concurrency:
 
 jobs:
   triage:
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
