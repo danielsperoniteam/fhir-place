@@ -102,6 +102,9 @@ function Patients() {
 - **`FhirClient` interface** — `read`, `vread`, `history`, `search`, `create`, `update`, `patch` (JSON Patch), `delete`, `readReference` (relative + absolute), generic `request()` escape hatch
 - **`FetchFhirClient`** — the only shipped implementation. Supports `If-Match` / `If-None-Match` / `If-None-Exist`, static + dynamic headers, `AbortSignal`, custom `fetch`
 - **`FhirError`** — carries status, URL, and `OperationOutcome` from the server when available
+- **`searchBuilder()` / `SearchBuilder`** — typed search builder. Per-resource `where` / `include` / `revInclude` / `sort` / `count` with R4 search-parameter typing; returns a `SearchParams` ready for `client.search(...)` or `useTypedSearch`. Companion types: `ParamType`, `DatePrefix`, `NumberPrefix`, `IncludeSpec`, `RevIncludeSpec`, `SearchableResource`, `ReferenceTargets`.
+- **`buildSearchParams(params)` / `formatSearchRequest()`** — serialise a `SearchParams` record into `URLSearchParams`, or produce a human-readable `SearchRequestPreview` (method, URL, body) for devtools and docs.
+- **Types** — `SearchParams`, `JsonPatchOp`, `RequestOptions`, `FhirVersion` are re-exported alongside the client
 
 ```ts
 import { FetchFhirClient } from "@fhir-place/react-fhir/client";
@@ -114,7 +117,12 @@ const bundle = await fhir.search("Patient", { name: "smith", _count: 20 });
 ### `hooks/`
 
 - **`FhirClientProvider` / `useFhirClient`** — context
+- **`useTerminologyClient` / `useOptionalTerminologyClient`** — opt-in second client for terminology operations (`$expand`, `$lookup`) when the primary server doesn't host the value sets you need
 - **`useResource`, `useSearch`, `useInfiniteSearch`, `useCapabilities`, `useStructureDefinition`, `useSearchParameter`, `useValueSet`, `useReadReference`** — TanStack Query wrappers with stable query keys (`fhirQueryKeys`). `useSearchParameter` resolves a `(base, code)` pair to its canonical `SearchParameter` resource so spec-aware code can prefer `expression` over the kebab→camel naming convention.
+- **`useTypedSearch`** — typed variant backed by a `SearchBuilder` instance; the builder supplies both the resource type and the params, and the query key reuses `fhirQueryKeys.search` so mutations invalidate it the same way as `useSearch`.
+- **`useResources`, `useReadReferences`** — batch reads. Take a list of `(type, id)` pairs or `Reference`s and resolve them in one cache-coherent query. `parseBatchableRefs` splits a reference list into resolvable / absolute / contained buckets.
+- **`useValueSetExpansion`, `useCodeLookup`** — terminology helpers routed through the terminology client when available. `useValueSetExpansion` calls `$expand`; `useCodeLookup` resolves a `(system, code)` to a display string from an expanded ValueSet.
+- **`nextPageUrl(bundle)`** — pulls the `link[rel=next]` URL off a search Bundle. Used by `useInfiniteSearch` and exported for app-level paging.
 - **`useCreateResource`, `useUpdateResource`, `useDeleteResource`** — mutations that invalidate matching read queries on success
 
 ```tsx
@@ -131,8 +139,13 @@ function PatientCard({ id }: { id: string }) {
 ### `structure/`
 
 - **`walkResource` / `walkObject`** — iterate a StructureDefinition snapshot, yield present elements in canonical order, resolve `[x]` choice types
-- **`directChildren`, `findElement`** — querying SDs
-- **`pathGet` / `pathSet` / `pathRemove` / `prune`** — immutable path helpers used by the editor
+- **`directChildren`, `findElement`, `findChoiceVariant`, `isPrimitive`, `PRIMITIVE_TYPES`** — querying SDs and the primitive-type set
+- **`pathGet` / `pathSet` / `pathRemove` / `prune`** — immutable path helpers used by the editor. `Path` / `PathSegment` are the underlying types.
+- **`resolveStructureDefinition(client, type, options?)`** — runtime SD resolver. Tries instance read, then canonical search, then the bundled fallback; `ResolveOptions` lets callers disable either network step or the bundled fallback.
+- **`bindingFor`, `isOpenBinding`, `codesFromValueSet`** — element-binding helpers: read strength + ValueSet reference off an `ElementDefinition`, expand a `ValueSet` to display-ready codes. Types: `BindingStrength`, `ElementBinding`, `ResolvedCode`, `ValueSetResolver`, `CodesFromValueSetOptions`.
+- **`elementPathForSearchParam`, `elementPathFromExpression`, `kebabToCamel`** — turn a `SearchParameter` (or its FHIRPath `expression`) into an element path, preferring `expression` over the kebab→camel convention.
+- **`formatHumanName`, `formatAddress`, `formatCoding`, `formatCodeableConcept`, `formatQuantity`, `formatPeriod`, `formatTiming`, `formatDosage`, `formatReferenceLabel`** — pure datatype formatters used by the renderers. Safe to call outside React.
+- **Bundled spec access** — `coreStructureDefinition(type)`, `lookupCoreDisplay`, `lookupCoreDefinition`, `lookupCoreConcept`, `coreValueSet`, `coreValueSets`, `bundledValueSetUrls`, `bundledTypes`. The fetcher is pluggable: `SpecFetcher`, `createDefaultSpecFetcher`, `setCoreStructureDefinitionFetcher`, `getCoreStructureDefinitionFetcher`, `clearSpecFetcherCache`.
 
 ```ts
 import { walkResource, findElement, pathGet } from "@fhir-place/react-fhir/structure";
@@ -153,7 +166,9 @@ for (const node of walkResource(patient, structureDef)) {
 - **`<SortPicker>`** — popover to choose the `_sort` search parameter, driven by the resource's search params.
 - **`<ReferencePicker>`** — debounced search-and-pick widget for FHIR `Reference` fields. Accepts `targets` (allowed resource types), searches the server live as the user types, and returns a typed `Reference`. Replaces the raw `Type/id` text field that `<ResourceEditor>` generates for Reference elements by default. Also exports `<ReferencePickerFallback>` for when the search fails.
 - **`<Narrative>`** — the *only* place `dangerouslySetInnerHTML` is used. DOMPurify with a FHIR-appropriate allowlist: no `<script>`, no `on*`, no `javascript:`, no forms or inputs.
-- **`defaultTypeRenderers` / `defaultTypeInputs`** — the dispatch maps. Every built-in renderer/input is overridable by passing `renderers` / `inputs` props.
+- **`<CodedValue>`** — renders a `Coding` or `CodeableConcept` with a known-system label, hover popover for full codes, and optional `tone`. Uses the `codedValue/` registry (`FHIR_CODE_SYSTEMS`, `partition`, `pickPrimary`, `labelForSystem`, `normalizeSystem`, `isKnown`) to prefer well-known systems and fall back to text.
+- **`<HintedDetail>`** — composes a detail page from a `LayoutHint` (hero + sections). Reads each declared field path, looks up the FHIR type via the StructureDefinition, and dispatches through the same renderer map as `<ResourceView>` and `<ResourceTable>`. Renders nothing when no hint is supplied.
+- **`defaultTypeRenderers` / `defaultTypeInputs`** — the dispatch maps. Every built-in renderer/input is overridable by passing `renderers` / `inputs` props. `defaultPathInputs` covers path-keyed overrides; `DataAbsentReasonInput` and `JsonFallbackInput` are the fallback inputs.
 
 ```tsx
 import { ResourceView, ResourceEditor, ResourceSearch } from "@fhir-place/react-fhir/components";
@@ -239,15 +254,16 @@ Tracked items (comment / upvote on the issue, or pick one up — each has a conc
 
 | # | Item |
 | --- | --- |
-| [#4](https://github.com/danielsperoniteam/fhir-place/issues/4) | ValueSet resolution + binding-aware code input |
-| [#121](https://github.com/danielsperoniteam/fhir-place/issues/121) | Typed search builder v0 — core API |
-| [#123](https://github.com/danielsperoniteam/fhir-place/issues/123) | Profile-aware codegen spike (US Core 7 seed) |
 | [#124](https://github.com/danielsperoniteam/fhir-place/issues/124) | Experimental Zod schema generation from `StructureDefinition` |
 | [#125](https://github.com/danielsperoniteam/fhir-place/issues/125) | Interop demo matrix (HAPI + Medplum + Aidbox) |
 | [#127](https://github.com/danielsperoniteam/fhir-place/issues/127) | Inferno (g)(10) CI badge |
-| [#128](https://github.com/danielsperoniteam/fhir-place/issues/128) | Optional `@fhir-place/mcp` package |
 
 See the [full issue list](https://github.com/danielsperoniteam/fhir-place/issues) for the current state — issues are the source of truth and stay up to date as work lands.
+
+<!-- #4 closed 2026-04-22 -->
+<!-- #121 closed 2026-05-04 -->
+<!-- #123 closed 2026-05-01 -->
+<!-- #128 closed 2026-05-10 -->
 
 Deferred (open an issue if you need it): Extensions in the editor, profile-URL support in `useStructureDefinition`, SMART on FHIR v2 auth, R4B / R5, Subscriptions / realtime.
 

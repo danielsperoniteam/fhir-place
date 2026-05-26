@@ -71,6 +71,122 @@ const readLayout = (rt: string, scoped: boolean): Layout => {
   return "table";
 };
 
+// Path segments that name a FHIR sub-structure rather than a domain
+// concept. When a column path ends in one of these, the leaf doesn't tell
+// the user anything useful (`basedOn.reference` collapses three different
+// links into "Reference"). Prefer the parent segment in that case so the
+// header names the resource element instead.
+const STRUCTURAL_LEAF_SEGMENTS = new Set([
+  "reference",
+  "display",
+  "code",
+  "system",
+  "value",
+  "text",
+  "coding",
+]);
+
+const humanizeSegment = (segment: string): string =>
+  segment
+    .replace(/\[\d+\]/g, "")
+    .replace(/\[x\]$/, "")
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+
+/**
+ * Convert a dotted FHIR path into a column header.
+ *
+ * The naive "last segment wins" version produces duplicate "Reference" /
+ * "System" headers on auto-derived resource types whose interesting fields
+ * are nested under structural elements (`basedOn.reference`,
+ * `partOf.reference`, `category.coding.system`). We walk back past those
+ * structural leaves to the first domain-named segment so the header reads
+ * like the resource element ("Based On", "Part Of", "Category").
+ */
+export const labelFromPath = (path: string): string => {
+  const segments = path
+    .split(".")
+    .map((segment) => segment.replace(/\[\d+\]/g, "").replace(/\[x\]$/, ""))
+    .filter((segment) => segment.length > 0);
+
+  if (segments.length === 0) return humanizeSegment(path);
+
+  let index = segments.length - 1;
+  while (index > 0 && STRUCTURAL_LEAF_SEGMENTS.has(segments[index] ?? "")) {
+    index -= 1;
+  }
+  return humanizeSegment(segments[index] ?? path);
+};
+
+/**
+ * Apply per-path labels and de-duplicate collisions by appending the
+ * next-outer segment to the loser(s). Pure function so it can be unit
+ * tested without rendering React.
+ */
+export const labelsForPaths = (paths: string[]): Record<string, string> => {
+  const result: Record<string, string> = {};
+  const seen = new Map<string, string>(); // label -> first path that produced it
+
+  const disambiguate = (path: string): string => {
+    const segments = path
+      .split(".")
+      .map((segment) => segment.replace(/\[\d+\]/g, "").replace(/\[x\]$/, ""))
+      .filter((segment) => segment.length > 0);
+    if (segments.length < 2) return labelFromPath(path);
+    let index = segments.length - 1;
+    while (index > 0 && STRUCTURAL_LEAF_SEGMENTS.has(segments[index] ?? "")) {
+      index -= 1;
+    }
+    const primary = humanizeSegment(segments[index] ?? path);
+    // Prefer the next-outer domain segment as a qualifier. For sibling
+    // leaves under the same parent (e.g. `category.coding.system` vs
+    // `category.coding.code`) there is no outer domain segment, so use
+    // the actual structural leaf as the disambiguator — the user at
+    // least sees "Category Code" vs "Category System".
+    const outerStart = index - 1;
+    let outer = outerStart;
+    while (outer >= 0 && STRUCTURAL_LEAF_SEGMENTS.has(segments[outer] ?? "")) {
+      outer -= 1;
+    }
+    if (outer >= 0) {
+      return `${humanizeSegment(segments[outer] ?? "")} ${primary}`;
+    }
+    const leaf = segments[segments.length - 1] ?? "";
+    if (leaf && leaf !== segments[index]) {
+      return `${primary} ${humanizeSegment(leaf)}`;
+    }
+    return primary;
+  };
+
+  for (const path of paths) {
+    const base = labelFromPath(path);
+    const prior = seen.get(base);
+    if (prior === undefined) {
+      result[path] = base;
+      seen.set(base, path);
+      continue;
+    }
+    // Collision: rename both the current path and (once) the first one
+    // that claimed this label, so neither is left bare.
+    const disambiguated = disambiguate(path);
+    if (result[prior] === base) {
+      result[prior] = disambiguate(prior);
+    }
+    result[path] = disambiguated;
+  }
+
+  return result;
+};
+
+const summaryPathsFromStructure = (resourceType: string, paths: string[]): string[] => {
+  const prefix = `${resourceType}.`;
+  return paths
+    .filter((path) => path.startsWith(prefix) && path.split(".").length > 2)
+    .map((path) => path.slice(prefix.length))
+    .filter((path) => !path.includes(".extension") && !path.includes(".modifierExtension"));
+};
+
 const collectPaths = (value: unknown, prefix = "", out = new Set<string>()): Set<string> => {
   if (value === null || value === undefined) return out;
   if (Array.isArray(value)) {
@@ -193,9 +309,9 @@ export function ResourceListPage() {
     const topLevelColumns = topLevelColumnsFromStructureDefinition(resourceType, structureDefinition);
     if (config) return mergeFhirPathColumns(config.tableColumns, topLevelColumns);
     const fromRows = resources.flatMap((resource) => Array.from(collectPaths(resource)));
-    const rowColumns = Array.from(new Set([...(derivedDefaults ?? []), ...fromRows])).map(
-      (path) => ({ path, label: labelFromFhirPath(path) }),
-    );
+    const ordered = Array.from(new Set<string>([...(derivedDefaults ?? []), ...fromRows]));
+    const labels = labelsForPaths(ordered);
+    const rowColumns = ordered.map((path) => ({ path, label: labels[path] ?? labelFromPath(path) }));
     return mergeFhirPathColumns(topLevelColumns, rowColumns);
   }, [config, derivedDefaults, resourceType, resources, structureDefinition]);
 

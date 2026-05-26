@@ -39,6 +39,14 @@ export interface ResourceListConfig<T extends Resource = Resource> {
   tableColumns: ResourceListColumn[];
   /** Column subset shown by default. */
   defaultVisibleColumns: string[];
+  /**
+   * Default-visible subset for the detail-page Fields picker. When omitted
+   * the picker shows every top-level element walked from the StructureDefinition.
+   * Used today only by Patient since detail-page field-pickers are
+   * Patient-only; the option is part of `ResourceListConfig` so other
+   * detail pickers (added later) inherit the same shape.
+   */
+  defaultDetailFields?: string[];
   /** Optional list-view title. When omitted the type only renders in table view. */
   formatPrimary?: (resource: T) => string;
   /** Optional list-view metadata items rendered after the title. */
@@ -179,6 +187,7 @@ export const genericFormatMeta = (r: Resource): Array<string | undefined | null>
     stringField(any.recordedDate) ??
     stringField(any.onsetDateTime) ??
     stringField(any.performedDateTime) ??
+    stringField((any.performedPeriod as { start?: string } | undefined)?.start) ??
     stringField(period?.start) ??
     stringField(any.date) ??
     stringField(any.issued) ??
@@ -217,6 +226,23 @@ const PATIENT: ResourceListConfig<Patient> = {
     { path: "language", label: "Language" },
   ],
   defaultVisibleColumns: ["name", "gender", "birthDate", "address.city", "id", "__counts"],
+  // Curated default for the detail-page Fields picker. Mirrors the
+  // pre-full-SD-walk default — the dozen-or-so elements a clinician scans
+  // first. Power users reach the long tail (extensions, contact details,
+  // link, photo, multipleBirth variants) via the picker's filter input.
+  defaultDetailFields: [
+    "identifier",
+    "active",
+    "name",
+    "telecom",
+    "gender",
+    "birthDate",
+    "address",
+    "maritalStatus",
+    "communication",
+    "generalPractitioner",
+    "managingOrganization",
+  ],
   formatPrimary: formatPatientName,
   formatMeta: (p) => [p.gender, p.birthDate],
 };
@@ -317,7 +343,7 @@ const PROCEDURE: ResourceListConfig<Procedure> = {
   ],
   defaultVisibleColumns: ["status", "code", "performed[x]"],
   formatPrimary: (p) => codeText(p.code) ?? "(no code)",
-  formatMeta: (p) => [p.status, p.performedDateTime],
+  formatMeta: (p) => [p.status, p.performedDateTime ?? p.performedPeriod?.start],
 };
 
 const ENCOUNTER: ResourceListConfig<Encounter> = {

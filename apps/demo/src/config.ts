@@ -125,7 +125,14 @@ const readStoredServers = (): ServerConfig[] | null => {
 /**
  * Merge built-ins with stored config so:
  * - Built-ins always exist (even if storage is empty/corrupt).
- * - Stored edits to built-ins (auth, headers, label) survive.
+ * - Stored edits to built-ins survive ONLY for auth/headers (`authMode`,
+ *   `bearerToken`, `headers`). The `label` and `baseUrl` are part of the
+ *   built-in's trust identity — the BUILT-IN badge claims "this is the
+ *   canonical entry shipped with the app" — so they are always taken from
+ *   `BUILTIN_SERVERS` regardless of what storage holds. This stops anything
+ *   that can write `fhir-place:servers` (extensions, dev tooling, a shared
+ *   profile, a previous version that allowed editing) from silently
+ *   retargeting a badged row at a hostile URL.
  * - Custom user-added servers come through unchanged.
  */
 const mergeWithBuiltins = (stored: ServerConfig[] | null): ServerConfig[] => {
@@ -134,7 +141,18 @@ const mergeWithBuiltins = (stored: ServerConfig[] | null): ServerConfig[] => {
   const merged: ServerConfig[] = [];
   for (const builtin of BUILTIN_SERVERS) {
     const override = byId.get(builtin.id);
-    merged.push(override ? { ...override, builtin: true } : { ...builtin });
+    if (override) {
+      merged.push({
+        ...builtin,
+        authMode: override.authMode,
+        ...(override.bearerToken ? { bearerToken: override.bearerToken } : {}),
+        ...(override.headers && override.headers.length > 0
+          ? { headers: override.headers }
+          : {}),
+      });
+    } else {
+      merged.push({ ...builtin });
+    }
     byId.delete(builtin.id);
   }
   for (const remaining of byId.values()) {
@@ -180,6 +198,24 @@ const FALLBACK_SERVER: ServerConfig = {
   builtin: true,
 };
 
+/**
+ * First-paint default when the user has not explicitly chosen a server.
+ *
+ * The hosted Pages build (https://danielsperoniteam.github.io/fhir-place/)
+ * must land on a server the browser can actually reach. SMART Health IT R4
+ * is the only built-in we control end-to-end for both CORS and Chrome's
+ * Private Network Access policy, so it is the safe default everywhere.
+ *
+ * Built-in ordering in `BUILTIN_SERVERS` is owned by the Settings UI (the
+ * picker shows them in that order). Pinning the default by id rather than
+ * "first in the array" decouples the two concerns so future reorders of
+ * the picker can't silently change which server new visitors land on.
+ *
+ * Persisted user choice (`fhir-place:active-server` in localStorage) still
+ * wins — this only controls what a brand-new visitor sees on cold load.
+ */
+export const DEFAULT_ACTIVE_SERVER_ID = "builtin-smart";
+
 export const resolveActiveServer = (): ServerConfig => {
   const servers = loadServers();
   const activeId = loadActiveServerId();
@@ -187,6 +223,8 @@ export const resolveActiveServer = (): ServerConfig => {
     const match = servers.find((s) => s.id === activeId);
     if (match) return match;
   }
+  const preferred = servers.find((s) => s.id === DEFAULT_ACTIVE_SERVER_ID);
+  if (preferred) return preferred;
   return servers[0] ?? { ...FALLBACK_SERVER };
 };
 
