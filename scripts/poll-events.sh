@@ -296,7 +296,7 @@ poll_once() {
     local conflicting_prs
     conflicting_prs=$(gh pr list --repo "$REPO" --state open \
       --json number,headRefName,isDraft,reviewDecision,mergeStateStatus \
-      --jq '[.[] | select(.isDraft == false and (.headRefName | startswith("bot/") or .reviewDecision == "APPROVED")) | {number, head: .headRefName, mergeable: .mergeStateStatus}]' \
+      --jq '[.[] | select(.isDraft == false and ((.headRefName | startswith("bot/")) or .reviewDecision == "APPROVED")) | {number, head: .headRefName, mergeable: .mergeStateStatus}]' \
       2>/dev/null || echo '[]')
     echo "$conflicting_prs" | jq -c '.[]' | while read -r row; do
       local num head mergeable
