@@ -243,13 +243,19 @@ build_stdin() {
 }
 
 run_claude() {
+  local claude_args=(
+    --print
+    --add-dir "$WORKTREE_PARENT"
+    --dangerously-skip-permissions
+  )
+
+  if [[ ${#CLAUDE_ARGS[@]} -gt 0 ]]; then
+    claude_args+=("${CLAUDE_ARGS[@]}")
+  fi
+
   # Claude falls back to the local OAuth session only when the API key is not set.
   unset ANTHROPIC_API_KEY
-  build_stdin | claude \
-    --print \
-    --add-dir "$WORKTREE_PARENT" \
-    --dangerously-skip-permissions \
-    "${CLAUDE_ARGS[@]}"
+  build_stdin | claude "${claude_args[@]}"
 }
 
 run_codex() {
@@ -286,7 +292,7 @@ if [[ $RC -ne 0 ]]; then
 fi
 
 # Trim old logs (~14 days).
-find "$LOG_DIR" -name "${PROMPT_BASENAME}*.log" -mtime +14 -delete 2>/dev/null || true
+find "$LOG_DIR" -name "${PROMPT_BASENAME}${TARGET_SLUG:+-$TARGET_SLUG}-*.log" -mtime +14 -delete 2>/dev/null || true
 
 echo "=== run $RUN_ID complete (provider=$PROVIDER rc=$RC) ==="
 exit "$RC"

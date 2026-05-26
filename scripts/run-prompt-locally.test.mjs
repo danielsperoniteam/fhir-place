@@ -165,6 +165,30 @@ test("AGENT_PROVIDER=codex invokes codex exec with provider prologue", () => {
   assert.match(stdin, /# codex-provider/);
 });
 
+test("AGENT_PROVIDER=random selects an installed provider", () => {
+  const h = makeHarness("random-provider");
+  const result = runHarness(h, { AGENT_PROVIDER: "random" });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /requested provider: random/);
+  assert.match(result.stdout, /selected provider: (claude|codex)/);
+  assert.equal(
+    existsSync(join(h.capture, "claude.args")) ||
+      existsSync(join(h.capture, "codex.args")),
+    true,
+  );
+});
+
+test("unknown AGENT_PROVIDER exits before running an agent", () => {
+  const h = makeHarness("unknown-provider");
+  const result = runHarness(h, { AGENT_PROVIDER: "bogus" });
+
+  assert.equal(result.status, 2, result.stderr || result.stdout);
+  assert.match(result.stderr, /unknown AGENT_PROVIDER=bogus/);
+  assert.equal(existsSync(join(h.capture, "claude.args")), false);
+  assert.equal(existsSync(join(h.capture, "codex.args")), false);
+});
+
 test("prompt lock is shared across providers", () => {
   const promptName = `lock-${process.pid}`;
   const h = makeHarness(promptName);
