@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { fhirQueryKeys, useFhirClient, type SearchParams } from "@fhir-place/react-fhir";
 import { useQueries } from "@tanstack/react-query";
 import type { Bundle, Resource } from "fhir/r4";
-import { ACTIVE_SERVER_CONFIG, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
+import { ACTIVE_SERVER_CONFIG, SETTINGS_ENABLED, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
 import { TOP_RESOURCE_TYPES } from "../resourceListConfig.js";
 import { usePinned } from "../state/pinned.js";
 import { JumpDialog } from "./JumpDialog.js";
@@ -75,7 +75,9 @@ export function CCSidebar() {
     return () => window.removeEventListener("fhir-place:active-server-changed", onChange);
   }, []);
   const servers = loadServers();
-  const activeServerId = loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id;
+  const activeServerId = SETTINGS_ENABLED
+    ? (loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id)
+    : ACTIVE_SERVER_CONFIG.id;
   const displayServer =
     servers.find((s) => s.id === activeServerId) ?? ACTIVE_SERVER_CONFIG;
 
