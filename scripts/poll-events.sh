@@ -25,7 +25,6 @@ STATE_DIR="${STATE_DIR:-$HOME/.fhir-place-state}"
 STATE_FILE="$STATE_DIR/poll-events.json"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/logs}"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-60}"
-PHONE="${PHONE:-+15082827897}"
 # Cap on concurrent event drivers. 3 matches the README's collision
 # analysis ("3 concurrent claude --print sessions = MEDIUM risk"). Raise
 # only if the Max plan can absorb it.
@@ -210,6 +209,19 @@ poll_once() {
     url=$(echo "$row" | jq -r '.html_url')
     issue_url=$(echo "$row" | jq -r '.issue_url')
     num=$(basename "$issue_url")
+
+    # Staging conflict marker — posted by github-actions[bot], bypass collaborator gate.
+    if echo "$body" | grep -q '<!-- staging-stack-agent-dispatch '; then
+      if echo "$url" | grep -q '/pull/'; then
+        if already_handled "$cid"; then continue; fi
+        local sha
+        sha=$(echo "$body" | grep -o 'sha=[^ >]*' | cut -d= -f2 | head -1)
+        echo "staging-conflict marker on PR #$num (comment $cid sha=$sha) → local resolver"
+        mark_handled "$cid"
+        dispatch_async "$REPO_ROOT/scripts/local/event-staging-conflict.sh" "$num" "$sha"
+      fi
+      continue
+    fi
 
     if ! is_collaborator "$assoc"; then
       continue
