@@ -51,12 +51,13 @@ test.describe("CRUD flows", () => {
 
     // Navigated to the detail view of the newly created patient
     await expect(page.getByTestId("resource-view")).toBeVisible();
-    // Scope to the rendered ResourceView; the JSON `<details>` block
-    // also includes "1936-08-17" verbatim, which would trip strict-mode
-    // duplicate matching against the formatted `<time>` cell.
+    // Scope to the rendered ResourceView. The Date renderer humanises the
+    // visible cell to "Aug 17, 1936" while the raw "1936-08-17" stays in
+    // the <time> element's `dateTime` attribute (and in the adjacent JSON
+    // block, which we deliberately avoid by scoping to resource-view).
     const view = page.getByTestId("resource-view");
     await expect(view.getByText("Margaret Hamilton")).toBeVisible();
-    await expect(view.getByText("1936-08-17")).toBeVisible();
+    await expect(view.getByText("Aug 17, 1936")).toBeVisible();
 
     await page.screenshot({
       path: "../../screenshots/07-created-patient.png",
