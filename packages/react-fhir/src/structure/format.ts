@@ -67,10 +67,100 @@ export function formatQuantity(q: Quantity | undefined): string {
   return `${comparator}${num}${unit ? ` ${unit}` : ""}`.trim();
 }
 
+/**
+ * Detected precision of a FHIR `date` / `dateTime` literal. Per the spec
+ * (https://hl7.org/fhir/datatypes.html#dateTime) the value can be a bare
+ * year, year-month, full date, or a full timestamp with a timezone offset.
+ * `toLocaleString` would otherwise hallucinate `Jan 1 12:00 AM` for partial
+ * values; the renderer needs to know the precision to stop early.
+ */
+type DateTimePrecision = "year" | "month" | "day" | "time";
+
+function detectPrecision(s: string): DateTimePrecision | undefined {
+  if (/^\d{4}$/.test(s)) return "year";
+  if (/^\d{4}-\d{2}$/.test(s)) return "month";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return "day";
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return "time";
+  return undefined;
+}
+
+const MONTH_ABBR = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * Human-readable rendering of a FHIR `date` / `dateTime` value. UTC-pinned
+ * so output is deterministic across the dev / CI / clinician browsers (no
+ * "9 PM here is 4 PM there" surprise). Falls back to the raw value when the
+ * input isn't a recognised partial-precision FHIR temporal literal — better
+ * to show the truth than to invent a date.
+ *
+ *   "2018"                          → "2018"
+ *   "2018-08"                       → "Aug 2018"
+ *   "2018-08-30"                    → "Aug 30, 2018"
+ *   "2018-08-30T21:24:36+00:00"     → "Aug 30, 2018, 9:24 PM"
+ */
+export function formatDateTime(value: string | undefined): string {
+  if (!value) return "";
+  const precision = detectPrecision(value);
+  if (!precision) return value;
+  if (precision === "year") return value;
+  if (precision === "month") {
+    const m = Number(value.slice(5, 7));
+    if (m < 1 || m > 12) return value;
+    return `${MONTH_ABBR[m - 1]} ${value.slice(0, 4)}`;
+  }
+  // Day-only and full timestamp both want month/day/year; the timestamp
+  // additionally wants a wall-clock time. Parse via Date and read back in
+  // UTC so the rendering is independent of the runtime timezone.
+  const d = new Date(precision === "day" ? `${value}T00:00:00Z` : value);
+  if (Number.isNaN(d.getTime())) return value;
+  const month = MONTH_ABBR[d.getUTCMonth()]!;
+  const day = d.getUTCDate();
+  const year = d.getUTCFullYear();
+  if (precision === "day") return `${month} ${day}, ${year}`;
+  const h24 = d.getUTCHours();
+  const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+  const period = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${month} ${day}, ${year}, ${h12}:${minutes} ${period}`;
+}
+
+function sameUtcDay(a: string, b: string): boolean {
+  return a.slice(0, 10) === b.slice(0, 10);
+}
+
+/** Wall-clock time only — used to collapse same-day Period renderings. */
+function formatTimeOnly(value: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const h24 = d.getUTCHours();
+  const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+  const period = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${minutes} ${period}`;
+}
+
+/**
+ * Plain-string label for a FHIR Period. Humanises both ends via
+ * `formatDateTime` and collapses to a single date when start and end share
+ * the same UTC calendar day with full-time precision
+ * (e.g. `Aug 30, 2018, 9:24 PM → 9:41 PM` instead of repeating the date).
+ */
 export function formatPeriod(p: Period | undefined): string {
   if (!p) return "";
-  const start = p.start ?? "…";
-  const end = p.end ?? "…";
+  const start = p.start ? formatDateTime(p.start) : "…";
+  const end = p.end ? formatDateTime(p.end) : "…";
+  if (
+    p.start &&
+    p.end &&
+    detectPrecision(p.start) === "time" &&
+    detectPrecision(p.end) === "time" &&
+    sameUtcDay(p.start, p.end)
+  ) {
+    return `${start} → ${formatTimeOnly(p.end)}`;
+  }
   return `${start} → ${end}`;
 }
 

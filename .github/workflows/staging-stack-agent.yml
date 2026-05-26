@@ -17,7 +17,6 @@ permissions:
   contents: write       # force-push staging
   issues: write         # escalation and status comments on PRs
   pull-requests: write  # read PR state and update UAT labels
-  id-token: write       # required by claude-code-action@v1
 
 concurrency:
   group: staging-stack-agent
@@ -25,6 +24,7 @@ concurrency:
 
 jobs:
   resolve:
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -51,23 +51,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Resolve staging stack conflicts with Claude Code
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            The clean-merge staging stacker hit a merge conflict.
-
-            Context:
-            - Conflicted PR: #${{ inputs.conflict_pr }}
-            - Conflicted PR head SHA at dispatch: ${{ inputs.conflict_sha }}
-            - Working directory is checked out on `main` with full git history.
-            - Your output branch is `staging`, which is a deploy artifact.
-            - Do not push to any PR branch, `main`, or `gh-pages`.
-
-            Read `docs/prompts/staging-stack-resolve-conflicts.md` and execute
-            the instructions in it. Do not modify the prompt file itself.
-          claude_args: "--max-turns 200 --allowedTools Read,Edit,Write,Bash,Grep,Glob,mcp__github__* --disallowedTools AskUserQuestion,ExitPlanMode"
-          show_full_output: true
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          printf 'The clean-merge staging stacker hit a merge conflict.\n\nContext:\n- Conflicted PR: #${{ inputs.conflict_pr }}\n- Conflicted PR head SHA at dispatch: ${{ inputs.conflict_sha }}\n- Working directory is checked out on `main` with full git history.\n- Your output branch is `staging`, which is a deploy artifact.\n- Do not push to any PR branch, `main`, or `gh-pages`.\n\n' | cat - docs/prompts/staging-stack-resolve-conflicts.md | \
+          claude \
+            --print \
+            --max-turns 200 \
+            --allowedTools "Read,Edit,Write,Bash,Grep,Glob" \
+            --disallowedTools "AskUserQuestion,ExitPlanMode" \
+            --dangerously-skip-permissions
