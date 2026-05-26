@@ -124,6 +124,7 @@ const bundle = await fhir.search("Patient", { name: "smith", _count: 20 });
 - **`useValueSetExpansion`, `useCodeLookup`** — terminology helpers routed through the terminology client when available. `useValueSetExpansion` calls `$expand`; `useCodeLookup` resolves a `(system, code)` to a display string from an expanded ValueSet.
 - **`nextPageUrl(bundle)`** — pulls the `link[rel=next]` URL off a search Bundle. Used by `useInfiniteSearch` and exported for app-level paging.
 - **`useCreateResource`, `useUpdateResource`, `useDeleteResource`** — mutations that invalidate matching read queries on success
+- **`nextPageUrl` / `parseBatchableRefs`** — small helpers exposed for callers that need Bundle paging or to dedupe a list of `Reference` strings
 
 ```tsx
 import { useResource, useSearch, useUpdateResource } from "@fhir-place/react-fhir/hooks";

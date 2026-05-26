@@ -137,32 +137,42 @@ export function ResourceDetailPage() {
         >
           ← All {resourceCollectionLabel(resourceType)}
         </Link>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {isPatient && patientFields.length > 0 && (
-            <ColumnPicker
-              options={patientFields}
-              defaultSelected={patientDefaultFields}
-              onChange={setVisibleFields}
-              storageKey={PATIENT_FIELDS_KEY}
-              buttonLabel="Fields"
-              searchPlaceholder="Filter fields…"
-            />
-          )}
-          <Link
-            to={`/fhir-ui/${resourceType}/${id}/edit`}
-            style={ccBtn("secondary")}
-            data-testid="edit-resource"
+        {/* Action buttons gate on resource presence: a 404/410 means there
+            is nothing to view fields on, edit, or delete. Rendering them
+            anyway invites the Edit-route-to-a-ghost failure (#482) and a
+            Delete confirm that can only ever surface a 404. Capability-
+            based gating is a separate concern (#159). */}
+        {!notFound && (
+          <div
+            data-testid="resource-actions"
+            style={{ display: "flex", gap: 6, alignItems: "center" }}
           >
-            Edit
-          </Link>
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            style={ccBtn("danger")}
-            data-testid="delete-resource"
-          >
-            Delete
-          </button>
-        </div>
+            {isPatient && patientFields.length > 0 && (
+              <ColumnPicker
+                options={patientFields}
+                defaultSelected={patientDefaultFields}
+                onChange={setVisibleFields}
+                storageKey={PATIENT_FIELDS_KEY}
+                buttonLabel="Fields"
+                searchPlaceholder="Filter fields…"
+              />
+            )}
+            <Link
+              to={`/fhir-ui/${resourceType}/${id}/edit`}
+              style={ccBtn("secondary")}
+              data-testid="edit-resource"
+            >
+              Edit
+            </Link>
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              style={ccBtn("danger")}
+              data-testid="delete-resource"
+            >
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Delete confirm */}
