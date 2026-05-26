@@ -4,6 +4,10 @@
 # /resolve-conflicts comment) and dispatches the corresponding local
 # event driver under scripts/local/.
 #
+# Every 60s: new issues → issue-review; non-draft PRs → pr-review;
+#   slash commands; bot PR human reviews → address-comments.
+# Every 5min: bot PR merge conflicts → resolve-conflicts.
+#
 # Runs as a long-lived launchd job. State lives in
 # ~/.fhir-place-state/poll-events.json (last-poll timestamp per event
 # stream). Dedup leverages either the prompt's own comment-marker
@@ -67,7 +71,8 @@ if [[ ! -f "$STATE_FILE" ]]; then
   jq -n --arg t "$TEN_MIN_AGO" '{
     issues_opened: $t,
     prs_ready: $t,
-    comments: $t
+    comments: $t,
+    reviews: $t
   }' > "$STATE_FILE"
   echo "Initialized state at $STATE_FILE (watermarks = $TEN_MIN_AGO)"
 fi
@@ -147,10 +152,11 @@ poll_once() {
   local prev
   prev=$(cat "$STATE_FILE")
 
-  local issues_since prs_since comments_since
+  local issues_since prs_since comments_since reviews_since
   issues_since=$(echo "$prev" | jq -r '.issues_opened')
   prs_since=$(echo "$prev" | jq -r '.prs_ready')
   comments_since=$(echo "$prev" | jq -r '.comments')
+  reviews_since=$(echo "$prev" | jq -r '.reviews // .prs_ready')
 
   # --- 1. New issues opened → fire issue-review ---
   local new_issues
@@ -258,20 +264,78 @@ poll_once() {
     fi
   done
 
+  # --- 4. Bot PR reviews → auto-address-comments ---
+  # Fetch bot/* PRs updated since last poll. For each, check if a human
+  # review was submitted since the reviews watermark; if so, dispatch the
+  # address-comments agent. The agent handles idempotency (it checks what's
+  # actually unresolved), so firing on any new review is safe.
+  local bot_prs_updated
+  bot_prs_updated=$(gh api "repos/$REPO/pulls?state=open&sort=updated&direction=desc&per_page=30" \
+    --jq "[.[] | select(.draft == false and (.head.ref | startswith(\"bot/\")) and .updated_at > \"$reviews_since\") | {number, head: .head.ref}]" \
+    2>/dev/null || echo '[]')
+  echo "$bot_prs_updated" | jq -c '.[]' | while read -r row; do
+    local num head
+    num=$(echo "$row" | jq -r '.number')
+    head=$(echo "$row" | jq -r '.head')
+    local new_reviews
+    new_reviews=$(gh api "repos/$REPO/pulls/$num/reviews" \
+      --jq "[.[] | select(.submitted_at > \"$reviews_since\" and .user.type != \"Bot\" and (.state == \"CHANGES_REQUESTED\" or (.state == \"COMMENTED\" and (.body | length) > 0)))] | length" \
+      2>/dev/null || echo '0')
+    if [[ "$new_reviews" -gt 0 ]]; then
+      echo "bot PR #$num ($head) got new human review → auto address-comments"
+      dispatch_async "$REPO_ROOT/scripts/local/event-address-comments.sh" "$num"
+    fi
+  done
+
+  # --- 5. Bot PR merge conflicts → auto-resolve-conflicts (every 5th poll ≈5 min) ---
+  # Checking mergeable on every open bot PR every 60s is too many API calls.
+  # Run this check every 5th iteration (~5 min). GitHub computes mergeable
+  # lazily, so UNKNOWN means "not yet computed" — skip those gracefully.
+  if (( POLL_ITER % 5 == 0 )); then
+    local bot_prs_all
+    bot_prs_all=$(gh api "repos/$REPO/pulls?state=open&sort=updated&direction=desc&per_page=50" \
+      --jq '[.[] | select(.draft == false and (.head.ref | startswith("bot/"))) | {number, head: .head.ref, mergeable}]' \
+      2>/dev/null || echo '[]')
+    echo "$bot_prs_all" | jq -c '.[]' | while read -r row; do
+      local num head mergeable
+      num=$(echo "$row" | jq -r '.number')
+      head=$(echo "$row" | jq -r '.head')
+      mergeable=$(echo "$row" | jq -r '.mergeable')
+      [[ "$mergeable" != "CONFLICTING" ]] && continue
+      # Dedup: skip if a resolver was dispatched in the last 2 hours.
+      local two_hours_ago
+      two_hours_ago=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+                      || date -u --date='2 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+      local recent_resolver
+      recent_resolver=$(gh api "repos/$REPO/issues/$num/comments?since=$two_hours_ago" \
+        --jq '[.[] | select(.body | contains("/resolve-conflicts"))] | length' \
+        2>/dev/null || echo '0')
+      if [[ "$recent_resolver" -gt 0 ]]; then
+        echo "bot PR #$num conflict detected but resolver recently dispatched — skip"
+        continue
+      fi
+      echo "bot PR #$num ($head) conflicts with main → auto resolve-conflicts"
+      dispatch_async "$REPO_ROOT/scripts/local/event-resolve-conflicts.sh" "$num"
+    done
+  fi
+
   # Update watermarks to `now`. Slightly racy (a comment posted between
   # `now_iso` capture and the GH query won't be picked up until the next
   # poll), which is fine at 60s cadence.
-  jq -n --arg issues "$now_iso" --arg prs "$now_iso" --arg comments "$now_iso" '{
+  jq -n --arg issues "$now_iso" --arg prs "$now_iso" --arg comments "$now_iso" --arg reviews "$now_iso" '{
     issues_opened: $issues,
     prs_ready: $prs,
-    comments: $comments
+    comments: $comments,
+    reviews: $reviews
   }' > "$STATE_FILE"
 }
 
+POLL_ITER=0
 echo "=== poll-events daemon started (interval=${POLL_INTERVAL_SECONDS}s) ==="
 while true; do
   if ! poll_once; then
     echo "::warning::poll iteration failed; will retry"
   fi
+  (( POLL_ITER++ )) || true
   sleep "$POLL_INTERVAL_SECONDS"
 done
