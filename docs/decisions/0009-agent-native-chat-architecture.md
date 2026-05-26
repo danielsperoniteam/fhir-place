@@ -41,10 +41,12 @@ Operating constraints:
 - **Tools are read-only by default.** Writes require an explicit `--allow-writes`
   flag (MCP) or a human-confirmation callback (browser).
 - **Synthetic/sandbox data only for now**, but bake in the seams that make real
-  PHI a bounded delta: a PHI-masking hook at the tool-output boundary
-  (no-op now), an audit-log interface on every tool call (console sink now),
-  error redaction in `FetchFhirClient`, and the extended `sameOrigin`
-  token-leak guard.
+  PHI a bounded delta. All of these are new code to add, except the `sameOrigin`
+  guard which already exists and is extended: a PHI-masking hook at the
+  tool-output boundary (no-op now), an audit-log interface on every tool call
+  (console sink now), and error redaction in `FetchFhirClient` (TODO — today the
+  client surfaces the request URL and `OperationOutcome.diagnostics` in thrown
+  errors; that path must be redacted before PHI flows through it).
 - **No rename.** Consistent with ADR 0004, the `FHIRplace`/`react-fhir` name
   collision is a README/SEO matter, not a package rename.
 

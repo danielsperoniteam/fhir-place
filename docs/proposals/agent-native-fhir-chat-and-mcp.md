@@ -220,6 +220,11 @@ unit-testable and the first thing to build after the registry.
 **before** issuing any `code=` search — replacing the current "use codes when
 you confidently know them" instruction. Offline fallback: the bundled core
 valuesets in `react-fhir/src/structure/core` before degrading to text search.
+When ADR 0009 moves from Proposed to Accepted, settle two details: whether
+grounding hits a local expansion service or remote `$expand` by default (the
+config already allows either), and which binding strengths trigger grounding —
+at minimum `required` and `extensible` bindings should, `preferred`/`example`
+need not.
 
 ### 5.5 CapabilityStatement-aware surfacing
 
@@ -278,6 +283,14 @@ from env/config) and provides the LLM-free half of the system.
 Read-only by default in both front doors; writes go behind an explicit
 `--allow-writes` flag (MCP) / a `confirmWrite` human-confirmation callback
 (browser), mirroring AWS HealthLake's `--readonly` primitive.
+
+**Token scope in the stdio path.** A customer-run-local MCP server inherits
+whatever SMART token the user supplies. Document explicitly that this path
+should **not** request `offline_access` (no long-lived refresh token should sit
+in a local agent's environment) and that token expiry is the caller's
+responsibility — the server does not silently refresh. This keeps the
+local-MCP credential blast radius small and is one less thing to unwind when the
+hosted/PHI path arrives.
 
 ## 8. Security & PHI posture
 
