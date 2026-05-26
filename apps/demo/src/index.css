@@ -100,6 +100,35 @@ body, .cc-shell * {
   font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 }
 
+/* ─── Resource detail responsive split ──────────────────────────────────── */
+.cc-detail-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cc-detail-pane {
+  overflow: auto;
+  min-height: 0;
+}
+
+@media (max-width: 800px) {
+  /* Below 800px the 50/50 split leaves both panes too narrow to read.
+     Stack them: structured view on top, JSON viewer below. Letting the
+     grid grow past the viewport makes the page scroll so both are reachable. */
+  .cc-detail-grid {
+    grid-template-columns: 1fr;
+    flex: none;
+    overflow: visible;
+  }
+
+  .cc-detail-pane {
+    overflow: visible;
+  }
+}
+
 /* ─── Responsive sidebar ────────────────────────────────────────────────── */
 .mobile-nav-trigger {
   display: none !important;

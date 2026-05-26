@@ -81,7 +81,7 @@ test.describe("patient field-picker options", () => {
     // Sanity-check defaults: every present field is rendered.
     await expect(view).toContainText("Ada Lovelace");
     await expect(view).toContainText("female");
-    await expect(view).toContainText("1815-12-10");
+    await expect(view).toContainText("Dec 10, 1815");
     await expect(view).toContainText("ada@example.com");
 
     // The Fields picker is only present on Patient.
@@ -101,7 +101,7 @@ test.describe("patient field-picker options", () => {
     await expect(view).not.toContainText("female");
     // Untouched fields remain.
     await expect(view).toContainText("Ada Lovelace");
-    await expect(view).toContainText("1815-12-10");
+    await expect(view).toContainText("Dec 10, 1815");
     await expect(view).toContainText("ada@example.com");
   });
 
@@ -178,7 +178,7 @@ test.describe("patient field-picker options", () => {
     // address, identifier.
     await expect(view).toContainText("Ada Lovelace");
     await expect(view).toContainText("female");
-    await expect(view).toContainText("1815-12-10");
+    await expect(view).toContainText("Dec 10, 1815");
     await expect(view).toContainText("ada@example.com");
     await expect(view).toContainText("MRN-0001");
 

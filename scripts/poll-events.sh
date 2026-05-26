@@ -287,21 +287,23 @@ poll_once() {
     fi
   done
 
-  # --- 5. Bot PR merge conflicts → auto-resolve-conflicts (every 5th poll ≈5 min) ---
-  # Checking mergeable on every open bot PR every 60s is too many API calls.
-  # Run this check every 5th iteration (~5 min). GitHub computes mergeable
+  # --- 5. Conflicting PRs (bot/* OR approved) → auto-resolve-conflicts (every 5th poll ≈5 min) ---
+  # Checking merge status on every open PR every 60s is too many API calls.
+  # Run this check every 5th iteration (~5 min). GitHub computes mergeStateStatus
   # lazily, so UNKNOWN means "not yet computed" — skip those gracefully.
+  # Covers: bot-authored branches AND any human-authored PR that has been approved.
   if (( POLL_ITER % 5 == 0 )); then
-    local bot_prs_all
-    bot_prs_all=$(gh api "repos/$REPO/pulls?state=open&sort=updated&direction=desc&per_page=50" \
-      --jq '[.[] | select(.draft == false and (.head.ref | startswith("bot/"))) | {number, head: .head.ref, mergeable}]' \
+    local conflicting_prs
+    conflicting_prs=$(gh pr list --repo "$REPO" --state open \
+      --json number,headRefName,isDraft,reviewDecision,mergeStateStatus \
+      --jq '[.[] | select(.isDraft == false and (.headRefName | startswith("bot/") or .reviewDecision == "APPROVED")) | {number, head: .headRefName, mergeable: .mergeStateStatus}]' \
       2>/dev/null || echo '[]')
-    echo "$bot_prs_all" | jq -c '.[]' | while read -r row; do
+    echo "$conflicting_prs" | jq -c '.[]' | while read -r row; do
       local num head mergeable
       num=$(echo "$row" | jq -r '.number')
       head=$(echo "$row" | jq -r '.head')
       mergeable=$(echo "$row" | jq -r '.mergeable')
-      [[ "$mergeable" != "CONFLICTING" ]] && continue
+      [[ "$mergeable" != "DIRTY" ]] && continue
       # Dedup: skip if a resolver was dispatched in the last 2 hours.
       local two_hours_ago
       two_hours_ago=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
@@ -311,10 +313,10 @@ poll_once() {
         --jq '[.[] | select(.body | contains("/resolve-conflicts"))] | length' \
         2>/dev/null || echo '0')
       if [[ "$recent_resolver" -gt 0 ]]; then
-        echo "bot PR #$num conflict detected but resolver recently dispatched — skip"
+        echo "PR #$num conflict detected but resolver recently dispatched — skip"
         continue
       fi
-      echo "bot PR #$num ($head) conflicts with main → auto resolve-conflicts"
+      echo "PR #$num ($head) conflicts with main → auto resolve-conflicts"
       dispatch_async "$REPO_ROOT/scripts/local/event-resolve-conflicts.sh" "$num"
     done
   fi
