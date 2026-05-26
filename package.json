@@ -18,12 +18,15 @@
     "changeset:version": "changeset version",
     "release": "pnpm --filter @fhir-place/react-fhir build && changeset publish",
     "check:readme-goal-task": "node scripts/check-readme-goal-task.mjs",
+    "lint:workflows": "node scripts/lint-workflow-permissions.mjs .github/workflows",
+    "test:lint-workflows": "node --test scripts/lint-workflow-permissions.test.mjs",
     "test:scripts": "node --test 'scripts/**/*.test.mjs'"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "yaml": "^2.6.0"
   },
   "engines": {
     "node": ">=20"
