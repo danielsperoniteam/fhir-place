@@ -65,7 +65,7 @@ export const AsyncCodeCombobox = ({
     return () => clearTimeout(t);
   }, [query, debounceMs]);
 
-  const { data, isFetching } = useValueSetExpansion(valueSet, debouncedQuery, {
+  const { data, isFetching, isError } = useValueSetExpansion(valueSet, debouncedQuery, {
     count,
   });
 
@@ -164,6 +164,16 @@ export const AsyncCodeCombobox = ({
           </button>
         )}
       </div>
+      {isError && (
+        <p
+          className="mt-1 text-xs text-amber-600"
+          role="alert"
+          data-testid="terminology-error"
+        >
+          Terminology unavailable — the server could not expand this value set.
+          You can still type a code directly.
+        </p>
+      )}
       {open && (
         <ul
           id={listboxId}
@@ -175,6 +185,10 @@ export const AsyncCodeCombobox = ({
             <li className="px-2 py-1 text-slate-400">Type to search…</li>
           ) : isFetching ? (
             <li className="px-2 py-1 text-slate-400">Searching…</li>
+          ) : isError ? (
+            <li className="px-2 py-1 text-amber-600" data-testid="terminology-error-option">
+              Terminology unavailable
+            </li>
           ) : options.length === 0 ? (
             <li className="px-2 py-1 text-slate-400">No matches</li>
           ) : (

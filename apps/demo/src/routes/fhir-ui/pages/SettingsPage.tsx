@@ -218,9 +218,20 @@ export function SettingsPage() {
         <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "var(--text)" }}>
           Terminology server
         </h2>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px", lineHeight: 1.5 }}>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px", lineHeight: 1.5 }}>
           Routes <code style={{ fontFamily: CC_MONO, fontSize: 11 }}>ValueSet/$expand</code> to a separate server so SNOMED, LOINC, ICD-10 dropdowns populate.
           Defaults to <code style={{ fontFamily: CC_MONO, fontSize: 11 }}>{DEFAULT_TERMINOLOGY_BASE_URL}</code> when blank. Reload after changing.
+        </p>
+        <p
+          style={{ fontSize: 12, color: "var(--warning, #b45309)", margin: "0 0 14px", lineHeight: 1.5, padding: "8px 10px", background: "var(--warning-soft, #fef3c7)", borderRadius: 6, border: "1px solid var(--warning-border, #fcd34d)" }}
+          data-testid="terminology-cors-warning"
+        >
+          <strong>Known limitation:</strong>{" "}
+          <code style={{ fontFamily: CC_MONO, fontSize: 11 }}>{DEFAULT_TERMINOLOGY_BASE_URL}</code>{" "}
+          currently sends duplicate <code style={{ fontFamily: CC_MONO, fontSize: 11 }}>Access-Control-Allow-Origin</code> headers,
+          which browsers block. Coded-field dropdowns will show a "Terminology unavailable" warning instead of
+          silently staying empty. To fix this, set a CORS-compliant alternative such as{" "}
+          <code style={{ fontFamily: CC_MONO, fontSize: 11 }}>https://r4.smarthealthit.org</code> below.
         </p>
         <label style={{ display: "block" }}>
           <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
