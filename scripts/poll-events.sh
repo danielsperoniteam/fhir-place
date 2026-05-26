@@ -25,7 +25,6 @@ STATE_DIR="${STATE_DIR:-$HOME/.fhir-place-state}"
 STATE_FILE="$STATE_DIR/poll-events.json"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/logs}"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-60}"
-PHONE="${PHONE:-+15082827897}"
 # Cap on concurrent event drivers. 3 matches the README's collision
 # analysis ("3 concurrent claude --print sessions = MEDIUM risk"). Raise
 # only if the Max plan can absorb it.

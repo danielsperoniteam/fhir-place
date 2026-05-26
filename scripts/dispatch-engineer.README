@@ -114,6 +114,5 @@ What this driver enforces directly:
   changes. Daniel mid-edit > unattended bot.
 - **Tool allow-list** passed to `claude --allowedTools`, defense-in-depth
   on top of the subagent's own permissions.
-- **iMessage on failure** — non-zero exit pings `+15082827897` with the run
-  ID and log path.
+- **Failure logging** — non-zero exit is recorded in the run log under `logs/`.
 - **Log rotation** — logs older than 14 days are pruned each run.
