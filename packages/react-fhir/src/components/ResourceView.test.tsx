@@ -50,7 +50,7 @@ describe("ResourceView", () => {
     wrap(<ResourceView resource={patient} structureDefinition={PatientStructureDefinition} />);
     expect(screen.getByText("true")).toBeInTheDocument(); // active
     expect(screen.getByText("female")).toBeInTheDocument(); // gender (code)
-    expect(screen.getByText("1815-12-10")).toBeInTheDocument(); // birthDate
+    expect(screen.getByText("Dec 10, 1815")).toBeInTheDocument(); // birthDate (humanised)
     // deceasedDateTime via choice type
     expect(screen.getByText(/1852/)).toBeInTheDocument();
   });
@@ -87,7 +87,7 @@ describe("ResourceView", () => {
       />,
     );
     expect(screen.getByText("female")).toBeInTheDocument();
-    expect(screen.getByText("1815-12-10")).toBeInTheDocument();
+    expect(screen.getByText("Dec 10, 1815")).toBeInTheDocument();
     // `name` is not in visibleFields, so the rendered HumanName should be hidden.
     expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
   });
