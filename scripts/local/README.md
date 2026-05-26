@@ -332,8 +332,8 @@ hour at `:15`, so its overlaps are the only ones to watch.
    start when the working tree is dirty, and engineer-dispatch creates
    its own `wt-*` worktrees. Nothing mutates the primary checkout from
    inside a routine.
-6. **iMessage failure notifications (LOW).** If three routines fail in
-   the same window, you get three notifications. Annoying, not harmful.
+6. **Concurrent failures (LOW).** If three routines fail in the same window,
+   each logs independently to `logs/`. Check logs to diagnose.
 
 ### Current schedule (this PR)
 

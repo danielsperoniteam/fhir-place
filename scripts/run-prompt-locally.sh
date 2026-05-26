@@ -31,7 +31,7 @@
 #   - Locks are prompt/target scoped, not provider scoped. Random provider
 #     selection must not allow two agents to work the same target at once.
 #   - Claude runs without ANTHROPIC_API_KEY so it uses the OAuth session from
-#     `claude login`.
+#     `claude login`. Bills against the Max subscription, not API tokens.
 #   - Errors notify via iMessage on failure (best-effort; never blocks
 #     exit).
 #   - Logs auto-trim to ~14 days.
@@ -183,6 +183,8 @@ fi
 
 git fetch origin --prune --tags --quiet
 git worktree prune
+git branch --format '%(if:equals=[gone])%(upstream:track)%(then)%(refname:short)%(end)' \
+  | grep -v '^$' | grep -E '^(bot|claude|codex)/' | xargs git branch -D 2>/dev/null || true
 
 # Find the prompt file. Accept either an absolute path, a repo-relative
 # path, or a bare basename (looked up under docs/prompts/).
@@ -203,6 +205,21 @@ fi
 # Worktree-parent so prompts that create worktrees under $(dirname $REPO_ROOT)
 # (engineer-dispatch convention) can edit them.
 WORKTREE_PARENT="$(dirname "$REPO_ROOT")"
+
+
+if [[ "$PROVIDER" == "claude" ]]; then
+  # OAuth fallback path — the launchd plist must not set ANTHROPIC_API_KEY.
+  unset ANTHROPIC_API_KEY
+  # Auth preflight — verify the Claude OAuth session is alive before committing
+  # to a full run. Exits early with a clear message rather than burning a run
+  # on a silent auth failure.
+  AUTH_CHECK=$(claude --print "Reply with the single word: ok" 2>&1 || true)
+  AUTH_CHECK=$(echo "$AUTH_CHECK" | tr -d '[:space:]')
+  if ! echo "$AUTH_CHECK" | grep -qi "^ok"; then
+    echo "ERROR: claude auth check failed — run 'claude login' to refresh the OAuth session" >&2
+    exit 2
+  fi
+fi
 
 echo "prompt: $RESOLVED_PROMPT"
 [[ -n "$TARGET" ]] && echo "target: $TARGET"
