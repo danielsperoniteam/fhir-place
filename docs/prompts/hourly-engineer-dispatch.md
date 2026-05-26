@@ -150,9 +150,8 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
 
 2. **Announce:** comment on the issue:
    "Picked up by hourly-engineer-dispatch. Branch: `bot/issue-<N>-<slug>`,
-   PR base: `main`. The agent will open a draft PR, promote the branch
-   into `staging` for live UAT against
-   `https://danielsperoniteam.github.io/fhir-place/staging/`, or post a
+   PR base: `main`. The agent will open a draft PR; Playwright CI is the
+   merge gate (no manual staging walk required). It will post a
    `status: needs-human` comment if it cannot complete the work."
 
 3. **Dispatch:** invoke the `engineer` subagent with worktree isolation,

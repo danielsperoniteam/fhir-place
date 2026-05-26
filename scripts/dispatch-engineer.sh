@@ -69,9 +69,9 @@ git worktree prune
 
 # Auth preflight — verify the Claude OAuth session before starting.
 AUTH_CHECK=$(claude --print "Reply with the single word: ok" 2>&1 || true)
+AUTH_CHECK=$(echo "$AUTH_CHECK" | tr -d '[:space:]')
 if ! echo "$AUTH_CHECK" | grep -qi "^ok"; then
   echo "ERROR: claude auth check failed — run 'claude login' to refresh the OAuth session" >&2
-  echo "auth check output: $AUTH_CHECK" >&2
   exit 2
 fi
 
