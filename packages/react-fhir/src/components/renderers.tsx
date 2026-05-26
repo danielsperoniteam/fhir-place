@@ -5,6 +5,7 @@ import type {
   CodeableConcept,
   Coding,
   ContactPoint,
+  Dosage,
   HumanName,
   Identifier,
   Meta,
@@ -15,13 +16,19 @@ import type {
   Ratio,
   Reference,
   Resource,
+  Timing,
 } from "fhir/r4";
 import type { ReactNode } from "react";
 import { Fragment } from "react";
 import {
   formatAddress,
+  formatCodeableConcept,
+  formatDateTime,
+  formatDosage,
   formatHumanName,
+  formatPeriod,
   formatReferenceLabel,
+  formatTiming,
 } from "../structure/format.js";
 import { useReadReference } from "../hooks/queries.js";
 import { CodedValue } from "./codedValue/index.js";
@@ -55,18 +62,13 @@ const Primitive: FhirTypeRenderer = (value) => <span>{String(value)}</span>;
 const Boolean_: FhirTypeRenderer = (value) => (
   <span className="font-mono">{value ? "true" : "false"}</span>
 );
-const Date_: FhirTypeRenderer = (value) => (
-  <time dateTime={String(value)}>{String(value)}</time>
-);
+const Date_: FhirTypeRenderer = (value) => {
+  const s = String(value);
+  return <time dateTime={s}>{formatDateTime(s) || s}</time>;
+};
 const DateTime_: FhirTypeRenderer = (value) => {
   const s = String(value);
-  let formatted = s;
-  try {
-    formatted = new Date(s).toLocaleString();
-  } catch {
-    // keep raw
-  }
-  return <time dateTime={s}>{formatted}</time>;
+  return <time dateTime={s}>{formatDateTime(s) || s}</time>;
 };
 const Code_: FhirTypeRenderer = (value) => (
   <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{String(value)}</code>
@@ -292,11 +294,17 @@ const MoneyRenderer: FhirTypeRenderer = (value) => {
 
 const PeriodRenderer: FhirTypeRenderer = (value) => {
   const p = value as Period;
+  // Humanised text via formatPeriod (collapses same-day ranges into
+  // "Aug 30, 2018, 9:24 PM → 9:41 PM"). The semantic <time> tags still
+  // carry the raw ISO values in `dateTime` so screen-readers and machine
+  // consumers see the unaltered FHIR string.
+  const summary = formatPeriod(p);
+  const [startText = "…", endText = "…"] = summary.split(" → ");
   return (
     <span>
-      <time>{p.start ?? "…"}</time>
+      <time {...(p.start ? { dateTime: p.start } : {})}>{startText}</time>
       <span className="mx-1 text-slate-400">→</span>
-      <time>{p.end ?? "…"}</time>
+      <time {...(p.end ? { dateTime: p.end } : {})}>{endText}</time>
     </span>
   );
 };
@@ -450,6 +458,85 @@ const AnnotationRenderer: FhirTypeRenderer = (value) => {
   );
 };
 
+const Dash = () => <span className="text-slate-400">—</span>;
+
+const TimingRenderer: FhirTypeRenderer = (value) => {
+  const summary = formatTiming(value as Timing);
+  return summary ? <span>{summary}</span> : <Dash />;
+};
+
+const DosageRenderer: FhirTypeRenderer = (value, ctx) => {
+  const d = value as Dosage;
+  const headline = d.text ?? formatDosage(d);
+  const rows: { label: string; node: ReactNode }[] = [];
+
+  if (d.sequence != null) rows.push({ label: "Step", node: <span>{d.sequence}</span> });
+  for (const dr of d.doseAndRate ?? []) {
+    const typeText = formatCodeableConcept(dr.type);
+    const suffix = typeText ? ` (${typeText})` : "";
+    if (dr.doseQuantity) {
+      rows.push({ label: `Dose${suffix}`, node: QuantityRenderer(dr.doseQuantity, ctx) });
+    } else if (dr.doseRange) {
+      rows.push({ label: `Dose${suffix}`, node: RangeRenderer(dr.doseRange, ctx) });
+    }
+    if (dr.rateQuantity) {
+      rows.push({ label: `Rate${suffix}`, node: QuantityRenderer(dr.rateQuantity, ctx) });
+    } else if (dr.rateRatio) {
+      rows.push({ label: `Rate${suffix}`, node: RatioRenderer(dr.rateRatio, ctx) });
+    } else if (dr.rateRange) {
+      rows.push({ label: `Rate${suffix}`, node: RangeRenderer(dr.rateRange, ctx) });
+    }
+  }
+  const schedule = formatTiming(d.timing);
+  if (schedule) rows.push({ label: "Schedule", node: <span>{schedule}</span> });
+  const repeat = d.timing?.repeat;
+  if (repeat?.boundsPeriod) {
+    rows.push({ label: "Duration", node: PeriodRenderer(repeat.boundsPeriod, ctx) });
+  } else if (repeat?.boundsDuration) {
+    rows.push({ label: "Duration", node: QuantityRenderer(repeat.boundsDuration, ctx) });
+  } else if (repeat?.boundsRange) {
+    rows.push({ label: "Duration", node: RangeRenderer(repeat.boundsRange, ctx) });
+  }
+  if (d.route) rows.push({ label: "Route", node: CodeableConceptRenderer(d.route, ctx) });
+  if (d.site) rows.push({ label: "Site", node: CodeableConceptRenderer(d.site, ctx) });
+  if (d.method) rows.push({ label: "Method", node: CodeableConceptRenderer(d.method, ctx) });
+  if (d.asNeededBoolean) rows.push({ label: "As needed", node: <span>yes</span> });
+  else if (d.asNeededCodeableConcept) {
+    rows.push({ label: "As needed for", node: CodeableConceptRenderer(d.asNeededCodeableConcept, ctx) });
+  }
+  if (d.maxDosePerPeriod) rows.push({ label: "Max / period", node: RatioRenderer(d.maxDosePerPeriod, ctx) });
+  if (d.maxDosePerAdministration) {
+    rows.push({ label: "Max / dose", node: QuantityRenderer(d.maxDosePerAdministration, ctx) });
+  }
+  if (d.maxDosePerLifetime) {
+    rows.push({ label: "Max / lifetime", node: QuantityRenderer(d.maxDosePerLifetime, ctx) });
+  }
+  for (const ai of d.additionalInstruction ?? []) {
+    rows.push({ label: "Also", node: CodeableConceptRenderer(ai, ctx) });
+  }
+  if (d.patientInstruction) {
+    rows.push({ label: "Patient instruction", node: <span>{d.patientInstruction}</span> });
+  }
+
+  if (!headline && rows.length === 0) return <Dash />;
+
+  return (
+    <div className="space-y-1">
+      {headline && <div className="font-medium">{headline}</div>}
+      {rows.length > 0 && (
+        <dl className="grid grid-cols-[minmax(5rem,max-content)_1fr] gap-x-3 gap-y-0.5">
+          {rows.map((r, i) => (
+            <Fragment key={`${r.label}-${i}`}>
+              <dt className="text-xs font-medium text-slate-500">{r.label}</dt>
+              <dd className="text-sm">{r.node}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
+};
+
 export const defaultTypeRenderers: TypeRenderers = {
   // primitives
   string: Primitive,
@@ -489,4 +576,6 @@ export const defaultTypeRenderers: TypeRenderers = {
   Attachment: AttachmentRenderer,
   Annotation: AnnotationRenderer,
   Meta: MetaRenderer,
+  Timing: TimingRenderer,
+  Dosage: DosageRenderer,
 };

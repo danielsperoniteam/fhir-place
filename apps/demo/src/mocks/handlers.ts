@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import type { Patient, Resource } from "fhir/r4";
+import type { Communication, Patient, Resource } from "fhir/r4";
 import { FHIR_BASE_URL } from "../config.js";
 import {
   allergiesFor,
@@ -363,4 +363,33 @@ export const handlers = [
       ...compartmentHandlers("CarePlan", carePlansFor),
     ];
   })(),
+
+  // Minimal Communication fixture — auto-derived resource type with the
+  // structural-leaf-collision shape (#400): `basedOn.reference`,
+  // `partOf.reference`, `recipient.reference`, and `category.coding.system`
+  // would all label as generic "Reference" / "System" headers in the
+  // column picker without parent-element disambiguation.
+  http.get(`*${BASE}/Communication`, () => {
+    const communication: Communication = {
+      resourceType: "Communication",
+      id: "comm-1",
+      status: "completed",
+      basedOn: [{ reference: "CommunicationRequest/cr-0" }],
+      partOf: [{ reference: "CarePlan/cp-1" }],
+      subject: { reference: "Patient/ada" },
+      recipient: [{ reference: "Practitioner/pr-1" }],
+      category: [
+        {
+          coding: [
+            {
+              system: "http://terminology.hl7.org/CodeSystem/communication-category",
+              code: "notification",
+            },
+          ],
+        },
+      ],
+      meta: { versionId: "1", lastUpdated: "2024-10-01T12:00:00Z" },
+    };
+    return okJson(searchBundle([communication]));
+  }),
 ];
