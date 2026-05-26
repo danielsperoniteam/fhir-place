@@ -102,8 +102,9 @@ function Patients() {
 - **`FhirClient` interface** — `read`, `vread`, `history`, `search`, `create`, `update`, `patch` (JSON Patch), `delete`, `readReference` (relative + absolute), generic `request()` escape hatch
 - **`FetchFhirClient`** — the only shipped implementation. Supports `If-Match` / `If-None-Match` / `If-None-Exist`, static + dynamic headers, `AbortSignal`, custom `fetch`
 - **`FhirError`** — carries status, URL, and `OperationOutcome` from the server when available
-- **`SearchBuilder` / `searchBuilder()`** — typed, chainable search builder with per-resource param-type, include, and revinclude maps. Plays with `useTypedSearch` so the query key matches plain `useSearch`.
-- **`formatSearchRequest()`** — renders a `SearchRequestPreview` (method, URL, body) for logging or showing the caller what wire request a `SearchParams` object will become. Also exports `buildSearchParams()` for the raw `URLSearchParams` step.
+- **`searchBuilder()` / `SearchBuilder`** — typed search builder. Per-resource `where` / `include` / `revInclude` / `sort` / `count` with R4 search-parameter typing; returns a `SearchParams` ready for `client.search(...)` or `useTypedSearch`. Companion types: `ParamType`, `DatePrefix`, `NumberPrefix`, `IncludeSpec`, `RevIncludeSpec`, `SearchableResource`, `ReferenceTargets`.
+- **`buildSearchParams(params)` / `formatSearchRequest()`** — serialise a `SearchParams` record into `URLSearchParams`, or produce a human-readable `SearchRequestPreview` (method, URL, body) for devtools and docs.
+- **Types** — `SearchParams`, `JsonPatchOp`, `RequestOptions`, `FhirVersion` are re-exported alongside the client
 
 ```ts
 import { FetchFhirClient } from "@fhir-place/react-fhir/client";
@@ -119,8 +120,9 @@ const bundle = await fhir.search("Patient", { name: "smith", _count: 20 });
 - **`useTerminologyClient` / `useOptionalTerminologyClient`** — opt-in second client for terminology operations (`$expand`, `$lookup`) when the primary server doesn't host the value sets you need
 - **`useResource`, `useSearch`, `useInfiniteSearch`, `useCapabilities`, `useStructureDefinition`, `useSearchParameter`, `useValueSet`, `useReadReference`** — TanStack Query wrappers with stable query keys (`fhirQueryKeys`). `useSearchParameter` resolves a `(base, code)` pair to its canonical `SearchParameter` resource so spec-aware code can prefer `expression` over the kebab→camel naming convention.
 - **`useTypedSearch`** — typed variant backed by a `SearchBuilder` instance; the builder supplies both the resource type and the params, and the query key reuses `fhirQueryKeys.search` so mutations invalidate it the same way as `useSearch`.
-- **`useValueSetExpansion` / `useCodeLookup`** — `$expand` and `$lookup` operations routed through the terminology client when available.
-- **`useResources` / `useReadReferences`** — batch variants of `useResource` / `useReadReference` that fetch many ids or references in one request.
+- **`useResources`, `useReadReferences`** — batch reads. Take a list of `(type, id)` pairs or `Reference`s and resolve them in one cache-coherent query. `parseBatchableRefs` splits a reference list into resolvable / absolute / contained buckets.
+- **`useValueSetExpansion`, `useCodeLookup`** — terminology helpers routed through the terminology client when available. `useValueSetExpansion` calls `$expand`; `useCodeLookup` resolves a `(system, code)` to a display string from an expanded ValueSet.
+- **`nextPageUrl(bundle)`** — pulls the `link[rel=next]` URL off a search Bundle. Used by `useInfiniteSearch` and exported for app-level paging.
 - **`useCreateResource`, `useUpdateResource`, `useDeleteResource`** — mutations that invalidate matching read queries on success
 
 ```tsx
@@ -138,12 +140,12 @@ function PatientCard({ id }: { id: string }) {
 
 - **`walkResource` / `walkObject`** — iterate a StructureDefinition snapshot, yield present elements in canonical order, resolve `[x]` choice types
 - **`directChildren`, `findElement`, `findChoiceVariant`, `isPrimitive`, `PRIMITIVE_TYPES`** — querying SDs and the primitive-type set
-- **`pathGet` / `pathSet` / `pathRemove` / `prune`** — immutable path helpers used by the editor
-- **`resolveStructureDefinition()`** — fetches a StructureDefinition by type or canonical, with optional bundled-types fallback for the R4 core
-- **`bindingFor()`, `codesFromValueSet()`, `isOpenBinding()`** — read the ValueSet binding on an `ElementDefinition` and pull resolved codes
-- **`elementPathForSearchParam()`, `elementPathFromExpression()`, `kebabToCamel()`** — turn a `SearchParameter` into an element path, preferring `expression` over the kebab→camel convention
-- **`formatHumanName`, `formatAddress`, `formatCoding`, `formatCodeableConcept`, `formatQuantity`, `formatPeriod`, `formatReferenceLabel`** — pure datatype formatters used by the renderers
-- **`coreStructureDefinition`, `lookupCoreDisplay`, `lookupCoreDefinition`, `lookupCoreConcept`, `bundledTypes`, `createDefaultSpecFetcher`** — bundled R4 core SDs and value sets, plus the `SpecFetcher` plumbing for offline / custom fetchers
+- **`pathGet` / `pathSet` / `pathRemove` / `prune`** — immutable path helpers used by the editor. `Path` / `PathSegment` are the underlying types.
+- **`resolveStructureDefinition(client, type, options?)`** — runtime SD resolver. Tries instance read, then canonical search, then the bundled fallback; `ResolveOptions` lets callers disable either network step or the bundled fallback.
+- **`bindingFor`, `isOpenBinding`, `codesFromValueSet`** — element-binding helpers: read strength + ValueSet reference off an `ElementDefinition`, expand a `ValueSet` to display-ready codes. Types: `BindingStrength`, `ElementBinding`, `ResolvedCode`, `ValueSetResolver`, `CodesFromValueSetOptions`.
+- **`elementPathForSearchParam`, `elementPathFromExpression`, `kebabToCamel`** — turn a `SearchParameter` (or its FHIRPath `expression`) into an element path, preferring `expression` over the kebab→camel convention.
+- **`formatHumanName`, `formatAddress`, `formatCoding`, `formatCodeableConcept`, `formatQuantity`, `formatPeriod`, `formatTiming`, `formatDosage`, `formatReferenceLabel`** — pure datatype formatters used by the renderers. Safe to call outside React.
+- **Bundled spec access** — `coreStructureDefinition(type)`, `lookupCoreDisplay`, `lookupCoreDefinition`, `lookupCoreConcept`, `coreValueSet`, `coreValueSets`, `bundledValueSetUrls`, `bundledTypes`. The fetcher is pluggable: `SpecFetcher`, `createDefaultSpecFetcher`, `setCoreStructureDefinitionFetcher`, `getCoreStructureDefinitionFetcher`, `clearSpecFetcherCache`.
 
 ```ts
 import { walkResource, findElement, pathGet } from "@fhir-place/react-fhir/structure";
@@ -164,9 +166,9 @@ for (const node of walkResource(patient, structureDef)) {
 - **`<SortPicker>`** — popover to choose the `_sort` search parameter, driven by the resource's search params.
 - **`<ReferencePicker>`** — debounced search-and-pick widget for FHIR `Reference` fields. Accepts `targets` (allowed resource types), searches the server live as the user types, and returns a typed `Reference`. Replaces the raw `Type/id` text field that `<ResourceEditor>` generates for Reference elements by default. Also exports `<ReferencePickerFallback>` for when the search fails.
 - **`<Narrative>`** — the *only* place `dangerouslySetInnerHTML` is used. DOMPurify with a FHIR-appropriate allowlist: no `<script>`, no `on*`, no `javascript:`, no forms or inputs.
-- **`<HintedDetail>`** — composes a detail page from a `LayoutHint`. Reads each declared field path, looks up the FHIR type via the StructureDefinition, and dispatches through the same renderer map as `<ResourceView>` and `<ResourceTable>`.
-- **`<CodedValue>`** — renders a `Coding` or `CodeableConcept` with a known-system label, hover popover for full codes, and optional `tone`. Re-exports `FHIR_CODE_SYSTEMS`, `isKnown`, `labelForSystem`, `normalizeSystem`, `partition`, `pickPrimary` from `./registry`.
-- **`defaultTypeRenderers` / `defaultTypeInputs`** — the dispatch maps. Every built-in renderer/input is overridable by passing `renderers` / `inputs` props.
+- **`<CodedValue>`** — renders a `Coding` or `CodeableConcept` with a known-system label, hover popover for full codes, and optional `tone`. Uses the `codedValue/` registry (`FHIR_CODE_SYSTEMS`, `partition`, `pickPrimary`, `labelForSystem`, `normalizeSystem`, `isKnown`) to prefer well-known systems and fall back to text.
+- **`<HintedDetail>`** — composes a detail page from a `LayoutHint` (hero + sections). Reads each declared field path, looks up the FHIR type via the StructureDefinition, and dispatches through the same renderer map as `<ResourceView>` and `<ResourceTable>`. Renders nothing when no hint is supplied.
+- **`defaultTypeRenderers` / `defaultTypeInputs`** — the dispatch maps. Every built-in renderer/input is overridable by passing `renderers` / `inputs` props. `defaultPathInputs` covers path-keyed overrides; `DataAbsentReasonInput` and `JsonFallbackInput` are the fallback inputs.
 
 ```tsx
 import { ResourceView, ResourceEditor, ResourceSearch } from "@fhir-place/react-fhir/components";
