@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ACTIVE_SERVER_CONFIG,
+  DEFAULT_FHIR_SERVER,
   DEFAULT_TERMINOLOGY_BASE_URL,
   type AuthMode,
   type CustomHeader,
@@ -168,7 +169,11 @@ export function SettingsPage() {
           </span>
         </div>
         <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
-          Connect to any FHIR-spec compliant endpoint. Settings stored in your browser — nothing leaves your device.
+          Connect to any FHIR-spec compliant endpoint. Blank settings use{" "}
+          <code style={{ fontFamily: CC_MONO, fontSize: 12 }}>
+            {DEFAULT_FHIR_SERVER.baseUrl}
+          </code>
+          . Settings stored in your browser — nothing leaves your device.
         </p>
       </div>
 
@@ -452,6 +457,7 @@ function ServerCard({
             onClick={() => setExpanded((v) => !v)}
             style={{ ...ccBtn("ghost"), fontSize: 12, padding: "6px 8px" }}
             aria-label={expanded ? "Collapse" : "Expand"}
+            data-testid="server-card-toggle"
           >
             <svg
               width="12"
@@ -524,6 +530,7 @@ function ServerCard({
               value={server.authMode}
               onChange={(e) => onChange({ authMode: e.target.value as AuthMode })}
               style={inputStyle}
+              data-testid="server-auth-mode"
             >
               <option value="none">None</option>
               <option value="bearer">Bearer token</option>
@@ -539,6 +546,7 @@ function ServerCard({
                 placeholder="paste token"
                 style={inputMonoStyle}
                 autoComplete="off"
+                data-testid="server-bearer-token-input"
               />
             </Field>
           )}
