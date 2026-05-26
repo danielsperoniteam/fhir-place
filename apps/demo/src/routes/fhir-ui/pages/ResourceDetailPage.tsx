@@ -65,7 +65,7 @@ export function ResourceDetailPage() {
     error instanceof FhirError && (error.status === 404 || error.status === 410);
   const del = useDeleteResource();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [rightPane, setRightPane] = useState<"formatted" | "json" | "refs">("formatted");
+  const [rightPane, setRightPane] = useState<"json" | "refs">("json");
 
   const isPatient = resourceType === "Patient";
   // Tier 1 reference implementation: AllergyIntolerance renders via
@@ -428,8 +428,8 @@ export function ResourceDetailPage() {
                   border: "1px solid var(--border)",
                 }}
               >
-                {(["formatted", "json", "refs"] as const).map((v) => {
-                  const labels = { formatted: "View", json: "JSON", refs: "References" };
+                {(["json", "refs"] as const).map((v) => {
+                  const labels = { json: "JSON", refs: "References" };
                   const active = rightPane === v;
                   return (
                     <button
@@ -459,7 +459,7 @@ export function ResourceDetailPage() {
             </div>
 
             {/* JSON content */}
-            {(rightPane === "json" || rightPane === "formatted") && (
+            {rightPane === "json" && (
               <div
                 data-testid="resource-json"
                 style={{
