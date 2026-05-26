@@ -122,7 +122,7 @@ fi
 git fetch origin --prune --tags --quiet
 git worktree prune
 git branch --format '%(if:equals=[gone])%(upstream:track)%(then)%(refname:short)%(end)' \
-  | grep -v '^$' | xargs git branch -D 2>/dev/null || true
+  | grep -v '^$' | grep '^bot/' | xargs git branch -d 2>/dev/null || true
 
 # Find the prompt file. Accept either an absolute path, a repo-relative
 # path, or a bare basename (looked up under docs/prompts/).
