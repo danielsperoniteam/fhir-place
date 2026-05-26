@@ -23,9 +23,10 @@ import { Fragment } from "react";
 import {
   formatAddress,
   formatCodeableConcept,
+  formatDateTime,
   formatDosage,
-  formatFhirDateTime,
   formatHumanName,
+  formatPeriod,
   formatReferenceLabel,
   formatTiming,
 } from "../structure/format.js";
@@ -61,12 +62,13 @@ const Primitive: FhirTypeRenderer = (value) => <span>{String(value)}</span>;
 const Boolean_: FhirTypeRenderer = (value) => (
   <span className="font-mono">{value ? "true" : "false"}</span>
 );
-const Date_: FhirTypeRenderer = (value) => (
-  <time dateTime={String(value)}>{String(value)}</time>
-);
+const Date_: FhirTypeRenderer = (value) => {
+  const s = String(value);
+  return <time dateTime={s}>{formatDateTime(s) || s}</time>;
+};
 const DateTime_: FhirTypeRenderer = (value) => {
   const s = String(value);
-  return <time dateTime={s}>{formatFhirDateTime(s)}</time>;
+  return <time dateTime={s}>{formatDateTime(s) || s}</time>;
 };
 const Code_: FhirTypeRenderer = (value) => (
   <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{String(value)}</code>
@@ -292,11 +294,17 @@ const MoneyRenderer: FhirTypeRenderer = (value) => {
 
 const PeriodRenderer: FhirTypeRenderer = (value) => {
   const p = value as Period;
+  // Humanised text via formatPeriod (collapses same-day ranges into
+  // "Aug 30, 2018, 9:24 PM → 9:41 PM"). The semantic <time> tags still
+  // carry the raw ISO values in `dateTime` so screen-readers and machine
+  // consumers see the unaltered FHIR string.
+  const summary = formatPeriod(p);
+  const [startText = "…", endText = "…"] = summary.split(" → ");
   return (
     <span>
-      <time dateTime={p.start}>{p.start ? formatFhirDateTime(p.start) : "…"}</time>
+      <time {...(p.start ? { dateTime: p.start } : {})}>{startText}</time>
       <span className="mx-1 text-slate-400">→</span>
-      <time dateTime={p.end}>{p.end ? formatFhirDateTime(p.end) : "…"}</time>
+      <time {...(p.end ? { dateTime: p.end } : {})}>{endText}</time>
     </span>
   );
 };

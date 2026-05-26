@@ -437,23 +437,18 @@ describe("ResourceTable", () => {
         { wrapper: wrap() },
       );
       const row = screen.getByTestId("resource-row");
-      // PeriodRenderer emits a <time dateTime="..."> per bound; the visible
-      // text is locale-formatted (environment-dependent), so match the raw
-      // ISO value on the dateTime attribute.
+      // PeriodRenderer shows humanised start and end; the raw ISO is preserved
+      // on the <time> element's `dateTime` attribute so downstream consumers
+      // (screen readers, scrapers) still see the unaltered FHIR value.
+      expect(within(row).getByText(/Mar 1, 2023/)).toBeInTheDocument();
+      expect(within(row).getByText(/May 31, 2023/)).toBeInTheDocument();
       expect(
-        within(row).getByText(
-          (_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2023-03-01",
-        ),
-      ).toBeInTheDocument();
-      expect(
-        within(row).getByText(
-          (_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2023-05-31",
-        ),
+        within(row).getByText((_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2023-03-01"),
       ).toBeInTheDocument();
       expect(within(row).queryByText(/"start":/)).not.toBeInTheDocument();
     });
 
-    it("performed[x] — performedDateTime variant renders the date string", () => {
+    it("performed[x] — performedDateTime variant renders a humanised date", () => {
       const procedure: Procedure = {
         resourceType: "Procedure",
         id: "proc1",
@@ -473,13 +468,15 @@ describe("ResourceTable", () => {
         { wrapper: wrap() },
       );
       const row = screen.getByTestId("resource-row");
-      // DateTime renderer emits a <time dateTime="..."> element; match by attribute.
+      // Visible text is humanised; the raw ISO is still on the <time>'s
+      // `dateTime` attribute for machine consumers (issue #556).
+      expect(within(row).getByText(/Aug 10, 2021/)).toBeInTheDocument();
       expect(
         within(row).getByText((_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2021-08-10"),
       ).toBeInTheDocument();
     });
 
-    it("performed[x] — performedPeriod variant renders start date, not raw JSON", () => {
+    it("performed[x] — performedPeriod variant renders humanised start and end, not raw JSON", () => {
       const procedure: Procedure = {
         resourceType: "Procedure",
         id: "proc2",
@@ -499,14 +496,8 @@ describe("ResourceTable", () => {
         { wrapper: wrap() },
       );
       const row = screen.getByTestId("resource-row");
-      // PeriodRenderer emits a <time dateTime="..."> per bound; the visible
-      // text is locale-formatted (environment-dependent), so match the raw
-      // ISO value on the dateTime attribute.
-      expect(
-        within(row).getByText(
-          (_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "2022-02-01",
-        ),
-      ).toBeInTheDocument();
+      expect(within(row).getByText(/Feb 1, 2022/)).toBeInTheDocument();
+      expect(within(row).getByText(/Jun 30, 2022/)).toBeInTheDocument();
       expect(within(row).queryByText(/"start":/)).not.toBeInTheDocument();
     });
 
@@ -628,7 +619,14 @@ describe("ResourceTable", () => {
       expect(within(card).getByText("Gender")).toBeInTheDocument();
       expect(within(card).getByText("female")).toBeInTheDocument();
       expect(within(card).getByText("Birth Date")).toBeInTheDocument();
-      expect(within(card).getByText("1815-12-10")).toBeInTheDocument();
+      // Dates are humanised by the Date renderer; the raw value stays on
+      // the <time>'s `dateTime` attribute.
+      expect(within(card).getByText("Dec 10, 1815")).toBeInTheDocument();
+      expect(
+        within(card).getByText(
+          (_c, el) => el?.tagName === "TIME" && el.getAttribute("dateTime") === "1815-12-10",
+        ),
+      ).toBeInTheDocument();
     });
 
     it("card rows are keyboard-clickable when onRowClick is set", async () => {

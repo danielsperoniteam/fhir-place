@@ -3,8 +3,8 @@ import {
   formatAddress,
   formatCodeableConcept,
   formatCoding,
+  formatDateTime,
   formatDosage,
-  formatFhirDateTime,
   formatHumanName,
   formatPeriod,
   formatQuantity,
@@ -113,55 +113,67 @@ describe("formatQuantity", () => {
   });
 });
 
-describe("formatFhirDateTime", () => {
-  it("locale-formats a parseable dateTime", () => {
-    const iso = "2026-03-09T06:20:00Z";
-    expect(formatFhirDateTime(iso)).toBe(new Date(iso).toLocaleString());
+describe("formatDateTime", () => {
+  it("renders date-only values without a fabricated time", () => {
+    expect(formatDateTime("2018-08-30")).toBe("Aug 30, 2018");
   });
 
-  it("returns the raw value for unparseable input", () => {
-    expect(formatFhirDateTime("not-a-date")).toBe("not-a-date");
+  it("renders full timestamps as wall-clock time in UTC", () => {
+    // UTC pin keeps the rendering deterministic across dev / CI / clinician
+    // browsers — 21:24 UTC is always "9:24 PM" in the output.
+    expect(formatDateTime("2018-08-30T21:24:36+00:00")).toBe(
+      "Aug 30, 2018, 9:24 PM",
+    );
+    expect(formatDateTime("2018-08-30T21:24:36Z")).toBe(
+      "Aug 30, 2018, 9:24 PM",
+    );
   });
 
-  it("returns an empty string for undefined", () => {
-    expect(formatFhirDateTime(undefined)).toBe("");
+  it("renders partial-precision year and year-month forms", () => {
+    expect(formatDateTime("2018")).toBe("2018");
+    expect(formatDateTime("2018-08")).toBe("Aug 2018");
   });
 
-  it("preserves date-only precision: YYYY-MM-DD does not shift timezone", () => {
-    // new Date("2022-02-01") is UTC midnight; in ET that becomes Jan 31.
-    // The formatter must keep Feb 1 by parsing the components as local time.
-    const result = formatFhirDateTime("2022-02-01");
-    const expected = new Date(2022, 1, 1).toLocaleDateString(); // local Feb 1
-    expect(result).toBe(expected);
+  it("formats midnight and noon at boundary hours", () => {
+    expect(formatDateTime("2018-08-30T00:00:00Z")).toBe(
+      "Aug 30, 2018, 12:00 AM",
+    );
+    expect(formatDateTime("2018-08-30T12:00:00Z")).toBe(
+      "Aug 30, 2018, 12:00 PM",
+    );
   });
 
-  it("preserves date-only precision: YYYY-MM returns a local date string", () => {
-    const result = formatFhirDateTime("2022-02");
-    const expected = new Date(2022, 1, 1).toLocaleDateString();
-    expect(result).toBe(expected);
-  });
-
-  it("returns the year string as-is for year-only FHIR dates", () => {
-    expect(formatFhirDateTime("2022")).toBe("2022");
+  it("returns '' for empty input and falls back to the raw string for unparseable inputs", () => {
+    expect(formatDateTime(undefined)).toBe("");
+    expect(formatDateTime("")).toBe("");
+    expect(formatDateTime("not a date")).toBe("not a date");
   });
 });
 
 describe("formatPeriod", () => {
-  it("locale-formats each side of the range like a single dateTime", () => {
-    const start = "2026-03-09T06:20:00Z";
-    const end = "2026-03-09T06:35:00Z";
-    // Regression for #564: the Period branch must use the same human-readable
-    // locale format as the single performedDateTime branch, not raw ISO.
-    expect(formatPeriod({ start, end })).toBe(
-      `${new Date(start).toLocaleString()} → ${new Date(end).toLocaleString()}`,
+  it("humanises start and end and joins them with an arrow", () => {
+    expect(formatPeriod({ start: "2024-01-01", end: "2024-12-31" })).toBe(
+      "Jan 1, 2024 → Dec 31, 2024",
     );
   });
 
-  it("renders ellipsis fallbacks for a missing bound", () => {
-    const start = "2024-01-01T00:00:00Z";
-    expect(formatPeriod({ start })).toBe(
-      `${new Date(start).toLocaleString()} → …`,
-    );
+  it("collapses to a single date when start and end share the same UTC day", () => {
+    expect(
+      formatPeriod({
+        start: "2018-08-30T21:24:36+00:00",
+        end: "2018-08-30T21:41:36+00:00",
+      }),
+    ).toBe("Aug 30, 2018, 9:24 PM → 9:41 PM");
+  });
+
+  it("does not collapse when only one end has time precision", () => {
+    expect(
+      formatPeriod({ start: "2018-08-30", end: "2018-08-30T21:41:36Z" }),
+    ).toBe("Aug 30, 2018 → Aug 30, 2018, 9:41 PM");
+  });
+
+  it("falls back to ellipsis for missing bounds and returns '' for undefined", () => {
+    expect(formatPeriod({ start: "2024-01-01" })).toBe("Jan 1, 2024 → …");
     expect(formatPeriod({})).toBe("… → …");
     expect(formatPeriod(undefined)).toBe("");
   });
@@ -327,13 +339,9 @@ describe("formatTiming", () => {
   });
 
   it("renders bounds-only timings instead of an em-dash", () => {
-    const boundsStart = "2024-01-01T00:00:00Z";
-    const boundsEnd = "2024-03-01T00:00:00Z";
     expect(
-      formatTiming({ repeat: { boundsPeriod: { start: boundsStart, end: boundsEnd } } }),
-    ).toBe(
-      `${new Date(boundsStart).toLocaleString()} → ${new Date(boundsEnd).toLocaleString()}`,
-    );
+      formatTiming({ repeat: { boundsPeriod: { start: "2024-01-01", end: "2024-03-01" } } }),
+    ).toBe("Jan 1, 2024 → Mar 1, 2024");
     expect(
       formatTiming({ repeat: { boundsDuration: { value: 14, unit: "days" } } }),
     ).toBe("for 14 days");
