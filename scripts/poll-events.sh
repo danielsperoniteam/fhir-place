@@ -287,16 +287,17 @@ poll_once() {
     fi
   done
 
-  # --- 5. Conflicting PRs (bot/* OR approved) → auto-resolve-conflicts (every 5th poll ≈5 min) ---
+  # --- 5. Conflicting PRs → auto-resolve-conflicts (every 5th poll ≈5 min) ---
   # Checking merge status on every open PR every 60s is too many API calls.
   # Run this check every 5th iteration (~5 min). GitHub computes mergeStateStatus
   # lazily, so UNKNOWN means "not yet computed" — skip those gracefully.
-  # Covers: bot-authored branches AND any human-authored PR that has been approved.
+  # Covers all non-draft PRs regardless of branch name or review state — a
+  # conflict blocks everyone and is always safe to resolve.
   if (( POLL_ITER % 5 == 0 )); then
     local conflicting_prs
     conflicting_prs=$(gh pr list --repo "$REPO" --state open \
-      --json number,headRefName,isDraft,reviewDecision,mergeStateStatus \
-      --jq '[.[] | select(.isDraft == false and ((.headRefName | test("^(bot|claude|codex)/")) or .reviewDecision == "APPROVED")) | {number, head: .headRefName, mergeable: .mergeStateStatus}]' \
+      --json number,headRefName,isDraft,mergeStateStatus \
+      --jq '[.[] | select(.isDraft == false) | {number, head: .headRefName, mergeable: .mergeStateStatus}]' \
       2>/dev/null || echo '[]')
     echo "$conflicting_prs" | jq -c '.[]' | while read -r row; do
       local num head mergeable
