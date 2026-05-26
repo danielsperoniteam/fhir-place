@@ -228,6 +228,17 @@ export const proceduresFor = (patientId: string): Procedure[] => {
       subject: adaSubject,
       performedDateTime: "2023-11-02T10:30:00Z",
     },
+    // Synthea and many production servers emit `performedPeriod` instead of
+    // `performedDateTime`. Keep one of each so the Procedure list view can
+    // prove both choice variants render in the "Performed" column (#476).
+    {
+      resourceType: "Procedure",
+      id: "proc-physio-ada",
+      status: "completed",
+      code: { text: "Physical therapy" },
+      subject: adaSubject,
+      performedPeriod: { start: "2022-02-01", end: "2022-06-30" },
+    },
   ];
 };
 

@@ -34,10 +34,15 @@ test.describe("Generic ResourceCreatePage", () => {
   });
 
   test("back link returns to the resource index", async ({ page }) => {
-    await page.goto("/fhir-ui/Condition/new");
-    await page.getByRole("link", { name: /all conditions/i }).click();
-    await expect(page).toHaveURL(/\/fhir-ui\/Condition$/);
-    await expect(page.getByRole("heading", { name: /^conditions$/i })).toBeVisible();
+    await page.goto("/fhir-ui/MedicationRequest/new");
+
+    const backLink = page.getByTestId("resource-create-back-link");
+    await expect(backLink).toHaveText("← All MedicationRequests");
+    await expect(backLink).not.toContainText("medicationrequests");
+
+    await backLink.click();
+    await expect(page).toHaveURL(/\/fhir-ui\/MedicationRequest$/);
+    await expect(page.getByRole("heading", { name: /^medication requests$/i })).toBeVisible();
   });
 
   test("cancel button returns to the resource index", async ({ page }) => {

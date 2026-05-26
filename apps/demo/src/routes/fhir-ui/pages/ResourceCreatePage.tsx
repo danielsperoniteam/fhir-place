@@ -5,6 +5,7 @@ import {
   RESOURCE_LIST_CONFIG,
   isTopResourceType,
 } from "../../../resourceListConfig.js";
+import { resourceCollectionLabel } from "../resourceLabels.js";
 
 /**
  * Generic create form for any FHIR resource type. Renders the spec-driven
@@ -23,13 +24,16 @@ export function ResourceCreatePage() {
     ? RESOURCE_LIST_CONFIG[resourceType]
     : undefined;
   const singular = config?.singular ?? resourceType.toLowerCase();
-  const title = config?.title ?? resourceType;
 
   return (
     <div className="space-y-4">
       <nav className="text-sm text-slate-500">
-        <Link to={`/fhir-ui/${resourceType}`} className="underline">
-          ← All {title.toLowerCase()}
+        <Link
+          to={`/fhir-ui/${resourceType}`}
+          className="underline"
+          data-testid="resource-create-back-link"
+        >
+          ← All {resourceCollectionLabel(resourceType)}
         </Link>
       </nav>
       <ResourceEditor

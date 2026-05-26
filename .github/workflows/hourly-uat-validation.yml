@@ -42,6 +42,7 @@ concurrency:
 
 jobs:
   validate:
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 45    # 8 PRs × short walk + PM time + buffer
     steps:

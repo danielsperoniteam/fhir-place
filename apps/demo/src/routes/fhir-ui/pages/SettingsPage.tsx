@@ -54,6 +54,20 @@ const inputMonoStyle: React.CSSProperties = {
   fontSize: 12,
 };
 
+const readonlyInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  background: "var(--surface-muted, var(--surface))",
+  color: "var(--text-muted)",
+  cursor: "not-allowed",
+};
+
+const readonlyMonoInputStyle: React.CSSProperties = {
+  ...inputMonoStyle,
+  background: "var(--surface-muted, var(--surface))",
+  color: "var(--text-muted)",
+  cursor: "not-allowed",
+};
+
 export function SettingsPage() {
   const [servers, setServers] = useState<ServerConfig[]>(() => loadServers());
   const [activeId, setActiveId] = useState<string>(
@@ -81,7 +95,22 @@ export function SettingsPage() {
   };
 
   const updateServer = (id: string, patch: Partial<ServerConfig>) => {
-    persist(servers.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    persist(
+      servers.map((s) => {
+        if (s.id !== id) return s;
+        // Built-in label and baseUrl are part of the BUILT-IN badge's trust
+        // identity. Even if the UI fails to disable the inputs (a future
+        // refactor, a bypass via dev tools), the state layer drops these
+        // fields on the floor so the canonical row can't be retargeted.
+        const safePatch = s.builtin
+          ? (() => {
+              const { label: _label, baseUrl: _baseUrl, ...rest } = patch;
+              return rest;
+            })()
+          : patch;
+        return { ...s, ...safePatch };
+      }),
+    );
   };
 
   const removeServer = (id: string) => {
@@ -348,6 +377,8 @@ function ServerCard({
         transition: "box-shadow 200ms ease, border-color 200ms ease",
       }}
       data-testid="server-form"
+      data-server-id={server.id}
+      data-builtin={server.builtin ? "true" : "false"}
     >
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: expanded ? 16 : 0 }}>
@@ -459,7 +490,9 @@ function ServerCard({
                 type="text"
                 value={server.label}
                 onChange={(e) => onChange({ label: e.target.value })}
-                style={inputStyle}
+                style={server.builtin ? readonlyInputStyle : inputStyle}
+                readOnly={server.builtin}
+                aria-readonly={server.builtin || undefined}
                 data-testid="server-label-input"
               />
             </Field>
@@ -468,12 +501,29 @@ function ServerCard({
                 type="url"
                 value={server.baseUrl}
                 onChange={(e) => onChange({ baseUrl: e.target.value })}
-                placeholder={DEFAULT_FHIR_SERVER.baseUrl}
-                style={inputMonoStyle}
+                placeholder="https://example.org/fhir"
+                style={server.builtin ? readonlyMonoInputStyle : inputMonoStyle}
+                readOnly={server.builtin}
+                aria-readonly={server.builtin || undefined}
                 data-testid="server-base-url-input"
               />
             </Field>
           </div>
+          {server.builtin && (
+            <p
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                margin: "-4px 0 0",
+                lineHeight: 1.5,
+              }}
+              data-testid="builtin-readonly-hint"
+            >
+              Label and base URL are fixed for built-in servers so the BUILT-IN
+              badge stays a reliable trust signal. Auth and custom headers are
+              still editable.
+            </p>
+          )}
 
           <Field label="Auth">
             <select

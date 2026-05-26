@@ -17,6 +17,7 @@ import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { PATIENT_COMPARTMENT } from "../../../compartment.js";
 import { patientFieldOptions } from "../../../patientFields.js";
 import { RESOURCE_LIST_CONFIG } from "../../../resourceListConfig.js";
+import { resourceCollectionLabel } from "../resourceLabels.js";
 
 const PATIENT_FIELDS_KEY = "fhir-place-demo-patient-detail-fields";
 
@@ -65,7 +66,7 @@ export function ResourceDetailPage() {
     error instanceof FhirError && (error.status === 404 || error.status === 410);
   const del = useDeleteResource();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [rightPane, setRightPane] = useState<"formatted" | "json" | "refs">("formatted");
+  const [rightPane, setRightPane] = useState<"json" | "refs">("json");
 
   const isPatient = resourceType === "Patient";
   // Tier 1 reference implementation: AllergyIntolerance renders via
@@ -131,9 +132,10 @@ export function ResourceDetailPage() {
       >
         <Link
           to={`/fhir-ui/${resourceType}`}
+          data-testid="resource-detail-back-link"
           style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "none" }}
         >
-          ← All {resourceType.toLowerCase()}s
+          ← All {resourceCollectionLabel(resourceType)}
         </Link>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {isPatient && patientFields.length > 0 && (
@@ -245,9 +247,10 @@ export function ResourceDetailPage() {
           </p>
           <Link
             to={`/fhir-ui/${resourceType}`}
+            data-testid="resource-not-found-back-link"
             style={{ fontSize: 12, color: "var(--text-muted)" }}
           >
-            ← Back to all {resourceType.toLowerCase()}s
+            ← Back to all {resourceCollectionLabel(resourceType)}
           </Link>
         </div>
       )}
@@ -275,23 +278,16 @@ export function ResourceDetailPage() {
         </div>
       )}
 
-      {/* Main content: split left/right */}
+      {/* Main content: split left/right.
+          Layout (flex / overflow / columns) lives in .cc-detail-grid so the
+          <800px media query can collapse it to a single stacked column —
+          inline styles would override the media query. */}
       {data && (
-        <div
-          style={{
-            flex: 1,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            minHeight: 0,
-            padding: "16px 24px",
-            gap: 16,
-            overflow: "hidden",
-          }}
-        >
+        <div className="cc-detail-grid" style={{ padding: "16px 24px", gap: 16 }}>
           {/* Left: structured view */}
           <div
+            className="cc-detail-pane"
             style={{
-              overflow: "auto",
               display: "flex",
               flexDirection: "column",
               gap: 16,
@@ -398,14 +394,14 @@ export function ResourceDetailPage() {
 
           {/* Right: JSON viewer */}
           <div
+            data-testid="resource-json-pane"
+            className="cc-detail-pane"
             style={{
               display: "flex",
               flexDirection: "column",
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 10,
-              overflow: "hidden",
-              minHeight: 0,
             }}
           >
             {/* Toolbar */}
@@ -428,8 +424,8 @@ export function ResourceDetailPage() {
                   border: "1px solid var(--border)",
                 }}
               >
-                {(["formatted", "json", "refs"] as const).map((v) => {
-                  const labels = { formatted: "View", json: "JSON", refs: "References" };
+                {(["json", "refs"] as const).map((v) => {
+                  const labels = { json: "JSON", refs: "References" };
                   const active = rightPane === v;
                   return (
                     <button
@@ -459,7 +455,7 @@ export function ResourceDetailPage() {
             </div>
 
             {/* JSON content */}
-            {(rightPane === "json" || rightPane === "formatted") && (
+            {rightPane === "json" && (
               <div
                 data-testid="resource-json"
                 style={{
