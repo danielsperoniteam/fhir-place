@@ -41,6 +41,7 @@ Before touching any files, set up a worktree so this run never disturbs the
 primary checkout:
 
 ```bash
+REPO_ROOT=$(pwd)
 HEAD_REF=$(gh pr view <pr_number> --json headRefName --jq '.headRefName')
 WORKTREE=../wt-pr-<pr_number>
 git fetch origin
@@ -50,11 +51,12 @@ cd "$WORKTREE"
 ```
 
 All subsequent git and file operations run inside `$WORKTREE`. At every exit
-point (success, needs-human, or any failure), remove the worktree:
+point (success, needs-human, or any failure), remove the worktree. Use
+`git -C "$REPO_ROOT"` — `cd ..` from inside the worktree lands in the
+parent of the main checkout, which is not a git repository:
 
 ```bash
-cd ..
-git worktree remove --force wt-pr-<pr_number>
+git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>
 ```
 
 ---
@@ -199,7 +201,7 @@ green yet.
 ## Exit table
 
 In every row below, remove the worktree before exiting:
-`cd .. && git worktree remove --force wt-pr-<pr_number>`
+`git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>`
 
 | Failure | Action | Branch fate |
 | --- | --- | --- |

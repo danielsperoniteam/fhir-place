@@ -38,6 +38,7 @@ Before touching any branch, set up a worktree so this run never disturbs the
 primary checkout:
 
 ```bash
+REPO_ROOT=$(pwd)
 HEAD_REF=$(gh pr view <pr_number> --json headRefName --jq '.headRefName')
 BASE_REF=$(gh pr view <pr_number> --json baseRefName --jq '.baseRefName')
 WORKTREE=../wt-pr-<pr_number>
@@ -49,11 +50,12 @@ cd "$WORKTREE"
 ```
 
 All subsequent git commands run inside `$WORKTREE`. At every exit point
-(success or needs-human), remove the worktree before finishing:
+(success or needs-human), remove the worktree before finishing. Use
+`git -C "$REPO_ROOT"` — `cd ..` from inside the worktree lands in the
+parent of the main checkout, which is not a git repository:
 
 ```bash
-cd ..
-git worktree remove --force wt-pr-<pr_number>
+git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>
 ```
 
 ---
@@ -211,7 +213,7 @@ To retry after resolving these manually, comment `/resolve-conflicts` again.
 ```
 
 3. Add the `status: needs-human` label to the PR.
-4. Remove the worktree: `cd .. && git worktree remove --force wt-pr-<pr_number>`
+4. Remove the worktree: `git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>`
 5. Exit without pushing anything.
 
 ---
