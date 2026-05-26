@@ -512,3 +512,28 @@ describe("Timing renderer", () => {
     expect(container.textContent).toBe("—");
   });
 });
+
+describe("Period renderer", () => {
+  const renderer = defaultTypeRenderers.Period!;
+  const ctx = { path: "Procedure.performedPeriod", typeCode: "Period" };
+
+  it("humanises both bounds via UTC-pinned formatDateTime", () => {
+    // Same-day timestamps collapse: only the wall-clock time is repeated for
+    // the end bound. The `→` separator is spaced via CSS margin, so the
+    // concatenated textContent has no surrounding whitespace.
+    const start = "2026-03-09T06:20:00Z";
+    const end = "2026-03-09T06:35:00Z";
+    const { container } = render(<>{renderer({ start, end }, ctx)}</>);
+    expect(container.textContent).toBe("Mar 9, 2026, 6:20 AM→6:35 AM");
+    // The raw ISO value stays machine-readable on the <time> element.
+    const times = container.querySelectorAll("time");
+    expect(times[0]?.getAttribute("datetime")).toBe(start);
+    expect(times[1]?.getAttribute("datetime")).toBe(end);
+  });
+
+  it("keeps the ellipsis fallback for a missing bound", () => {
+    const start = "2026-03-09T06:20:00Z";
+    const { container } = render(<>{renderer({ start }, ctx)}</>);
+    expect(container.textContent).toBe("Mar 9, 2026, 6:20 AM→…");
+  });
+});
