@@ -171,7 +171,6 @@ export const AsyncCodeCombobox = ({
           data-testid="terminology-error"
         >
           Terminology unavailable — the server could not expand this value set.
-          You can still type a code directly.
         </p>
       )}
       {open && (
