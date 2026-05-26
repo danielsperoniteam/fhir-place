@@ -275,23 +275,16 @@ export function ResourceDetailPage() {
         </div>
       )}
 
-      {/* Main content: split left/right */}
+      {/* Main content: split left/right.
+          Layout (flex / overflow / columns) lives in .cc-detail-grid so the
+          <800px media query can collapse it to a single stacked column —
+          inline styles would override the media query. */}
       {data && (
-        <div
-          style={{
-            flex: 1,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            minHeight: 0,
-            padding: "16px 24px",
-            gap: 16,
-            overflow: "hidden",
-          }}
-        >
+        <div className="cc-detail-grid" style={{ padding: "16px 24px", gap: 16 }}>
           {/* Left: structured view */}
           <div
+            className="cc-detail-pane"
             style={{
-              overflow: "auto",
               display: "flex",
               flexDirection: "column",
               gap: 16,
@@ -398,14 +391,14 @@ export function ResourceDetailPage() {
 
           {/* Right: JSON viewer */}
           <div
+            data-testid="resource-json-pane"
+            className="cc-detail-pane"
             style={{
               display: "flex",
               flexDirection: "column",
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 10,
-              overflow: "hidden",
-              minHeight: 0,
             }}
           >
             {/* Toolbar */}
