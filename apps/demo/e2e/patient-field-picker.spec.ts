@@ -81,7 +81,7 @@ test.describe("patient field-picker options", () => {
     // Sanity-check defaults: every present field is rendered.
     await expect(view).toContainText("Ada Lovelace");
     await expect(view).toContainText("female");
-    await expect(view).toContainText("1815-12-10");
+    await expect(view).toContainText("Dec 10, 1815");
     await expect(view).toContainText("ada@example.com");
 
     // The Fields picker is only present on Patient.
@@ -101,7 +101,7 @@ test.describe("patient field-picker options", () => {
     await expect(view).not.toContainText("female");
     // Untouched fields remain.
     await expect(view).toContainText("Ada Lovelace");
-    await expect(view).toContainText("1815-12-10");
+    await expect(view).toContainText("Dec 10, 1815");
     await expect(view).toContainText("ada@example.com");
   });
 
@@ -121,6 +121,87 @@ test.describe("patient field-picker options", () => {
     await page.reload();
     await expect(page.getByTestId("resource-view")).toBeVisible();
     await expect(page.getByTestId("resource-view")).not.toContainText("female");
+  });
+
+  test("Columns picker on the list page supports a keyboard filter that narrows the option list", async ({
+    page,
+  }) => {
+    await resetPrefs(page);
+    await page.goto("/Patient");
+    await page.getByTestId("layout-table").click();
+    await expect(page.getByTestId("resource-table")).toBeVisible();
+
+    await page.getByRole("button", { name: /columns/i }).click();
+    const panel = page.getByRole("group", { name: /choose visible columns/i });
+
+    const search = panel.getByRole("searchbox");
+    await expect(search).toBeVisible();
+    // Search input is auto-focused so typing immediately filters.
+    await expect(search).toBeFocused();
+
+    await search.fill("marit");
+    await expect(
+      panel.getByRole("checkbox", { name: /^marital status$/i }),
+    ).toBeVisible();
+    // Unrelated options are hidden behind the filter.
+    await expect(
+      panel.getByRole("checkbox", { name: /^telecom$/i }),
+    ).toHaveCount(0);
+
+    // Power-user path: the long tail (filtered-out columns) becomes
+    // reachable again the moment the filter is cleared.
+    await search.clear();
+    await expect(panel.getByRole("checkbox", { name: /^telecom$/i })).toBeVisible();
+  });
+
+  test("Columns picker filter shows 'no matches' when nothing in the option list matches", async ({
+    page,
+  }) => {
+    await resetPrefs(page);
+    await page.goto("/Patient");
+    await page.getByTestId("layout-table").click();
+    await page.getByRole("button", { name: /columns/i }).click();
+    const panel = page.getByRole("group", { name: /choose visible columns/i });
+    await panel.getByRole("searchbox").fill("nonexistentcolumnname");
+    await expect(panel.getByTestId("column-picker-empty")).toBeVisible();
+  });
+
+  test("Fields picker on the patient detail page opens on the curated default subset", async ({
+    page,
+  }) => {
+    await resetPrefs(page);
+    await page.goto("/Patient/ada");
+    const view = page.getByTestId("resource-view");
+    await expect(view).toBeVisible();
+
+    // Curated defaults are visible: name, gender, birthDate, telecom,
+    // address, identifier.
+    await expect(view).toContainText("Ada Lovelace");
+    await expect(view).toContainText("female");
+    await expect(view).toContainText("Dec 10, 1815");
+    await expect(view).toContainText("ada@example.com");
+    await expect(view).toContainText("MRN-0001");
+
+    // `deceasedDateTime` is in the long tail (not in defaults). Picker
+    // exposes it but ResourceView leaves it hidden until the user opts in.
+    // The walker labels the row `Deceased`; the value is rendered through
+    // the date formatter, so we assert on the visible label.
+    await expect(view).not.toContainText("Deceased");
+
+    // The picker itself, once opened, still lists every walked field —
+    // long tail reachable.
+    await page.getByRole("button", { name: /^fields$/i }).click();
+    const panel = page.getByRole("group", { name: /choose visible columns/i });
+    // Use the search to find the long-tail field, then toggle it on.
+    await panel.getByRole("searchbox").fill("deceased");
+    const deceasedCheckbox = panel.getByRole("checkbox", { name: /deceased.*dateTime/i });
+    await expect(deceasedCheckbox).toBeVisible();
+    await expect(deceasedCheckbox).not.toBeChecked();
+    await deceasedCheckbox.click();
+
+    // Clear the filter to confirm the row renders in the view.
+    await panel.getByRole("searchbox").clear();
+    await expect(view).toContainText("Deceased");
   });
 
   test("Fields picker is not rendered for non-Patient resources", async ({
