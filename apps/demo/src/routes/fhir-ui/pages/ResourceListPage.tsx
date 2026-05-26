@@ -3,6 +3,10 @@ import {
   ResourceSearch,
   ResourceTable,
   SortPicker,
+  labelFromFhirPath,
+  mergeFhirPathColumns,
+  summaryColumnsFromStructureDefinition,
+  topLevelColumnsFromStructureDefinition,
   useFhirClient,
   useInfiniteSearch,
   useStructureDefinition,
@@ -291,28 +295,25 @@ export function ResourceListPage() {
   const totalAdvertised = data?.pages[0]?.total;
 
   const { data: structureDefinition } = useStructureDefinition(resourceType, {
-    enabled: !config && Boolean(resourceType),
+    enabled: Boolean(resourceType),
   });
 
   const derivedDefaults = useMemo(() => {
     if (config) return null;
-    const summary = summaryPathsFromStructure(
-      resourceType,
-      structureDefinition?.snapshot?.element
-        ?.filter((element) => element.isSummary)
-        .map((element) => element.path ?? "") ?? [],
-    );
+    const summary = summaryColumnsFromStructureDefinition(resourceType, structureDefinition);
     if (summary.length > 0) return summary.slice(0, 8);
     return ["status", "code.text", "subject.reference", "id"];
-  }, [config, resourceType, structureDefinition?.snapshot?.element]);
+  }, [config, resourceType, structureDefinition]);
 
   const tableColumns: ResourceListColumn[] = useMemo(() => {
-    if (config) return config.tableColumns;
+    const topLevelColumns = topLevelColumnsFromStructureDefinition(resourceType, structureDefinition);
+    if (config) return mergeFhirPathColumns(config.tableColumns, topLevelColumns);
     const fromRows = resources.flatMap((resource) => Array.from(collectPaths(resource)));
     const ordered = Array.from(new Set<string>([...(derivedDefaults ?? []), ...fromRows]));
     const labels = labelsForPaths(ordered);
-    return ordered.map((path) => ({ path, label: labels[path] ?? labelFromPath(path) }));
-  }, [config, derivedDefaults, resources]);
+    const rowColumns = ordered.map((path) => ({ path, label: labels[path] ?? labelFromPath(path) }));
+    return mergeFhirPathColumns(topLevelColumns, rowColumns);
+  }, [config, derivedDefaults, resourceType, resources, structureDefinition]);
 
   const defaultVisibleColumns = useMemo(
     () => config?.defaultVisibleColumns ?? derivedDefaults ?? [],
@@ -651,7 +652,9 @@ export function ResourceListPage() {
             <ResourceTable<Resource>
               resources={resources}
               columns={tableColumns.map((c) => c.path).filter((p) => columns.includes(p))}
-              columnLabels={Object.fromEntries(tableColumns.map((c) => [c.path, c.label]))}
+              columnLabels={Object.fromEntries(
+                tableColumns.map((c) => [c.path, c.label ?? labelFromFhirPath(c.path)]),
+              )}
               cellRenderers={
                 resourceType === "Patient"
                   ? {
