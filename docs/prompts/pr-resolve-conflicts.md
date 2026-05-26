@@ -171,7 +171,27 @@ commit fields.
 
 ---
 
-## Step 6 — post a summary comment
+## Step 6 — enable auto-merge if already approved
+
+Check the PR's review decision:
+
+```bash
+gh pr view <pr_number> --json reviewDecision --jq '.reviewDecision'
+```
+
+If the result is `APPROVED`, enable GitHub's auto-merge so the PR merges
+automatically once CI is green:
+
+```bash
+gh pr merge <pr_number> --auto --squash
+```
+
+If the result is anything else (e.g. `REVIEW_REQUIRED`), skip this step —
+the PR still needs a human review before it can merge.
+
+---
+
+## Step 7 — post a summary comment
 
 Use the MCP GitHub tools to post a comment on PR #<pr_number> with this
 structure:
@@ -184,6 +204,8 @@ Merge conflicts resolved. Summary:
   you merged them
 
 **Build status:** typecheck passed / N test(s) skipped / any other notes
+
+**Auto-merge:** enabled (will merge once CI is green) / not enabled (awaiting review)
 
 **Note (if applicable):** any pre-existing failures unrelated to this merge
 ```
