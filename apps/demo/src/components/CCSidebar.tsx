@@ -138,10 +138,10 @@ export function CCSidebar() {
             border: "1px solid var(--border)",
             borderRadius: 8,
             background: "var(--sunken)",
-            cursor: "pointer",
+            cursor: SETTINGS_ENABLED ? "pointer" : "default",
           }}
-          onClick={() => setPickerOpen((v) => !v)}
-          title="Switch server"
+          onClick={SETTINGS_ENABLED ? () => setPickerOpen((v) => !v) : undefined}
+          title={SETTINGS_ENABLED ? "Switch server" : "Active server"}
           data-testid="server-picker-trigger"
         >
           <div
@@ -176,20 +176,22 @@ export function CCSidebar() {
               {displayServer.baseUrl}
             </div>
           </div>
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="var(--text-muted)"
-            strokeWidth="1.5"
-            style={{ transform: pickerOpen ? "rotate(180deg)" : "none", transition: "transform 120ms", flexShrink: 0 }}
-          >
-            <path d="M3 5l3-3 3 3M3 7l3 3 3-3" />
-          </svg>
+          {SETTINGS_ENABLED && (
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="var(--text-muted)"
+              strokeWidth="1.5"
+              style={{ transform: pickerOpen ? "rotate(180deg)" : "none", transition: "transform 120ms", flexShrink: 0 }}
+            >
+              <path d="M3 5l3-3 3 3M3 7l3 3 3-3" />
+            </svg>
+          )}
         </div>
 
-        {pickerOpen && (
+        {SETTINGS_ENABLED && pickerOpen && (
           <div
             style={{
               position: "absolute",

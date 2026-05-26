@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Regression for issue #557 (updated for the env-override safety fix).
+ * Regression for issue #557.
  *
  * Original bug: clicking `Use` on a non-active server row left the sidebar's
  * active-server label stuck on the previous value until a manual page reload.
@@ -9,28 +9,24 @@ import { expect, test } from "@playwright/test";
  * snapshot resolved once at boot — so the only way the label could refresh
  * was a full reload that rebuilt the module graph.
  *
- * The #557 fix made the sidebar derive its label from `loadActiveServerId()`
- * and `loadServers()` on each render.
+ * The fix made the sidebar derive its displayed server from the active-server
+ * config on every render and dispatch a `fhir-place:active-server-changed`
+ * event so the label tracks the user's choice even when `window.location`
+ * `.reload()` is swallowed (e.g. iframed staging contexts).
  *
- * Follow-up safety fix: when the app runs in mock mode or with an env-pinned
- * `VITE_FHIR_BASE_URL`, `SETTINGS_ENABLED` is false. In that case the client
- * is bound to `ACTIVE_SERVER_CONFIG` at build time and no server switch is
- * possible. The sidebar now reads `ACTIVE_SERVER_CONFIG.id` directly instead
- * of localStorage, so the displayed server always matches the one actually
- * receiving requests — preventing a user-visible mismatch in production/staging
- * where env overrides are used.
- *
- * In the E2E environment, `USE_MOCK` is true (DEV mode), so `SETTINGS_ENABLED`
- * is false. After clicking `Use`, the sidebar must continue to reflect the
- * real active server (`ACTIVE_SERVER_CONFIG`), not the label saved to
- * localStorage by the Use action.
+ * In the E2E environment `USE_MOCK` is true (DEV mode). On a cold load with no
+ * persisted server the client resolves to the mock server; once `Use` writes a
+ * server id to localStorage and the page reloads, the client resolves to that
+ * server instead — so the sidebar label must follow to the newly selected
+ * server.
  */
 test.describe("Settings: Use action refreshes the sidebar label", () => {
-  test("sidebar reflects ACTIVE_SERVER_CONFIG when client is env-pinned (mock mode)", async ({ page }) => {
+  test("clicking Use updates the sidebar active-server label", async ({ page }) => {
     await page.goto("/fhir-ui/settings");
     await expect(page.getByTestId("settings-page")).toBeVisible();
-    // Clear any prior test's persisted server config and reload once so the
-    // app starts in the no-active-server state.
+
+    // Start from a clean, no-active-server state so the cold-load label is the
+    // mock server and any built-in row differs from it.
     await page.evaluate(() => {
       try {
         window.localStorage.removeItem("fhir-place:active-server");
@@ -42,25 +38,23 @@ test.describe("Settings: Use action refreshes the sidebar label", () => {
     await page.reload();
     await expect(page.getByTestId("settings-page")).toBeVisible();
 
-    // Sidebar's server-picker section — the source of truth for what the
-    // sidebar claims the active server is.
+    // Sidebar's server-picker label — the source of truth for what the sidebar
+    // claims the active server is.
     const sidebarPicker = page.getByTestId("server-picker-trigger");
     await expect(sidebarPicker).toBeVisible();
     const initialPickerText = (await sidebarPicker.textContent())?.trim();
     expect(initialPickerText).toBeTruthy();
 
-    // Pick a built-in server row whose label is not already shown in the
-    // sidebar and click its Use button.
-    const useButtons = page.getByTestId("use-server");
-    const useCount = await useButtons.count();
-    expect(useCount).toBeGreaterThan(0);
+    // Pick a server row whose label is not already shown in the sidebar and
+    // click its Use button.
+    const cards = page.getByTestId("server-form");
+    const cardCount = await cards.count();
+    expect(cardCount).toBeGreaterThan(0);
 
     let targetLabel: string | undefined;
-    for (let i = 0; i < useCount; i++) {
-      const card = page.getByTestId("server-form").nth(i);
-      const labelText = (
-        await card.locator("h3").first().textContent()
-      )?.trim();
+    for (let i = 0; i < cardCount; i++) {
+      const card = cards.nth(i);
+      const labelText = (await card.getByTestId("server-name").textContent())?.trim();
       if (labelText && !initialPickerText?.includes(labelText)) {
         targetLabel = labelText;
         await card.getByTestId("use-server").click();
@@ -69,10 +63,10 @@ test.describe("Settings: Use action refreshes the sidebar label", () => {
     }
     expect(targetLabel).toBeTruthy();
 
-    // In mock mode (SETTINGS_ENABLED = false), the sidebar always reflects
-    // ACTIVE_SERVER_CONFIG regardless of what Use wrote to localStorage.
-    // The picker must still show the original active server — not the label
-    // that was just picked — because the client is not actually switching.
-    await expect(sidebarPicker).toContainText(initialPickerText as string);
+    // After Use, the sidebar's active-server label reflects the newly selected
+    // server — no manual page reload by the user required.
+    await expect(page.getByTestId("active-server-label")).toHaveText(
+      targetLabel as string,
+    );
   });
 });
