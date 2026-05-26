@@ -6,7 +6,7 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type {
   Bundle,
   CapabilityStatement,
@@ -228,9 +228,16 @@ export function usePagedSearch<T extends Resource = Resource>(
   const client = useFhirClient();
   const [pageUrl, setPageUrl] = useState<string | undefined>(undefined);
   const paramsKey = JSON.stringify(params ?? {});
-  useEffect(() => {
+
+  // Reset the cursor synchronously during render so the first render after a
+  // search change never fires against a stale Bundle.link URL. A useEffect
+  // would run after the render and miss that first request.
+  const searchKey = `${client.baseUrl}\0${type}\0${paramsKey}`;
+  const [prevSearchKey, setPrevSearchKey] = useState(searchKey);
+  if (searchKey !== prevSearchKey) {
+    setPrevSearchKey(searchKey);
     setPageUrl(undefined);
-  }, [client.baseUrl, type, paramsKey]);
+  }
 
   const query = useQuery<Bundle<T>, Error>({
     queryKey: [
