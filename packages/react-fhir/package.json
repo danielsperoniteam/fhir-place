@@ -80,6 +80,7 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
+    "@lhncbc/ucum-lhc": "4.2.0",
     "dompurify": "^3.2.0"
   },
   "devDependencies": {

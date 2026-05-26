@@ -1,9 +1,11 @@
 import type {
   ElementDefinition,
   ElementDefinitionType,
+  Observation,
   Resource,
   StructureDefinition,
 } from "fhir/r4";
+import { UcumLhcUtils } from "@lhncbc/ucum-lhc";
 import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react";
 import { useStructureDefinition } from "../hooks/queries.js";
 import {
@@ -79,10 +81,44 @@ const skipKeys = new Set([
   "contained",
 ]);
 
+interface ResourceEditorFieldError {
+  path: Path;
+  message: string;
+}
+
+type ResourceEditorClinicalSafetyGuardrail = (
+  draft: Resource,
+) => ResourceEditorFieldError[];
+
+const pathKey = (path: Path): string => path.join(".");
+
+const isValidUcumCode = (code: string): boolean =>
+  UcumLhcUtils.getInstance().validateUnitString(code, false).status === "valid";
+
+const observationValueQuantityUcumCodeGuardrail: ResourceEditorClinicalSafetyGuardrail = (
+  draft,
+) => {
+  if (draft.resourceType !== "Observation") return [];
+  const quantity = (draft as Observation).valueQuantity;
+  const code = quantity?.code?.trim();
+  if (!code || isValidUcumCode(code)) return [];
+  return [
+    {
+      path: ["valueQuantity"],
+      message: `valueQuantity.code "${code}" is not a valid UCUM code; this is a developer-tool warning, not clinical decision support.`,
+    },
+  ];
+};
+
+export const RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS: readonly ResourceEditorClinicalSafetyGuardrail[] = [
+  observationValueQuantityUcumCodeGuardrail,
+];
+
 export function ResourceEditor(props: ResourceEditorProps) {
   const { resource, structureDefinition, onChange, onSave, onCancel, profile } = props;
   const detectedProfile = profile === undefined ? resource.meta?.profile?.[0] : profile;
   const [draft, setDraft] = useState<Resource>(resource);
+  const [fieldErrors, setFieldErrors] = useState<Map<string, string>>(() => new Map());
 
   const sdQuery = useStructureDefinition({ type: resource.resourceType, profile: detectedProfile }, {
     enabled: !structureDefinition,
@@ -107,6 +143,12 @@ export function ResourceEditor(props: ResourceEditorProps) {
             ? pathRemove(prevObj, path)
             : pathSet(prevObj, path, value);
         const asResource = next as unknown as Resource;
+        setFieldErrors((prevErrors) => {
+          if (prevErrors.size === 0) return prevErrors;
+          const nextErrors = new Map(prevErrors);
+          nextErrors.delete(pathKey(path));
+          return nextErrors;
+        });
         onChange?.(asResource);
         return asResource;
       });
@@ -117,7 +159,16 @@ export function ResourceEditor(props: ResourceEditorProps) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onSave) return;
-    await onSave(prune(draft));
+    const pruned = prune(draft);
+    const errors = RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS.flatMap((guardrail) =>
+      guardrail(pruned),
+    );
+    if (errors.length > 0) {
+      setFieldErrors(new Map(errors.map((error) => [pathKey(error.path), error.message])));
+      return;
+    }
+    setFieldErrors(new Map());
+    await onSave(pruned);
   };
 
   if (!sd) {
@@ -153,6 +204,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
         draft={draft as unknown as Record<string, unknown>}
         inputs={inputs}
         pathInputs={pathInputs}
+        fieldErrors={fieldErrors}
         setAt={setAt}
       />
 
@@ -185,6 +237,7 @@ interface FieldGroupProps {
   draft: Record<string, unknown>;
   inputs: TypeInputs;
   pathInputs: PathInputs;
+  fieldErrors: Map<string, string>;
   setAt: (path: Path, value: unknown) => void;
 }
 
@@ -195,6 +248,7 @@ function FieldGroup({
   draft,
   inputs,
   pathInputs,
+  fieldErrors,
   setAt,
 }: FieldGroupProps): ReactNode {
   const children = directChildren(sd, parentPath).filter((el) => {
@@ -216,6 +270,7 @@ function FieldGroup({
           draft={draft}
           inputs={inputs}
           pathInputs={pathInputs}
+          fieldErrors={fieldErrors}
           setAt={setAt}
         />
       ))}
@@ -235,6 +290,7 @@ function Field({
   draft,
   inputs,
   pathInputs,
+  fieldErrors,
   setAt,
 }: FieldProps): ReactNode {
   const path = element.path!;
@@ -253,6 +309,7 @@ function Field({
         draft={draft}
         inputs={inputs}
         pathInputs={pathInputs}
+        fieldErrors={fieldErrors}
         setAt={setAt}
       />
     );
@@ -284,6 +341,7 @@ function Field({
                 draft={draft}
                 inputs={inputs}
                 pathInputs={pathInputs}
+                fieldErrors={fieldErrors}
                 setAt={setAt}
               />
             </ArrayRow>
@@ -312,6 +370,7 @@ function Field({
           draft={draft}
           inputs={inputs}
           pathInputs={pathInputs}
+          fieldErrors={fieldErrors}
           setAt={setAt}
         />
       </dd>
@@ -328,6 +387,7 @@ interface ChoiceFieldProps {
   draft: Record<string, unknown>;
   inputs: TypeInputs;
   pathInputs: PathInputs;
+  fieldErrors: Map<string, string>;
   setAt: (path: Path, value: unknown) => void;
 }
 
@@ -340,6 +400,7 @@ function ChoiceField({
   draft,
   inputs,
   pathInputs,
+  fieldErrors,
   setAt,
 }: ChoiceFieldProps): ReactNode {
   const base = relative.slice(0, -3);
@@ -392,6 +453,7 @@ function ChoiceField({
             draft={draft}
             inputs={inputs}
             pathInputs={pathInputs}
+            fieldErrors={fieldErrors}
             setAt={setAt}
             override={activeValue}
           />
@@ -409,6 +471,7 @@ interface SingleValueInputProps {
   draft: Record<string, unknown>;
   inputs: TypeInputs;
   pathInputs: PathInputs;
+  fieldErrors: Map<string, string>;
   setAt: (path: Path, value: unknown) => void;
   override?: unknown;
 }
@@ -421,10 +484,12 @@ function SingleValueInput({
   draft,
   inputs,
   pathInputs,
+  fieldErrors,
   setAt,
   override,
 }: SingleValueInputProps): ReactNode {
   const value = override !== undefined ? override : pathGet(draft, path);
+  const error = fieldErrors.get(pathKey(path));
 
   if (typeCode === "BackboneElement" || typeCode === "Element") {
     return (
@@ -436,6 +501,7 @@ function SingleValueInput({
           draft={draft}
           inputs={inputs}
           pathInputs={pathInputs}
+          fieldErrors={fieldErrors}
           setAt={setAt}
         />
       </div>
@@ -452,6 +518,7 @@ function SingleValueInput({
         value,
         onChange: (v: unknown) => setAt(path, v),
         context: { path: element.path!, typeCode, element },
+        error,
       })}
     </>
   );

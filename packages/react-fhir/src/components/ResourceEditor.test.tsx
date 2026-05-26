@@ -193,6 +193,94 @@ describe("ResourceEditor", () => {
     });
   });
 
+  it("saves an Observation valueQuantity with a valid UCUM code", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const obs: Observation = {
+      resourceType: "Observation",
+      status: "final",
+      code: { text: "Glucose" },
+      valueQuantity: {
+        value: 93,
+        unit: "milligrams per deciliter",
+        code: "mg/dL",
+      },
+    };
+    wrap(
+      <ResourceEditor
+        resource={obs}
+        structureDefinition={ObservationStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    const saved = onSave.mock.calls[0]?.[0] as Observation;
+    expect(saved.valueQuantity?.code).toBe("mg/dL");
+    expect(screen.queryByTestId("resource-editor-valuequantity-code-error")).toBeNull();
+  });
+
+  it("blocks save when Observation valueQuantity.code is not UCUM", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const obs: Observation = {
+      resourceType: "Observation",
+      status: "final",
+      code: { text: "Glucose" },
+      valueQuantity: {
+        value: 93,
+        unit: "milligrams per deciliter",
+        code: "not-a-ucum",
+      },
+    };
+    wrap(
+      <ResourceEditor
+        resource={obs}
+        structureDefinition={ObservationStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    expect(onSave).not.toHaveBeenCalled();
+    const error = screen.getByTestId("resource-editor-valuequantity-code-error");
+    expect(error).toHaveTextContent("not-a-ucum");
+    expect(error).toHaveTextContent(
+      "developer-tool warning, not clinical decision support",
+    );
+  });
+
+  it("treats Observation valueQuantity.unit as display text only", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const obs: Observation = {
+      resourceType: "Observation",
+      status: "final",
+      code: { text: "Glucose" },
+      valueQuantity: {
+        value: 93,
+        unit: "mg/dL",
+      },
+    };
+    wrap(
+      <ResourceEditor
+        resource={obs}
+        structureDefinition={ObservationStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    const form = screen.getByTestId("resource-editor");
+    await user.clear(within(form).getByLabelText("Unit"));
+    await user.type(within(form).getByLabelText("Unit"), "milligrams per deciliter");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    const saved = onSave.mock.calls[0]?.[0] as Observation;
+    expect(saved.valueQuantity).toMatchObject({
+      unit: "milligrams per deciliter",
+    });
+    expect(saved.valueQuantity?.code).toBeUndefined();
+    expect(screen.queryByTestId("resource-editor-valuequantity-code-error")).toBeNull();
+  });
+
   it("falls back to JSON textarea for datatypes without a built-in input", () => {
     const sdWithMystery = {
       ...PatientStructureDefinition,
