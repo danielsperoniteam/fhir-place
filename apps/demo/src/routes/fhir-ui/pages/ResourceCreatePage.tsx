@@ -17,7 +17,8 @@ const EMPTY_PATIENT_WARNING =
 function warnIfUnidentifiablePatient(draft: Resource): string | null {
   if (draft.resourceType !== "Patient") return null;
   const patient = draft as Patient;
-  if (patient.identifier && patient.identifier.length > 0) return null;
+  if ((patient.identifier ?? []).some((id) => (id.value ?? "").trim() !== ""))
+    return null;
   const named = (patient.name ?? []).some(
     (n) =>
       (n.given ?? []).some((g) => g.trim() !== "") ||
