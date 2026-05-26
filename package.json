@@ -17,7 +17,8 @@
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "release": "pnpm --filter @fhir-place/react-fhir build && changeset publish",
-    "check:readme-goal-task": "node scripts/check-readme-goal-task.mjs"
+    "check:readme-goal-task": "node scripts/check-readme-goal-task.mjs",
+    "test:scripts": "node --test 'scripts/**/*.test.mjs'"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
