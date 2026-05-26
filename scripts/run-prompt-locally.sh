@@ -24,8 +24,6 @@
 #     atomic mkdir lock with stale-PID recovery.
 #   - No ANTHROPIC_API_KEY in env so `claude` uses the OAuth session from
 #     `claude login`. Bill against the Max subscription, not API tokens.
-#   - Errors notify via iMessage on failure (best-effort; never blocks
-#     exit).
 #   - Logs auto-trim to ~14 days.
 #
 # See scripts/local/*.sh for per-prompt drivers that call this.
@@ -61,7 +59,6 @@ done
 REPO_ROOT="${REPO_ROOT:-$HOME/src/fhir-place}"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/logs}"
 PAUSE_FILE="${PAUSE_FILE:-$HOME/.fhir-place-pause}"
-PHONE="${PHONE:-+15082827897}"
 
 # Path: launchd does not inherit shell PATH. Cover Apple Silicon, Intel,
 # npm global, pnpm self-install, and ~/.local/bin.
@@ -150,6 +147,16 @@ WORKTREE_PARENT="$(dirname "$REPO_ROOT")"
 # the API key either. To double-check, explicitly unset here.
 unset ANTHROPIC_API_KEY
 
+# Auth preflight — verify the Claude OAuth session is alive before committing
+# to a full run. Exits early with a clear message rather than burning a run
+# on a silent auth failure.
+AUTH_CHECK=$(claude --print "Reply with the single word: ok" 2>&1 || true)
+if ! echo "$AUTH_CHECK" | grep -qi "^ok"; then
+  echo "ERROR: claude auth check failed — run 'claude login' to refresh the OAuth session" >&2
+  echo "auth check output: $AUTH_CHECK" >&2
+  exit 2
+fi
+
 echo "prompt: $RESOLVED_PROMPT"
 [[ -n "$TARGET" ]] && echo "target: $TARGET"
 echo "claude args: ${CLAUDE_ARGS[*]:-(none)}"
@@ -173,10 +180,6 @@ build_stdin | claude \
   "${CLAUDE_ARGS[@]}"
 RC=$?
 set -e
-
-if [[ $RC -ne 0 ]]; then
-  osascript -e "tell application \"Messages\" to send \"$PROMPT_BASENAME failed rc=$RC run=$RUN_ID — see $LOG_FILE\" to participant \"$PHONE\" of (service 1 whose service type is iMessage)" 2>/dev/null || true
-fi
 
 # Trim old logs (~14 days).
 find "$LOG_DIR" -name "${PROMPT_BASENAME}-*.log" -mtime +14 -delete 2>/dev/null || true

@@ -11,7 +11,7 @@
 #
 # See docs/decisions/0003-agent-safety-rules.md for the safety model.
 # The engineer subagent (.claude/agents/engineer.md) enforces all hard rules;
-# this script just wraps env, locking, logging, and notification.
+# this script just wraps env, locking, and logging.
 
 set -Eeuo pipefail
 
@@ -21,7 +21,6 @@ LOCK_DIR="/tmp/fhir-place-dispatch.lock"
 PAUSE_FILE="$HOME/.fhir-place-pause"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_FILE="$LOG_DIR/engineer-dispatch-$RUN_ID.log"
-PHONE="+15082827897"
 
 # launchd does not inherit shell PATH. Cover Apple Silicon, Intel, npm
 # global, pnpm self-install, and ~/.local/bin.
@@ -68,6 +67,14 @@ fi
 git fetch origin --prune --tags --quiet
 git worktree prune
 
+# Auth preflight — verify the Claude OAuth session before starting.
+AUTH_CHECK=$(claude --print "Reply with the single word: ok" 2>&1 || true)
+if ! echo "$AUTH_CHECK" | grep -qi "^ok"; then
+  echo "ERROR: claude auth check failed — run 'claude login' to refresh the OAuth session" >&2
+  echo "auth check output: $AUTH_CHECK" >&2
+  exit 2
+fi
+
 # Tool allow-list. Defense in depth: engineer subagent has its own hard
 # rules; this just bounds what a prompt-injected dispatcher can call.
 ALLOWED="Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*"
@@ -90,10 +97,6 @@ github tools are configured and the engineer subagent at
 PROMPT
 RC=$?
 set -e
-
-if [[ $RC -ne 0 ]]; then
-  osascript -e "tell application \"Messages\" to send \"engineer-dispatch failed rc=$RC run=$RUN_ID — see $LOG_FILE\" to participant \"$PHONE\" of (service 1 whose service type is iMessage)" || true
-fi
 
 # Trim old logs (~14 days).
 find "$LOG_DIR" -name 'engineer-dispatch-*.log' -mtime +14 -delete 2>/dev/null || true

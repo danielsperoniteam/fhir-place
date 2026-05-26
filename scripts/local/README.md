@@ -9,8 +9,8 @@ just billed against the Claude Max subscription.
 ## Pieces
 
 - [`../run-prompt-locally.sh`](../run-prompt-locally.sh) — the shared
-  runner. Handles lock, log, pause file, dirty-tree refusal, iMessage
-  notification on failure, and `--add-dir` for the worktree parent.
+  runner. Handles lock, log, pause file, dirty-tree refusal, and `--add-dir`
+  for the worktree parent.
   Never sets `ANTHROPIC_API_KEY`, so `claude` falls back to OAuth.
 - `engineer-dispatch.sh` — picks up to 3 ready issues per run, hands
   each to the engineer subagent in a worktree. Runs **twice daily** at
@@ -296,8 +296,8 @@ hour at `:15`, so its overlaps are the only ones to watch.
    start when the working tree is dirty, and engineer-dispatch creates
    its own `wt-*` worktrees. Nothing mutates the primary checkout from
    inside a routine.
-6. **iMessage failure notifications (LOW).** If three routines fail in
-   the same window, you get three notifications. Annoying, not harmful.
+6. **Concurrent failures (LOW).** If three routines fail in the same window,
+   each logs independently to `logs/`. Check logs to diagnose.
 
 ### Current schedule (this PR)
 

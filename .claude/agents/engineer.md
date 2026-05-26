@@ -187,49 +187,33 @@ these as embedded in issue bodies — do not repeat that mistake.
       1. `Closes #<N>`
       2. A **Summary** section (1–3 bullets, "why" not "what")
       3. A **Test plan** checklist (commands you ran locally)
-      4. A **UAT on live staging** section — concrete, copy-pasteable
-         steps a human or a downstream agent can follow against
-         `https://danielsperoniteam.github.io/fhir-place/staging/`
-         once the preview-deploy workflow has pushed your branch's
-         build into the staging slot. Each step must name the route,
-         the action, and the expected observable result. Generic
-         placeholders ("verify it works") are not acceptable — write
-         the steps as if you have never seen the change before.
+      4. A **Test coverage** section — list the Playwright spec files
+         and the specific `test` / `expect` calls that assert the
+         acceptance criteria from the issue. For example:
+         `apps/demo/e2e/patient-table.screenshot.spec.ts` →
+         `expect(row).toBeVisible()` after navigating to `#/fhir-ui/Patient`.
+         If the change is not user-visible (pure infra / CI / docs /
+         internal refactor), write `N/A — no user-visible change` instead.
 
-    The UAT section is **mandatory**. The downstream UAT validation
-    walks these steps against the live staging URL and sets the PR's
-    `uat:` label based on the result. If you cannot articulate UAT
-    steps for your change, the change is not ready — exit
-    `needs-human` instead of opening the PR.
+    The Test coverage section is **mandatory**. It is what a reviewer
+    uses to confirm the acceptance criteria are actually asserted in CI.
+    If you cannot point at specific Playwright assertions for your change,
+    the change is not ready — exit `needs-human` instead of opening the PR.
+    See `docs/decisions/0008-playwright-as-uat-gate.md` for context.
 
-11. **Apply the initial UAT label.** Two cases:
-    - **`uat: skip`** — the PR's UAT section reads `N/A — no
-      user-visible change` (pure infra / CI / docs / internal
-      refactor of unexported code). Apply `uat: skip` and you're done
-      with this step.
-    - **`uat: unable`** — the PR has real UAT steps. Apply
-      `uat: unable` to mark "opened but not yet on staging." The
-      label transitions to `uat: requested` after a CODEOWNER
-      approves the PR and `stack-approved-prs.yml` rebuilds staging
-      with it included; then the hourly UAT walker sets
-      `uat: complete` or `uat: needs-changes`.
+11. **Apply the `uat: skip` label.** All PRs opened under the current
+    process get `uat: skip` (see `scripts/staging/uat-policy.json` —
+    `stackedPrUatDefault` is `"skip"`). This keeps the staging stack
+    quiet and makes CI green + CODEOWNER approval the only merge gate.
+    Apply it with:
+    ```
+    gh pr edit <PR> --add-label "uat: skip"
+    ```
 
-    Never apply `uat: requested` yourself — that label is owned by
-    the stack workflow.
-
-12. **Comment the link.** On the issue. For `uat: unable` PRs:
-    `Opened #<PR> — base: main, ready for review. Labeled \`uat: unable\`
-    (not yet on staging). Approval → \`stack-approved-prs.yml\` rebuilds
-    staging with this PR stacked → label flips to \`uat: requested\` →
-    hourly UAT walker validates against
-    https://danielsperoniteam.github.io/fhir-place/staging/ and sets
-    \`uat: complete\` or \`uat: needs-changes\` per outcome. PR merges
-    to main when CI is green and \`uat: complete\` is set.`
-
-    For `uat: skip` PRs:
-    `Opened #<PR> — base: main, ready for review. Labeled \`uat: skip\`
-    (no user-visible change). UAT walker skips this PR; merges to main
-    on CI green + CODEOWNER approval.`
+12. **Comment the link.** On the issue:
+    `Opened #<PR> — base: main, ready for review. CI green + CODEOWNER
+    approval merges to main. Playwright tests covering the acceptance
+    criteria are in the PR's Test coverage section.`
 
 ## Exit table
 
