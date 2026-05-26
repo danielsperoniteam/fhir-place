@@ -1,4 +1,5 @@
-# Resolves merge conflicts on a PR when a maintainer comments /resolve-conflicts.
+# Resolves merge conflicts on a PR when a maintainer comments /resolve-conflicts
+# or when a trusted workflow dispatches the resolver for a stalled PR.
 #
 # Trigger:       PR comment containing "/resolve-conflicts" on its own line
 # Security gate: commenter must have OWNER, MEMBER, or COLLABORATOR association
@@ -14,29 +15,25 @@ name: PR — resolve merge conflicts
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number whose head branch should be resolved against its base"
+        required: true
 
 permissions:
   contents: write       # push resolved branch
   pull-requests: write  # post acknowledgment and summary comments
-  issues: read          # read PR metadata
+  issues: write         # comments and needs-human labels
   id-token: write       # required by claude-code-action@v1
 
 concurrency:
-  group: pr-resolve-conflicts-${{ github.event.issue.number }}
+  group: pr-resolve-conflicts-${{ github.event.issue.number || inputs.pr_number }}
   cancel-in-progress: false  # never kill a mid-resolution run
 
 jobs:
   resolve:
-    # Only run on PR comments (not plain issue comments) from trusted authors
-    # containing the slash command.
-    if: >-
-      github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '/resolve-conflicts') &&
-      (
-        github.event.comment.author_association == 'OWNER' ||
-        github.event.comment.author_association == 'MEMBER' ||
-        github.event.comment.author_association == 'COLLABORATOR'
-      )
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -46,11 +43,15 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const pull_number = context.eventName === 'workflow_dispatch'
+              ? Number(core.getInput('pr_number'))
+              : context.issue.number;
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.issue.number
+              pull_number
             });
+            core.setOutput('number', String(pull_number));
             core.setOutput('head_ref', pr.data.head.ref);
             core.setOutput('base_ref', pr.data.base.ref);
 
@@ -58,10 +59,11 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const issue_number = Number('${{ steps.pr.outputs.number }}');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number,
               body: [
                 'Conflict resolution started on branch `${{ steps.pr.outputs.head_ref }}`.',
                 "I'll reply here when done, or if I hit something that needs a human decision."
@@ -96,10 +98,10 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            PR #${{ github.event.issue.number }} needs its merge conflicts resolved.
+            PR #${{ steps.pr.outputs.number }} needs its merge conflicts resolved.
 
             Context:
-            - PR number:    ${{ github.event.issue.number }}
+            - PR number:    ${{ steps.pr.outputs.number }}
             - Head branch:  ${{ steps.pr.outputs.head_ref }}
             - Base branch:  ${{ steps.pr.outputs.base_ref }}
             - Working directory is already checked out on `${{ steps.pr.outputs.head_ref }}`

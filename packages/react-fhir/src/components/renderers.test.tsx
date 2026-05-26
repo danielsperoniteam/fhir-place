@@ -1,4 +1,4 @@
-import type { CodeableConcept, Meta } from "fhir/r4";
+import type { CodeableConcept, Dosage, Meta } from "fhir/r4";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -406,5 +406,109 @@ describe("DEFAULT_CODING_PRIORITY", () => {
     expect(paths).toContain("MedicationRequest.medicationCodeableConcept");
     expect(paths).toContain("AllergyIntolerance.code");
     expect(paths).toContain("Immunization.vaccineCode");
+  });
+});
+
+describe("Dosage renderer", () => {
+  const renderer = defaultTypeRenderers.Dosage!;
+  const ctx = { path: "MedicationStatement.dosage", typeCode: "Dosage" };
+
+  it("shows the authored text as the headline and a structured breakdown", () => {
+    const d: Dosage = {
+      text: "1 tab twice daily",
+      timing: { repeat: { frequency: 2, period: 1, periodUnit: "d" } },
+      doseAndRate: [
+        {
+          doseQuantity: {
+            value: 1,
+            unit: "tablet",
+            system: "http://snomed.info/sct",
+            code: "428673006",
+          },
+        },
+      ],
+    };
+    const { container } = render(<>{renderer(d, ctx)}</>);
+    expect(container.textContent).toContain("1 tab twice daily");
+    expect(container.textContent).toContain("Dose");
+    expect(container.textContent).toContain("1 tablet");
+    expect(container.textContent).toContain("Schedule");
+    expect(container.textContent).toContain("2 times per day");
+  });
+
+  it("synthesises a headline when no text is present", () => {
+    const d: Dosage = {
+      route: { text: "oral" },
+      doseAndRate: [{ doseQuantity: { value: 400, unit: "mg" } }],
+      asNeededBoolean: true,
+    };
+    const { container } = render(<>{renderer(d, ctx)}</>);
+    expect(container.textContent).toContain("400 mg oral, as needed");
+    expect(container.textContent).toContain("Route");
+  });
+
+  it("shows the dosage step number from Dosage.sequence", () => {
+    const { container } = render(
+      <>{renderer({ sequence: 2, text: "then..." } as Dosage, ctx)}</>,
+    );
+    expect(container.textContent).toContain("Step");
+    expect(container.textContent).toContain("2");
+  });
+
+  it("labels dose/rate rows with their doseAndRate.type", () => {
+    const d: Dosage = {
+      text: "infusion",
+      doseAndRate: [
+        { type: { text: "ordered" }, doseQuantity: { value: 500, unit: "mg" } },
+        { type: { text: "calculated" }, doseQuantity: { value: 480, unit: "mg" } },
+      ],
+    };
+    const { container } = render(<>{renderer(d, ctx)}</>);
+    expect(container.textContent).toContain("Dose (ordered)");
+    expect(container.textContent).toContain("Dose (calculated)");
+  });
+
+  it("surfaces bounds variants and the lifetime max dose", () => {
+    const duration: Dosage = {
+      text: "course",
+      timing: { repeat: { boundsDuration: { value: 10, unit: "days" } } },
+      maxDosePerLifetime: { value: 4, unit: "g" },
+    };
+    const a = render(<>{renderer(duration, ctx)}</>);
+    expect(a.container.textContent).toContain("Duration");
+    expect(a.container.textContent).toContain("10");
+    expect(a.container.textContent).toContain("Max / lifetime");
+    expect(a.container.textContent).toContain("4");
+
+    const range: Dosage = {
+      text: "course",
+      timing: { repeat: { boundsRange: { low: { value: 7, unit: "d" }, high: { value: 14, unit: "d" } } } },
+    };
+    const b = render(<>{renderer(range, ctx)}</>);
+    expect(b.container.textContent).toContain("Duration");
+    expect(b.container.textContent).toContain("7");
+    expect(b.container.textContent).toContain("14");
+  });
+
+  it("renders an em-dash for an empty dosage", () => {
+    const { container } = render(<>{renderer({} as Dosage, ctx)}</>);
+    expect(container.textContent).toBe("—");
+  });
+});
+
+describe("Timing renderer", () => {
+  const renderer = defaultTypeRenderers.Timing!;
+  const ctx = { path: "ServiceRequest.occurrenceTiming", typeCode: "Timing" };
+
+  it("renders a plain-English summary", () => {
+    const { container } = render(
+      <>{renderer({ repeat: { frequency: 1, period: 8, periodUnit: "h" } }, ctx)}</>,
+    );
+    expect(container.textContent).toBe("once every 8 hours");
+  });
+
+  it("renders an em-dash when empty", () => {
+    const { container } = render(<>{renderer({}, ctx)}</>);
+    expect(container.textContent).toBe("—");
   });
 });

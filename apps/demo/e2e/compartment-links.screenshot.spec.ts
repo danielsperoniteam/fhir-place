@@ -8,7 +8,7 @@ test.describe("Patient compartment links + index pages", () => {
 
     // Every compartment type shows a chip. Fixture-populated counts:
     // Conditions 2, MedicationRequests 3, Allergies 1, Observations 3,
-    // Procedures 1, Encounters 2, Immunizations 1.
+    // Procedures 2, Encounters 2, Immunizations 1.
     await expect(
       page.getByTestId("compartment-chip-Condition"),
     ).toContainText(/Conditions\s*\(2\)/);
