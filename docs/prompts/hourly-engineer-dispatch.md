@@ -65,6 +65,43 @@ For every open PR from a `bot/*` branch with no human review in 7+ days:
 
 Do not close the PR — that's a human's call.
 
+## Step 2b — detect and resolve bot PR conflicts
+
+For every open PR from a `bot/*` branch, check whether it currently
+conflicts with its base branch (`main`):
+
+```
+gh pr view <N> --json number,headRefName,mergeable,mergeStateStatus \
+  --jq '{number, head: .headRefName, mergeable, state: .mergeStateStatus}'
+```
+
+A PR needs conflict resolution when `mergeable == "CONFLICTING"`.
+
+Skip it if any of these are true:
+- It already has `status: needs-human` on its linked issue (already escalated).
+- A comment containing `/resolve-conflicts` was posted on the PR in the
+  last 4 hours (resolution already in flight — check comment timestamps).
+
+For each conflicting PR that passes the skip checks (cap: **3 per run**):
+
+1. Post a comment on the PR:
+
+   ```
+   /resolve-conflicts
+
+   Auto-dispatched by hourly-engineer-dispatch: branch conflicts with main.
+   ```
+
+   This comment triggers the local poll-events daemon to run the
+   `pr-resolve-conflicts` agent against this PR. Do not attempt to resolve
+   the conflict yourself — that is the resolver agent's job.
+
+2. Log the dispatch in the tracking issue body under "This run":
+   `Conflict resolution dispatched: #<N> (<head-branch>)`
+
+Do not pick up a conflicting PR as new dispatch work in Step 4. If a PR
+has conflicts it cannot be worked on until the resolver completes.
+
 ## Step 3 — compute the sprint-scoped ready queue
 
 The canonical work source is the
@@ -113,9 +150,8 @@ For each of the up-to-3 ready issues, **sequentially** (not in parallel):
 
 2. **Announce:** comment on the issue:
    "Picked up by hourly-engineer-dispatch. Branch: `bot/issue-<N>-<slug>`,
-   PR base: `main`. The agent will open a draft PR, promote the branch
-   into `staging` for live UAT against
-   `https://danielsperoniteam.github.io/fhir-place/staging/`, or post a
+   PR base: `main`. The agent will open a draft PR; Playwright CI is the
+   merge gate (no manual staging walk required). It will post a
    `status: needs-human` comment if it cannot complete the work."
 
 3. **Dispatch:** invoke the `engineer` subagent with worktree isolation,
@@ -153,6 +189,7 @@ _Last run: YYYY-MM-DD HH:MM UTC. Pause: add `status: agent-paused` to this issue
 - Skipped: 0
 - Stale claims released: 0
 - Stale bot PRs flagged: 0
+- Conflict resolutions dispatched: 0
 
 ## Last 24h
 

@@ -125,7 +125,14 @@ const readStoredServers = (): ServerConfig[] | null => {
 /**
  * Merge built-ins with stored config so:
  * - Built-ins always exist (even if storage is empty/corrupt).
- * - Stored edits to built-ins (auth, headers, label) survive.
+ * - Stored edits to built-ins survive ONLY for auth/headers (`authMode`,
+ *   `bearerToken`, `headers`). The `label` and `baseUrl` are part of the
+ *   built-in's trust identity — the BUILT-IN badge claims "this is the
+ *   canonical entry shipped with the app" — so they are always taken from
+ *   `BUILTIN_SERVERS` regardless of what storage holds. This stops anything
+ *   that can write `fhir-place:servers` (extensions, dev tooling, a shared
+ *   profile, a previous version that allowed editing) from silently
+ *   retargeting a badged row at a hostile URL.
  * - Custom user-added servers come through unchanged.
  */
 const mergeWithBuiltins = (stored: ServerConfig[] | null): ServerConfig[] => {
@@ -134,7 +141,18 @@ const mergeWithBuiltins = (stored: ServerConfig[] | null): ServerConfig[] => {
   const merged: ServerConfig[] = [];
   for (const builtin of BUILTIN_SERVERS) {
     const override = byId.get(builtin.id);
-    merged.push(override ? { ...override, builtin: true } : { ...builtin });
+    if (override) {
+      merged.push({
+        ...builtin,
+        authMode: override.authMode,
+        ...(override.bearerToken ? { bearerToken: override.bearerToken } : {}),
+        ...(override.headers && override.headers.length > 0
+          ? { headers: override.headers }
+          : {}),
+      });
+    } else {
+      merged.push({ ...builtin });
+    }
     byId.delete(builtin.id);
   }
   for (const remaining of byId.values()) {

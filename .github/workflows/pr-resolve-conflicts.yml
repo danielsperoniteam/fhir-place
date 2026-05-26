@@ -33,19 +33,7 @@ concurrency:
 
 jobs:
   resolve:
-    # Only run on PR comments (not plain issue comments) from trusted authors
-    # containing the slash command, or explicit workflow_dispatch.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event.issue.pull_request != null &&
-        contains(github.event.comment.body, '/resolve-conflicts') &&
-        (
-          github.event.comment.author_association == 'OWNER' ||
-          github.event.comment.author_association == 'MEMBER' ||
-          github.event.comment.author_association == 'COLLABORATOR'
-        )
-      )
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
