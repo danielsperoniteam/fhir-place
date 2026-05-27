@@ -15,6 +15,7 @@ Operational tooling for the fhir-place repo. Most things you touch from here run
 | `check-readme-goal-task.mjs` | One-off checker run from CI. |
 | `discover-test-patients.mjs` | One-off helper for the demo's seed data. |
 | `sync-labels.mjs` | Pure script invoked by `.github/workflows/sync-labels.yml` to keep label vocab in sync with `.github/labels.yml`. |
+| `lint-workflow-permissions.mjs` (+ `.test.mjs`) | Pure script invoked by `.github/workflows/lint-workflows.yml` to assert workflow `permissions:` / `env:` match shell content. See [`README-lint-workflow-permissions.md`](README-lint-workflow-permissions.md). |
 
 ## Quick orientation
 
