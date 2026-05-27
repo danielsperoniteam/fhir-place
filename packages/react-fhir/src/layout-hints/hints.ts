@@ -190,6 +190,9 @@ const ALLERGY_INTOLERANCE: LayoutHint = {
       { title: "Classification", fields: ["type", "category", "onsetDateTime", "recordedDate"] },
       { title: "Notes", fields: ["note"] },
     ],
+    // TODO(#251): BackboneCollection not yet consumed by HintedDetail.
+    // When #251 lands, remove AllergyIntoleranceReactionsContext and let
+    // this collections entry drive the reaction display instead.
     collections: {
       reaction: { mode: "cards", cardTitle: "manifestation" },
     },
