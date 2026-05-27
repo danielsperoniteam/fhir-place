@@ -86,7 +86,7 @@ interface ResourceListConfig<T extends Resource = Resource> {
 
 ### Configured resource types
 
-All 20 types in `TOP_RESOURCE_TYPES` have explicit configs: Patient, AllergyIntolerance, Appointment, CarePlan, CareTeam, Condition, DiagnosticReport, DocumentReference, Encounter, Goal, Immunization, Location, Medication, MedicationRequest, Observation, Organization, Practitioner, Procedure, ServiceRequest, Task.
+`TOP_RESOURCE_TYPES` lists 51 types shown in the sidebar. Of those, 20 have hand-tuned `RESOURCE_LIST_CONFIG` entries: Patient, AllergyIntolerance, Appointment, CarePlan, CareTeam, Condition, DiagnosticReport, DocumentReference, Encounter, Goal, Immunization, Location, Medication, MedicationRequest, Observation, Organization, Practitioner, Procedure, ServiceRequest, Task.
 
 ### Fallback for unconfigured types
 

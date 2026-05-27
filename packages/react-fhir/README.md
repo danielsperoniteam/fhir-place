@@ -122,6 +122,8 @@ const bundle = await fhir.search("Patient", { name: "smith", _count: 20 });
 - **`useValueSetExpansion` / `useCodeLookup`** — `$expand` and `$lookup` operations routed through the terminology client when available.
 - **`useResources` / `useReadReferences`** — batch variants of `useResource` / `useReadReference` that fetch many ids or references in one request.
 - **`useCreateResource`, `useUpdateResource`, `useDeleteResource`** — mutations that invalidate matching read queries on success
+- **`nextPageUrl`** — pure helper that extracts the `rel=next` link from a Bundle, used internally by `useInfiniteSearch` and available for custom pagination loops
+- **`parseBatchableRefs`** — splits an array of FHIR references into `{ type, id }` pairs for batch-fetching; used internally by `useReadReferences`
 
 ```tsx
 import { useResource, useSearch, useUpdateResource } from "@fhir-place/react-fhir/hooks";
@@ -144,6 +146,7 @@ function PatientCard({ id }: { id: string }) {
 - **`elementPathForSearchParam()`, `elementPathFromExpression()`, `kebabToCamel()`** — turn a `SearchParameter` into an element path, preferring `expression` over the kebab→camel convention
 - **`formatHumanName`, `formatAddress`, `formatCoding`, `formatCodeableConcept`, `formatQuantity`, `formatPeriod`, `formatReferenceLabel`** — pure datatype formatters used by the renderers
 - **`coreStructureDefinition`, `lookupCoreDisplay`, `lookupCoreDefinition`, `lookupCoreConcept`, `bundledTypes`, `createDefaultSpecFetcher`** — bundled R4 core SDs and value sets, plus the `SpecFetcher` plumbing for offline / custom fetchers
+- **`setCoreStructureDefinitionFetcher` / `getCoreStructureDefinitionFetcher` / `clearSpecFetcherCache`** — swap in a custom `SpecFetcher`, read the currently active one, or reset it; useful for testing and for apps that serve SDs from a non-standard endpoint
 
 ```ts
 import { walkResource, findElement, pathGet } from "@fhir-place/react-fhir/structure";
@@ -167,6 +170,12 @@ for (const node of walkResource(patient, structureDef)) {
 - **`<HintedDetail>`** — composes a detail page from a `LayoutHint`. Reads each declared field path, looks up the FHIR type via the StructureDefinition, and dispatches through the same renderer map as `<ResourceView>` and `<ResourceTable>`.
 - **`<CodedValue>`** — renders a `Coding` or `CodeableConcept` with a known-system label, hover popover for full codes, and optional `tone`. Re-exports `FHIR_CODE_SYSTEMS`, `isKnown`, `labelForSystem`, `normalizeSystem`, `partition`, `pickPrimary` from `./registry`.
 - **`defaultTypeRenderers` / `defaultTypeInputs`** — the dispatch maps. Every built-in renderer/input is overridable by passing `renderers` / `inputs` props.
+- **`defaultPathInputs`** — path-keyed override map applied on top of `defaultTypeInputs` by `<ResourceEditor>`; currently wires `Observation.dataAbsentReason` to `DataAbsentReasonInput`
+- **`RendererContext`** — the context object passed as the second argument to every `FhirTypeRenderer`; carries the active `renderers` map, `client`, and SD-level metadata for recursive dispatch
+- **`FhirTypeRenderer` / `TypeRenderers`** — the function signature and record-type alias for the renderer dispatch map; needed when writing custom renderers to pass to the `renderers` prop
+- **`DataAbsentReasonInput`** — standalone input for `Observation.dataAbsentReason`; renders a coded picker for the HL7 data-absent-reason value set
+- **`JsonFallbackInput`** — fallback raw-JSON textarea used by `<ResourceEditor>` for types with no registered input widget
+- **`FhirTypeInput` / `TypeInputs` / `PathInputs` / `FhirInputProps` / `InputContext`** — type aliases for writing custom inputs; mirror the renderer type family on the input side
 
 ```tsx
 import { ResourceView, ResourceEditor, ResourceSearch } from "@fhir-place/react-fhir/components";
