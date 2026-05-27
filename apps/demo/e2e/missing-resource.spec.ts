@@ -22,6 +22,23 @@ test.describe("Missing resource detail page", () => {
     ).toBeVisible();
   });
 
+  // #482 — when the resource fetch resolves to a 404, the topbar
+  // resource-action buttons (Fields ▾, Edit, Delete) must not render.
+  // Otherwise Edit on a ghost resource routes to `<Type>/<id>/edit`
+  // and Delete confirms a delete that can only ever 404.
+  test("Patient/<unknown id> hides Fields/Edit/Delete in the topbar", async ({
+    page,
+  }) => {
+    await page.goto("/Patient/this-id-does-not-exist");
+
+    await expect(page.getByTestId("resource-not-found")).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByTestId("resource-actions")).toHaveCount(0);
+    await expect(page.getByTestId("edit-resource")).toHaveCount(0);
+    await expect(page.getByTestId("delete-resource")).toHaveCount(0);
+  });
+
   // The 5xx test runs in a context with service workers blocked so
   // `page.route` intercepts FHIR API calls directly. With MSW running,
   // the in-app service worker would catch the request first and return

@@ -171,6 +171,7 @@ function Shell() {
 function StatusBar() {
   return (
     <div
+      data-testid="status-bar"
       style={{
         padding: "6px 20px",
         borderTop: "1px solid var(--border)",
@@ -190,10 +191,18 @@ function StatusBar() {
         />
         FHIR R4
       </span>
-      <span style={{ color: "var(--border-strong)" }}>·</span>
-      <span>← → navigate</span>
-      <span>·</span>
-      <span>⏎ open</span>
+      {/* Keyboard hints are pointer-only. Hidden at ≤640px (touch viewports)
+          by the .status-bar-hints CSS rule in index.css. */}
+      <span
+        className="status-bar-hints"
+        data-testid="status-bar-hints"
+        style={{ display: "inline-flex", alignItems: "center", gap: 16 }}
+      >
+        <span style={{ color: "var(--border-strong)" }}>·</span>
+        <span>← → navigate</span>
+        <span>·</span>
+        <span>⏎ open</span>
+      </span>
       <div style={{ flex: 1 }} />
       <span style={{ color: "var(--text-subtle)" }}>fhir-place</span>
     </div>

@@ -5,9 +5,10 @@ import {
   SortPicker,
   useFhirClient,
   usePagedSearch,
+  useResource,
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
-import type { Reference, Resource } from "fhir/r4";
+import type { Patient, Reference, Resource } from "fhir/r4";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
@@ -18,6 +19,7 @@ import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { loadAnthropicApiKey } from "../../../config.js";
 import {
   RESOURCE_LIST_CONFIG,
+  formatPatientName,
   genericFormatPrimary,
   isTopResourceType,
   type ResourceListColumn,
@@ -240,6 +242,21 @@ export function ResourceListPage() {
   };
   const patientId = searchParams.get("patient") ?? undefined;
 
+  // Fetch the patient that scopes this compartment view so we can show a
+  // human-readable name in place of the raw UUID. The lookup only fires
+  // when we're actually in a compartment view; on unscoped list pages
+  // `enabled: false` keeps it silent. The page must not block on this:
+  // if the patient hasn't loaded yet (or the read fails), fall back to
+  // the UUID so the back-link and chip are still useful.
+  const { data: compartmentPatient } = useResource<Patient>(
+    "Patient",
+    patientId,
+    { enabled: Boolean(patientId) },
+  );
+  const patientLabel = compartmentPatient
+    ? formatPatientName(compartmentPatient)
+    : patientId;
+
   const config: ResourceListConfig | undefined = isTopResourceType(resourceType)
     ? RESOURCE_LIST_CONFIG[resourceType]
     : undefined;
@@ -403,9 +420,10 @@ export function ResourceListPage() {
         <div style={{ padding: "12px 24px 0" }}>
           <Link
             to={`/fhir-ui/Patient/${patientId}`}
+            title={`Patient/${patientId}`}
             style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "none" }}
           >
-            ← Back to Patient/{patientId}
+            ← Back to {patientLabel}
           </Link>
         </div>
       )}
@@ -435,13 +453,14 @@ export function ResourceListPage() {
           </span>
           {patientId && (
             <span
+              title={`Patient/${patientId}`}
               style={{
                 fontSize: 12,
                 color: "var(--text-muted)",
-                fontFamily: CC_MONO,
+                fontFamily: compartmentPatient ? CC_FONT : CC_MONO,
               }}
             >
-              · Patient/<span style={{ color: "var(--accent-text)" }}>{patientId}</span>
+              · <span style={{ color: "var(--accent-text)" }}>{patientLabel}</span>
             </span>
           )}
           {showCreate && (

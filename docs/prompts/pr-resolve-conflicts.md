@@ -32,11 +32,39 @@ See also:
 
 ---
 
+## Step 0 — create an isolated worktree
+
+Before touching any branch, set up a worktree so this run never disturbs the
+primary checkout:
+
+```bash
+REPO_ROOT=$(pwd)
+HEAD_REF=$(gh pr view <pr_number> --json headRefName --jq '.headRefName')
+BASE_REF=$(gh pr view <pr_number> --json baseRefName --jq '.baseRefName')
+WORKTREE=../wt-pr-<pr_number>
+git fetch origin
+# Create local tracking branch if it doesn't exist, then add worktree.
+git branch --track "$HEAD_REF" "origin/$HEAD_REF" 2>/dev/null || true
+git worktree add "$WORKTREE" "$HEAD_REF"
+cd "$WORKTREE"
+```
+
+All subsequent git commands run inside `$WORKTREE`. At every exit point
+(success or needs-human), remove the worktree before finishing. Use
+`git -C "$REPO_ROOT"` — `cd ..` from inside the worktree lands in the
+parent of the main checkout, which is not a git repository:
+
+```bash
+git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>
+```
+
+---
+
 ## Step 1 — recreate the conflict state
 
 ```
 git fetch origin
-git merge origin/<base_ref>
+git merge "origin/$BASE_REF"
 ```
 
 If the merge exits cleanly (return code 0, no conflict markers), there is
@@ -185,7 +213,8 @@ To retry after resolving these manually, comment `/resolve-conflicts` again.
 ```
 
 3. Add the `status: needs-human` label to the PR.
-4. Exit without pushing anything.
+4. Remove the worktree: `git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>`
+5. Exit without pushing anything.
 
 ---
 
@@ -193,8 +222,9 @@ To retry after resolving these manually, comment `/resolve-conflicts` again.
 
 - Run git commands via Bash. Use the MCP GitHub tools only for reading PR
   metadata and posting comments.
-- The working directory is already on `<head_ref>` with a clean checkout;
-  do not switch branches.
+- All git work happens inside the `../wt-pr-<pr_number>` worktree created in
+  Step 0. Do not modify the primary checkout.
+- Always remove the worktree at every exit path (success and needs-human).
 - The workflow's `concurrency` group ensures only one resolution run executes
   per PR at a time.
 - If you find a bug in this prompt or in the workflow, open a regular PR to

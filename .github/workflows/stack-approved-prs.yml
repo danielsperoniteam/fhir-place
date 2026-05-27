@@ -177,14 +177,9 @@ jobs:
                   "If the resolver finds a binary/generated conflict or an ambiguous product decision, it will stop and escalate to @danielsperoni with the files that need human judgment.")
                 gh pr comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "$BODY"
               fi
-              if ! gh workflow run staging-stack-agent.yml \
-                --repo "$GITHUB_REPOSITORY" \
-                --ref main \
-                -f conflict_pr="$NUM" \
-                -f conflict_sha="$REF_SHA"; then
-                gh pr comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "@danielsperoni staging conflict resolver dispatch failed for \`$REF_SHA\`. The PR is still not on staging and needs human intervention."
-                exit 1
-              fi
+              # Local poll-events daemon picks up the <!-- staging-stack-agent-dispatch -->
+              # comment above and runs the resolver via Claude Max subscription (no API key needed).
+              echo "Conflict marker posted — local daemon will resolve via Max subscription."
               CONFLICT_DISPATCHED=1
               echo "::endgroup::"
               break

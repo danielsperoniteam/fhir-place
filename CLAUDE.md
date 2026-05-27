@@ -15,7 +15,16 @@
 - Treat GitHub issue acceptance criteria as the source of truth.
 - After changes, report: files changed, tests run, risks, and follow-ups.
 
+## Merge gate
+
+CI green + CODEOWNER approval = mergeable. No `uat: complete` label required.
+See `docs/decisions/0008-playwright-as-uat-gate.md` for why.
+
 ## E2E test maintenance
+
+Playwright tests are the UAT gate. Every PR that changes user-visible
+behavior must ship a corresponding test update in the same PR — this is
+what replaces a manual staging walk.
 
 - Every user-facing change needs a test update in the same PR.
 - New page or route → new spec in `apps/demo/e2e/`.
