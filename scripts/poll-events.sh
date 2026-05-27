@@ -305,16 +305,18 @@ poll_once() {
       head=$(echo "$row" | jq -r '.head')
       mergeable=$(echo "$row" | jq -r '.mergeable')
       [[ "$mergeable" != "DIRTY" ]] && continue
-      # Dedup: skip if a resolver was dispatched in the last 2 hours.
+      # Dedup: skip if a resolver ran or was dispatched in the last 2 hours.
+      # Match both manual /resolve-conflicts comments and the bot's own
+      # <!-- resolve-conflicts:bot --> marker left in its summary comment.
       local two_hours_ago
       two_hours_ago=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
                       || date -u --date='2 hours ago' +%Y-%m-%dT%H:%M:%SZ)
       local recent_resolver
       recent_resolver=$(gh api "repos/$REPO/issues/$num/comments?since=$two_hours_ago" \
-        --jq '[.[] | select(.body | contains("/resolve-conflicts"))] | length' \
+        --jq '[.[] | select(.body | (contains("/resolve-conflicts") or contains("<!-- resolve-conflicts:bot -->")))] | length' \
         2>/dev/null || echo '0')
       if [[ "$recent_resolver" -gt 0 ]]; then
-        echo "PR #$num conflict detected but resolver recently dispatched — skip"
+        echo "PR #$num conflict detected but resolver recently ran — skip"
         continue
       fi
       echo "PR #$num ($head) conflicts with main → auto resolve-conflicts"
