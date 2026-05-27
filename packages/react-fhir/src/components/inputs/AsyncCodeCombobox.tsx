@@ -166,7 +166,7 @@ export const AsyncCodeCombobox = ({
           </button>
         )}
       </div>
-      {isError && (
+      {isError && options.length === 0 && (
         <p role="alert" className="mt-1 text-xs text-amber-700">
           Terminology server unreachable. Code lookup is unavailable; enter a
           code manually or check the terminology server in Settings.
@@ -183,7 +183,7 @@ export const AsyncCodeCombobox = ({
             <li className="px-2 py-1 text-slate-400">Type to search…</li>
           ) : isFetching ? (
             <li className="px-2 py-1 text-slate-400">Searching…</li>
-          ) : isError ? (
+          ) : isError && options.length === 0 ? (
             <li className="px-2 py-1 text-amber-700">
               Terminology server unreachable
             </li>
