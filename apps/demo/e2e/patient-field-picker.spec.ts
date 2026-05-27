@@ -212,4 +212,46 @@ test.describe("patient field-picker options", () => {
     await expect(page.getByTestId("resource-view")).toBeVisible();
     await expect(page.getByRole("button", { name: /^fields$/i })).toHaveCount(0);
   });
+
+  test("Columns picker panel stays within the viewport on a 375px mobile viewport", async ({
+    page,
+  }) => {
+    // Regression for #656: panel was right-anchored to a button near the left
+    // edge of a narrow viewport, causing the panel's left edge to extend off-screen.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await resetPrefs(page);
+    await page.goto("/Patient");
+    await page.getByTestId("layout-table").click();
+    await expect(page.getByTestId("resource-table")).toBeVisible();
+
+    await page.getByRole("button", { name: /columns/i }).click();
+    const panel = page.getByTestId("column-picker-panel");
+    await expect(panel).toBeVisible();
+
+    const box = await panel.boundingBox();
+    expect(box).not.toBeNull();
+    // Left edge must be at least 0px (inside the viewport).
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    // Right edge must not exceed the viewport width.
+    expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+  });
+
+  test("Columns picker panel is fully visible on desktop 1280px viewport (no regression)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await resetPrefs(page);
+    await page.goto("/Patient");
+    await page.getByTestId("layout-table").click();
+    await expect(page.getByTestId("resource-table")).toBeVisible();
+
+    await page.getByRole("button", { name: /columns/i }).click();
+    const panel = page.getByTestId("column-picker-panel");
+    await expect(panel).toBeVisible();
+
+    const box = await panel.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
+  });
 });
