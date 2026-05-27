@@ -70,10 +70,11 @@ describe("HintedDetail", () => {
     );
     const hero = screen.getByTestId("hinted-detail-hero");
     expect(hero).toBeInTheDocument();
-    // code / clinicalStatus / verificationStatus / criticality
+    // code / clinicalStatus in hero; criticality moves to Reactions section
     expect(screen.getByTestId("hinted-detail-hero-code")).toBeInTheDocument();
     expect(screen.getByTestId("hinted-detail-hero-clinicalStatus")).toBeInTheDocument();
-    expect(screen.getByTestId("hinted-detail-hero-criticality")).toBeInTheDocument();
+    // criticality is surfaced in the dedicated Reactions section, not the hero
+    expect(screen.queryByTestId("hinted-detail-hero-criticality")).not.toBeInTheDocument();
   });
 
   it("renders sections with field labels and values", () => {
@@ -147,7 +148,12 @@ describe("HintedDetail", () => {
     // Hero is rendered but every individual hero field is missing → no
     // hero spans render.
     expect(screen.queryByTestId("hinted-detail-hero-code")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("hinted-detail-hero-criticality")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hinted-detail-hero-clinicalStatus")).not.toBeInTheDocument();
+    // The Reactions guardrail section also does not render when none of its
+    // fields (criticality, verificationStatus, reaction) are present.
+    expect(
+      screen.queryByTestId("hinted-detail-section-reactions"),
+    ).not.toBeInTheDocument();
     // Sections without any present fields collapse entirely.
     expect(
       screen.queryByTestId("hinted-detail-section-classification"),

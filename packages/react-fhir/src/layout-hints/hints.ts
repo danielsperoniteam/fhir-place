@@ -184,7 +184,7 @@ const ALLERGY_INTOLERANCE: LayoutHint = {
     sortBy: "recordedDate",
   },
   detail: {
-    hero: ["code", "clinicalStatus", "verificationStatus", "criticality"],
+    hero: ["code", "clinicalStatus"],
     sections: [
       { title: "Subject", fields: ["patient", "encounter", "recorder", "asserter"] },
       { title: "Classification", fields: ["type", "category", "onsetDateTime", "recordedDate"] },
