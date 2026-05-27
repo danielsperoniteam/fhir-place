@@ -42,7 +42,7 @@ REPO_ROOT=$(pwd)
 HEAD_REF=$(gh pr view <pr_number> --json headRefName --jq '.headRefName')
 BASE_REF=$(gh pr view <pr_number> --json baseRefName --jq '.baseRefName')
 WORKTREE=../wt-pr-<pr_number>
-git fetch origin
+git fetch origin "$HEAD_REF" main
 # Create local tracking branch if it doesn't exist, then add worktree.
 git branch --track "$HEAD_REF" "origin/$HEAD_REF" 2>/dev/null || true
 git worktree add "$WORKTREE" "$HEAD_REF"
@@ -177,6 +177,7 @@ Use the MCP GitHub tools to post a comment on PR #<pr_number> with this
 structure:
 
 ```
+<!-- resolve-conflicts:bot -->
 Merge conflicts resolved. Summary:
 
 **Files resolved:**
