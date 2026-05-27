@@ -267,8 +267,8 @@ function Field({
     const items = Array.isArray(currentValue) ? currentValue : [];
     return (
       <Fragment>
-        <Dt label={label} path={path} />
-        <dd className="space-y-2">
+        <FieldLabel label={label} path={path} />
+        <div className="space-y-2">
           {items.map((_, i) => (
             <ArrayRow
               key={i}
@@ -295,15 +295,15 @@ function Field({
           >
             + Add {relative}
           </button>
-        </dd>
+        </div>
       </Fragment>
     );
   }
 
   return (
     <Fragment>
-      <Dt label={label} path={path} />
-      <dd>
+      <FieldLabel label={label} path={path} />
+      <div>
         <SingleValueInput
           sd={sd}
           element={element}
@@ -314,7 +314,7 @@ function Field({
           pathInputs={pathInputs}
           setAt={setAt}
         />
-      </dd>
+      </div>
     </Fragment>
   );
 }
@@ -368,8 +368,8 @@ function ChoiceField({
 
   return (
     <Fragment>
-      <Dt label={label} path={element.path!} />
-      <dd className="space-y-2">
+      <FieldLabel label={label} path={element.path!} />
+      <div className="space-y-2">
         <select
           data-testid={`choice-${base}`}
           className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
@@ -396,7 +396,7 @@ function ChoiceField({
             override={activeValue}
           />
         )}
-      </dd>
+      </div>
     </Fragment>
   );
 }
@@ -457,11 +457,14 @@ function SingleValueInput({
   );
 }
 
-function Dt({ label, path }: { label: string; path: string }) {
+// Uses div+label instead of dt/dd so that nested BackboneElement fields
+// (rendered via FieldGroup inside a parent field) never produce dt/dd
+// outside a dl — which is invalid HTML and triggers React validateDOMNesting.
+function FieldLabel({ label, path }: { label: string; path: string }) {
   return (
-    <dt className="font-medium text-slate-600" title={path}>
+    <div className="font-medium text-slate-600" title={path}>
       {label}
-    </dt>
+    </div>
   );
 }
 
