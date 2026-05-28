@@ -463,6 +463,7 @@ export function ResourceListPage() {
       {/* Search card */}
       <div style={{ padding: "16px 24px 0" }}>
         <div
+          className="search-params-panel"
           style={{
             background: "var(--surface)",
             border: "1px solid var(--border)",

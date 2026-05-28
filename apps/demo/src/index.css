@@ -197,4 +197,12 @@ body, .cc-shell * {
   .topbar-settings-link {
     display: none !important;
   }
+
+  /* The search-params panel can stack 6+ single-column fields on mobile and
+     fill the entire viewport, pushing resource rows below the fold with no
+     scroll affordance. Cap it so the page remains reachable by scrolling. */
+  .search-params-panel {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
 }
