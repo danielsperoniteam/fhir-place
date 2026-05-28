@@ -6,6 +6,7 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 import type {
   Bundle,
   CapabilityStatement,
@@ -147,6 +148,35 @@ export const nextPageUrl = <T extends Resource>(
   bundle?.link?.find((l) => l.relation === "next")?.url;
 
 /**
+ * Page-navigation links a Bundle advertises. Per FHIR R4 §3.1.0.5 a server
+ * MAY populate any of `first`, `previous`/`prev`, `next`, `last` — none are
+ * required. Cursor servers (Epic, parts of HealthLake) typically emit `next`
+ * only; offset servers (HAPI, Smile CDR) usually emit all four. URLs are
+ * passed through verbatim because cursor tokens are opaque.
+ */
+export interface BundlePageLinks {
+  first?: string;
+  previous?: string;
+  next?: string;
+  last?: string;
+}
+
+export const bundlePageLinks = <T extends Resource>(
+  bundle: Bundle<T> | undefined,
+): BundlePageLinks => {
+  const out: BundlePageLinks = {};
+  for (const link of bundle?.link ?? []) {
+    if (!link.url) continue;
+    // Accept both spellings of "previous" — RFC 5988 says "prev", servers split.
+    if (link.relation === "first") out.first = link.url;
+    else if (link.relation === "previous" || link.relation === "prev") out.previous = link.url;
+    else if (link.relation === "next") out.next = link.url;
+    else if (link.relation === "last") out.last = link.url;
+  }
+  return out;
+};
+
+/**
  * Page-aware search. Each page is a FHIR Bundle; `fetchNextPage` follows
  * `Bundle.link[rel=next]` (an absolute URL on most servers including HAPI).
  * `hasNextPage` mirrors the presence of that link on the most recent page.
@@ -168,6 +198,72 @@ export function useInfiniteSearch<T extends Resource = Resource>(
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => nextPageUrl(lastPage) ?? undefined,
   });
+}
+
+export interface UsePagedSearchResult<T extends Resource> {
+  bundle: Bundle<T> | undefined;
+  isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: Error | null;
+  links: BundlePageLinks;
+  /** Navigate to a specific page link. No-op when the link is absent. */
+  goTo: (url: string | undefined) => void;
+}
+
+/**
+ * Single-page search that follows `Bundle.link` rels for navigation.
+ *
+ * Surfaces one Bundle at a time plus the URLs the server advertised — use
+ * this when the UI exposes discrete First/Prev/Next/Last controls and needs
+ * to disable buttons for rels the server didn't emit. Forward-only servers
+ * degrade to a Next-only UI. Changing `type` or `params` resets to the
+ * server-generated first page. See {@link useInfiniteSearch} for the
+ * append-style "Load more" pattern.
+ */
+export function usePagedSearch<T extends Resource = Resource>(
+  type: string,
+  params?: SearchParams,
+): UsePagedSearchResult<T> {
+  const client = useFhirClient();
+  const [pageUrl, setPageUrl] = useState<string | undefined>(undefined);
+  const paramsKey = JSON.stringify(params ?? {});
+
+  // Reset the cursor synchronously during render so the first render after a
+  // search change never fires against a stale Bundle.link URL. A useEffect
+  // would run after the render and miss that first request.
+  const searchKey = `${client.baseUrl}\0${type}\0${paramsKey}`;
+  const [prevSearchKey, setPrevSearchKey] = useState(searchKey);
+  if (searchKey !== prevSearchKey) {
+    setPrevSearchKey(searchKey);
+    setPageUrl(undefined);
+  }
+
+  const query = useQuery<Bundle<T>, Error>({
+    queryKey: [
+      ...fhirQueryKeys.search(client.baseUrl, type, params),
+      "paged",
+      pageUrl ?? "__first__",
+    ] as const,
+    queryFn: ({ signal }) =>
+      pageUrl
+        ? client.request<Bundle<T>>({ path: pageUrl, signal })
+        : client.search<T>(type, params, { signal }),
+  });
+
+  const goTo = useCallback((url: string | undefined) => {
+    if (url) setPageUrl(url);
+  }, []);
+
+  return {
+    bundle: query.data,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    isError: query.isError,
+    error: query.error,
+    links: bundlePageLinks(query.data),
+    goTo,
+  };
 }
 
 export type StructureDefinitionInput = string | { type: string; profile?: string | null };
