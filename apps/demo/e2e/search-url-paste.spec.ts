@@ -39,6 +39,23 @@ test.describe("Paste a FHIR search URL", () => {
     ).toBeVisible();
   });
 
+  test("repeated params survive hydration as AND filters", async ({ page }) => {
+    await page.goto("/fhir-ui/Patient");
+
+    const paste = page.getByTestId("search-url-paste");
+    await paste
+      .getByTestId("search-url-paste-input")
+      .fill("/Patient?identifier=a&identifier=b");
+    await paste.getByTestId("search-url-paste-load").click();
+
+    // Both AND values survive in the page URL, which is what the active
+    // search hydrates from (array-preserving paramsFromUrl — see the unit
+    // test in ResourceListPage.test.ts). The search *form* renders one input
+    // per param and the preview mirrors the form, an acknowledged v0 limit
+    // in #145.
+    await expect(page).toHaveURL(/\/fhir-ui\/Patient\?identifier=a&identifier=b$/);
+  });
+
   test("invalid input shows an inline error instead of crashing", async ({
     page,
   }) => {

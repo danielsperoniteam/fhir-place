@@ -206,7 +206,7 @@ const collectPaths = (value: unknown, prefix = "", out = new Set<string>()): Set
   return out;
 };
 
-const paramsFromUrl = (
+export const paramsFromUrl = (
   urlParams: URLSearchParams,
   pageSize: number,
   patientId?: string,
@@ -214,7 +214,13 @@ const paramsFromUrl = (
   const out: SearchParams = { _count: pageSize };
   for (const [k, v] of urlParams.entries()) {
     if (k === "patient") continue;
-    out[k] = v;
+    // Repeated keys are FHIR AND semantics (e.g. identifier=a&identifier=b,
+    // often arriving via the paste-a-URL box) — collapse to an array rather
+    // than letting the last value win.
+    const existing = out[k];
+    if (existing === undefined) out[k] = v;
+    else if (Array.isArray(existing)) existing.push(v);
+    else out[k] = [existing, v];
   }
   if (patientId) out.patient = patientId;
   return out;
