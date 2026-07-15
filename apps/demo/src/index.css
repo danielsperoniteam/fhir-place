@@ -206,3 +206,55 @@ body, .cc-shell * {
     overflow-y: auto;
   }
 }
+
+/* ─── Token-aware card + spec-driven editor theming (#361) ──────────────── */
+/* Card surface that follows the Clean Clinical tokens in both themes. */
+.cc-card {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* The spec-driven <ResourceEditor> in @fhir-place/react-fhir ships
+   light-only Tailwind utilities. Until the library grows theme tokens,
+   re-map those utilities to the demo's dark palette when dark mode is on,
+   scoped to the editor so nothing else is affected. */
+.dark [data-testid="resource-editor"] .bg-white {
+  background-color: var(--surface);
+}
+.dark [data-testid="resource-editor"] .bg-slate-50 {
+  background-color: var(--sunken);
+}
+.dark [data-testid="resource-editor"] .bg-slate-100 {
+  background-color: var(--chip);
+}
+.dark [data-testid="resource-editor"] .border-slate-200,
+.dark [data-testid="resource-editor"] .border-slate-300 {
+  border-color: var(--border-strong);
+}
+.dark [data-testid="resource-editor"] .text-slate-400,
+.dark [data-testid="resource-editor"] .text-slate-500 {
+  color: var(--text-subtle);
+}
+.dark [data-testid="resource-editor"] .text-slate-600,
+.dark [data-testid="resource-editor"] .text-slate-700,
+.dark [data-testid="resource-editor"] .text-slate-800 {
+  color: var(--text-muted);
+}
+.dark [data-testid="resource-editor"] input,
+.dark [data-testid="resource-editor"] select,
+.dark [data-testid="resource-editor"] textarea {
+  background-color: var(--sunken);
+  color: var(--text);
+  border-color: var(--border-strong);
+  color-scheme: dark;
+}
+.dark [data-testid="resource-editor"] .bg-amber-50 {
+  background-color: var(--warn-soft);
+}
+.dark [data-testid="resource-editor"] .border-amber-300 {
+  border-color: var(--warn);
+}
+.dark [data-testid="resource-editor"] .text-amber-800 {
+  color: var(--warn);
+}
