@@ -23,6 +23,12 @@ export interface ReverseReferencesProps {
   onNavigate?: (resourceType: string, id: string) => void;
   /** Rows shown per section before "Show all". Default 10. */
   pageSize?: number;
+  /**
+   * Safety cap on pages fetched per "Show all" click (default 100). When a
+   * group is larger than `maxAutoPages × page size`, the drain pauses and
+   * the Show-all control reappears to continue.
+   */
+  maxAutoPages?: number;
 }
 
 /**
@@ -41,6 +47,7 @@ export function ReverseReferences({
   hrefFor,
   onNavigate,
   pageSize = 10,
+  maxAutoPages = 100,
 }: ReverseReferencesProps) {
   const pairs = includes ?? defaultRevIncludes(resourceType);
   const target = `${resourceType}/${id}`;
@@ -73,6 +80,7 @@ export function ReverseReferences({
           hrefFor={hrefFor}
           onNavigate={onNavigate}
           pageSize={pageSize}
+          maxAutoPages={maxAutoPages}
           maxCount={maxCount}
           onCount={(n) =>
             setCounts((prev) =>
@@ -94,6 +102,7 @@ interface RevIncludeSectionProps {
   hrefFor?: (resourceType: string, id: string) => string;
   onNavigate?: (resourceType: string, id: string) => void;
   pageSize: number;
+  maxAutoPages: number;
   maxCount: number;
   onCount: (n: number) => void;
 }
@@ -105,11 +114,12 @@ function RevIncludeSection({
   hrefFor,
   onNavigate,
   pageSize,
+  maxAutoPages,
   maxCount,
   onCount,
 }: RevIncludeSectionProps) {
   const [open, setOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [draining, setDraining] = useState(false);
 
   const countQuery = useSearch(type, {
     [param]: target,
@@ -132,20 +142,29 @@ function RevIncludeSection({
     { [param]: target, _count: pageSize },
     { enabled: open },
   );
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = listQuery;
+  const { hasNextPage, fetchNextPage } = listQuery;
 
   // Sequentially follow next links until the server stops emitting them.
   // Driven by each fetch's returned state, not an effect on
   // isFetchingNextPage — React batches that flag's true→false transition
   // away when pages resolve quickly, which would stall an effect-based
-  // drain after one page. Hard cap as a defence against a server that
-  // pathologically always returns a next link.
+  // drain after one page. `maxAutoPages` caps each click as a defence
+  // against a server that pathologically always returns a next link; when
+  // the cap pauses the drain early, `draining` resets so the Show-all
+  // control reappears to continue rather than stranding an infinite
+  // loading state.
   const drainAll = async () => {
-    setShowAll(true);
-    const maxPages = 100;
-    let res = await fetchNextPage();
-    while (res.hasNextPage && !res.isError && (res.data?.pages.length ?? 0) < maxPages) {
-      res = await fetchNextPage();
+    setDraining(true);
+    try {
+      let fetched = 0;
+      let res = await fetchNextPage();
+      fetched += 1;
+      while (res.hasNextPage && !res.isError && fetched < maxAutoPages) {
+        res = await fetchNextPage();
+        fetched += 1;
+      }
+    } finally {
+      setDraining(false);
     }
   };
 
@@ -242,7 +261,7 @@ function RevIncludeSection({
                 })}
               </ul>
             )}
-            {!showAll && hasNextPage && (
+            {!draining && hasNextPage && (
               <button
                 type="button"
                 onClick={() => void drainAll()}
@@ -252,7 +271,7 @@ function RevIncludeSection({
                 Show all {typeof total === "number" ? total : ""}
               </button>
             )}
-            {showAll && (hasNextPage || isFetchingNextPage) && (
+            {draining && (
               <p
                 data-testid={`revref-loading-more-${type}-${param}`}
                 className="text-xs text-[var(--text-muted,#64748b)]"

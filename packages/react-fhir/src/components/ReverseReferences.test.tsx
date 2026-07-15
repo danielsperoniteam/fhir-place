@@ -133,6 +133,63 @@ describe("ReverseReferences", () => {
     // click was intercepted (preventDefault) rather than followed.
   });
 
+  it("re-surfaces the Show-all control when the drain pauses at maxAutoPages", async () => {
+    const all = ["o1", "o2", "o3", "o4", "o5"].map((id) => ({
+      resource: { resourceType: "Observation", id },
+    }));
+    const page = (offset: number) => ({
+      resourceType: "Bundle",
+      type: "searchset",
+      total: all.length,
+      entry: all.slice(offset, offset + 1),
+      link:
+        offset + 1 < all.length
+          ? [{ relation: "next", url: `${BASE}/Observation?_page=${offset + 1}` }]
+          : [],
+    });
+    server.use(
+      http.get(`${BASE}/Observation`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("_summary") === "count") {
+          return HttpResponse.json(countBundle(all.length));
+        }
+        return HttpResponse.json(page(Number(url.searchParams.get("_page") ?? 0)));
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <ReverseReferences
+        resourceType="Patient"
+        id="ada"
+        includes={[["Observation", "subject"]]}
+        pageSize={1}
+        maxAutoPages={2}
+      />,
+      { wrapper: wrap() },
+    );
+
+    await user.click(await screen.findByText("Observation — subject"));
+    await screen.findByText("Observation/o1");
+
+    // First click drains 2 more pages (the cap), then pauses: no stuck
+    // "Loading all…" line, and the control returns to continue (Codex
+    // review on #729).
+    await user.click(screen.getByTestId("revref-show-all-Observation-subject"));
+    await screen.findByText("Observation/o3", {}, { timeout: 5000 });
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("revref-loading-more-Observation-subject"),
+      ).toBeNull(),
+    );
+    expect(screen.queryByText("Observation/o4")).toBeNull();
+    const again = screen.getByTestId("revref-show-all-Observation-subject");
+
+    // Second click finishes the drain.
+    await user.click(again);
+    await screen.findByText("Observation/o5", {}, { timeout: 5000 });
+  });
+
   it("follows next links after Show all, even when the server caps _count", async () => {
     // Server behaves like a capped real-world server: every page holds at
     // most 2 rows regardless of the requested _count, with a Bundle

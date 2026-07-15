@@ -1,4 +1,4 @@
-import type { CodeableConcept, Dosage, Meta } from "fhir/r4";
+import type { CodeableConcept, Coding, Dosage, Meta } from "fhir/r4";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -57,6 +57,15 @@ describe("Quantity renderer (#368)", () => {
     const { container } = render(
       <>{renderer({ value: 93, unit: "mg/dL", code: "mg/dL" }, ctx)}</>,
     );
+    expect(container.textContent).not.toContain("UCUM:");
+  });
+
+  it("leaves non-UCUM systems' codes untouched and unbadged", () => {
+    const { container } = render(
+      <>{renderer({ value: 37, code: "Cel", system: "http://example.org/units" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("37 Cel");
+    expect(container.textContent).not.toContain("°C");
     expect(container.textContent).not.toContain("UCUM:");
   });
 });
@@ -199,6 +208,66 @@ describe("CodeableConcept renderer (CodedValue)", () => {
     expect(getByTestId("coded-value-popover-text").textContent).toBe(
       "Diastolic blood pressure",
     );
+  });
+
+  it("decodes display translation extensions in the popover (#367)", () => {
+    const cc: CodeableConcept = {
+      coding: [
+        {
+          system: "http://snomed.info/sct",
+          code: "38341003",
+          display: "Hypertensive disorder",
+          _display: {
+            extension: [
+              {
+                url: "http://hl7.org/fhir/StructureDefinition/translation",
+                extension: [
+                  { url: "lang", valueCode: "de" },
+                  { url: "content", valueString: "Hypertonie" },
+                ],
+              },
+            ],
+          },
+        } as Coding,
+      ],
+    };
+    const { container, getAllByTestId } = render(<>{renderer(cc, ctx)}</>);
+    openPopover(container);
+    const translations = getAllByTestId("coded-value-translation");
+    expect(translations).toHaveLength(1);
+    expect(translations[0]!.textContent).toContain("de");
+    expect(translations[0]!.textContent).toContain("Hypertonie");
+  });
+
+  it("lists both codings of a dual-coded concept in the popover (#367)", () => {
+    const cc: CodeableConcept = {
+      text: "Essential hypertension",
+      coding: [
+        {
+          system: "http://snomed.info/sct",
+          code: "59621000",
+          display: "Essential hypertension (disorder)",
+          userSelected: true,
+        },
+        {
+          system: "http://hl7.org/fhir/sid/icd-10-cm",
+          code: "I10",
+          display: "Essential (primary) hypertension",
+        },
+      ],
+    };
+    const { container, getByTestId, getAllByTestId } = render(
+      <>{renderer(cc, ctx)}</>,
+    );
+    // Chip shows the userSelected primary's code plus a +1 indicator.
+    expect(getByTestId("coded-value-code").textContent).toBe("59621000");
+    expect(getByTestId("coded-value-extra-count").textContent).toBe("+1");
+    openPopover(container);
+    const pills = getAllByTestId("coded-value-system-pill").map(
+      (n) => n.textContent,
+    );
+    expect(pills).toContain("SNOMED CT");
+    expect(pills).toContain("ICD-10-CM");
   });
 
   it("renders an em-dash when neither text nor coding is present", () => {

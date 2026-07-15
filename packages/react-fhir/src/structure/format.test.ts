@@ -103,6 +103,24 @@ describe("formatQuantity", () => {
     expect(formatQuantity({ value: 12, code: "ug/dL" })).toBe("12 µg/dL");
   });
 
+  it("only decodes the code as UCUM when the system is UCUM or absent", () => {
+    expect(
+      formatQuantity({
+        value: 37,
+        code: "Cel",
+        system: "http://unitsofmeasure.org",
+      }),
+    ).toBe("37 °C");
+    // A site-specific system scopes its own codes — leave them untouched.
+    expect(
+      formatQuantity({
+        value: 37,
+        code: "Cel",
+        system: "http://example.org/units",
+      }),
+    ).toBe("37 Cel");
+  });
+
   it("includes comparator when present", () => {
     expect(formatQuantity({ comparator: "<", value: 6.5, unit: "%" })).toBe(
       "<6.5 %",
