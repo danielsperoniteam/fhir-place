@@ -2,6 +2,7 @@ import type {
   ElementDefinition,
   ElementDefinitionType,
   Observation,
+  Patient,
   Resource,
   StructureDefinition,
 } from "fhir/r4";
@@ -110,8 +111,31 @@ const observationValueQuantityUcumCodeGuardrail: ResourceEditorClinicalSafetyGua
   ];
 };
 
+// A new Patient with no name and no identifier is unfindable once created
+// (#588). Only applies to creates (no id yet): servers can legitimately hold
+// anonymized patients, and editing those must stay possible. Path [] marks
+// this as a form-level error rendered in the footer banner rather than next
+// to a specific input (an empty form has no inputs to anchor to).
+const patientIdentityGuardrail: ResourceEditorClinicalSafetyGuardrail = (draft) => {
+  if (draft.resourceType !== "Patient" || draft.id) return [];
+  const patient = draft as Patient;
+  const hasIdentifier = (patient.identifier ?? []).some((i) => i.value || i.system);
+  const hasName = (patient.name ?? []).some(
+    (n) => n.text || n.family || (n.given ?? []).length > 0,
+  );
+  if (hasIdentifier || hasName) return [];
+  return [
+    {
+      path: [],
+      message:
+        "This Patient has no identifying information — add at least a name or an identifier before saving.",
+    },
+  ];
+};
+
 export const RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS: readonly ResourceEditorClinicalSafetyGuardrail[] = [
   observationValueQuantityUcumCodeGuardrail,
+  patientIdentityGuardrail,
 ];
 
 export function ResourceEditor(props: ResourceEditorProps) {
@@ -119,6 +143,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
   const detectedProfile = profile === undefined ? resource.meta?.profile?.[0] : profile;
   const [draft, setDraft] = useState<Resource>(resource);
   const [fieldErrors, setFieldErrors] = useState<Map<string, string>>(() => new Map());
+  const [formErrors, setFormErrors] = useState<string[]>([]);
 
   const sdQuery = useStructureDefinition({ type: resource.resourceType, profile: detectedProfile }, {
     enabled: !structureDefinition,
@@ -149,6 +174,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
           nextErrors.delete(pathKey(path));
           return nextErrors;
         });
+        setFormErrors((prev) => (prev.length === 0 ? prev : []));
         onChange?.(asResource);
         return asResource;
       });
@@ -164,10 +190,13 @@ export function ResourceEditor(props: ResourceEditorProps) {
       guardrail(pruned),
     );
     if (errors.length > 0) {
-      setFieldErrors(new Map(errors.map((error) => [pathKey(error.path), error.message])));
+      const atField = errors.filter((error) => error.path.length > 0);
+      setFieldErrors(new Map(atField.map((error) => [pathKey(error.path), error.message])));
+      setFormErrors(errors.filter((error) => error.path.length === 0).map((e) => e.message));
       return;
     }
     setFieldErrors(new Map());
+    setFormErrors([]);
     await onSave(pruned);
   };
 
@@ -207,6 +236,18 @@ export function ResourceEditor(props: ResourceEditorProps) {
         fieldErrors={fieldErrors}
         setAt={setAt}
       />
+
+      {formErrors.length > 0 && (
+        <div
+          role="alert"
+          data-testid="resource-editor-form-error"
+          className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800"
+        >
+          {formErrors.map((message) => (
+            <p key={message}>{message}</p>
+          ))}
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
         {onCancel && (
@@ -324,8 +365,8 @@ function Field({
     const items = Array.isArray(currentValue) ? currentValue : [];
     return (
       <Fragment>
-        <Dt label={label} path={path} />
-        <dd className="space-y-2">
+        <FieldLabel label={label} path={path} />
+        <div className="space-y-2">
           {items.map((_, i) => (
             <ArrayRow
               key={i}
@@ -353,15 +394,15 @@ function Field({
           >
             + Add {relative}
           </button>
-        </dd>
+        </div>
       </Fragment>
     );
   }
 
   return (
     <Fragment>
-      <Dt label={label} path={path} />
-      <dd>
+      <FieldLabel label={label} path={path} />
+      <div>
         <SingleValueInput
           sd={sd}
           element={element}
@@ -373,7 +414,7 @@ function Field({
           fieldErrors={fieldErrors}
           setAt={setAt}
         />
-      </dd>
+      </div>
     </Fragment>
   );
 }
@@ -429,8 +470,8 @@ function ChoiceField({
 
   return (
     <Fragment>
-      <Dt label={label} path={element.path!} />
-      <dd className="space-y-2">
+      <FieldLabel label={label} path={element.path!} />
+      <div className="space-y-2">
         <select
           data-testid={`choice-${base}`}
           className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
@@ -458,7 +499,7 @@ function ChoiceField({
             override={activeValue}
           />
         )}
-      </dd>
+      </div>
     </Fragment>
   );
 }
@@ -524,11 +565,14 @@ function SingleValueInput({
   );
 }
 
-function Dt({ label, path }: { label: string; path: string }) {
+// Label cell of the editor grid. Deliberately a <div>, not <dt>: the grid
+// container is a <div> and fields nest inside other fields' value cells, so
+// <dt>/<dd> here is invalid HTML (issue #587 — validateDOMNesting warnings).
+function FieldLabel({ label, path }: { label: string; path: string }) {
   return (
-    <dt className="font-medium text-slate-600" title={path}>
+    <div className="font-medium text-slate-600" title={path}>
       {label}
-    </dt>
+    </div>
   );
 }
 
