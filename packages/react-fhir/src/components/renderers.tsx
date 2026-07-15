@@ -30,6 +30,7 @@ import {
   formatReferenceLabel,
   formatTiming,
 } from "../structure/format.js";
+import { ucumDisplay } from "../structure/ucumDisplay.js";
 import { useReadReference } from "../hooks/queries.js";
 import { CodedValue } from "./codedValue/index.js";
 
@@ -251,12 +252,28 @@ const CodeableConceptRenderer: FhirTypeRenderer = (value, ctx) => {
 const QuantityRenderer: FhirTypeRenderer = (value) => {
   const q = value as Quantity;
   const comparator = q.comparator ?? "";
-  const unit = q.unit ?? q.code ?? "";
+  // Prefer the human display unit, falling back to a decoded UCUM code
+  // ("10*9/L" → "10⁹/L") rather than the raw symbol (#368).
+  const unit = q.unit ?? ucumDisplay(q.code);
+  // When unit and code disagree (e.g. unit "mmHg", code "mm[Hg]"), surface
+  // the canonical UCUM form so the mapping is inspectable without opening
+  // the JSON pane.
+  const showCodeBadge = Boolean(q.code && q.unit && q.unit !== q.code);
   return (
     <span>
       {comparator}
       {q.value ?? ""}{" "}
-      <span className="text-slate-500">{unit}</span>
+      <span className="text-slate-500" title={q.system}>
+        {unit}
+      </span>
+      {showCodeBadge && (
+        <span
+          className="ml-1 rounded bg-slate-100 px-1 font-mono text-[10px] text-slate-500"
+          title={q.system ?? "UCUM code"}
+        >
+          UCUM: {q.code}
+        </span>
+      )}
     </span>
   );
 };

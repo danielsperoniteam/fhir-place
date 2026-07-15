@@ -9,6 +9,7 @@ import type {
   Resource,
   Timing,
 } from "fhir/r4";
+import { ucumDisplay } from "./ucumDisplay.js";
 
 /**
  * Pure string-formatters for FHIR datatypes. Used by the read-side renderers
@@ -63,7 +64,9 @@ export function formatQuantity(q: Quantity | undefined): string {
   if (!q) return "";
   const comparator = q.comparator ?? "";
   const num = q.value === undefined ? "" : String(q.value);
-  const unit = q.unit ?? q.code ?? "";
+  // Prefer the human display unit; fall back to a decoded UCUM code
+  // ("10*9/L" → "10⁹/L") rather than the raw symbol (#368).
+  const unit = q.unit ?? ucumDisplay(q.code);
   return `${comparator}${num}${unit ? ` ${unit}` : ""}`.trim();
 }
 

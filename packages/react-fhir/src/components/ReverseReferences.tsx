@@ -1,6 +1,6 @@
 import type { Bundle, Resource } from "fhir/r4";
 import { useEffect, useMemo, useState } from "react";
-import { useSearch } from "../hooks/queries.js";
+import { useInfiniteSearch, useSearch } from "../hooks/queries.js";
 import { defaultRevIncludes, type RevInclude } from "../registries/revIncludes.js";
 
 export interface ReverseReferencesProps {
@@ -124,15 +124,37 @@ function RevIncludeSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total]);
 
-  const listQuery = useSearch(
+  // Page-aware list: servers may cap `_count`, so "Show all" cannot rely on
+  // one big request — after the user opts in, keep following the Bundle's
+  // `next` links until every row is loaded (Codex review on #728).
+  const listQuery = useInfiniteSearch(
     type,
-    { [param]: target, _count: showAll && total ? total : pageSize },
+    { [param]: target, _count: pageSize },
     { enabled: open },
   );
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = listQuery;
+
+  // Sequentially follow next links until the server stops emitting them.
+  // Driven by each fetch's returned state, not an effect on
+  // isFetchingNextPage — React batches that flag's true→false transition
+  // away when pages resolve quickly, which would stall an effect-based
+  // drain after one page. Hard cap as a defence against a server that
+  // pathologically always returns a next link.
+  const drainAll = async () => {
+    setShowAll(true);
+    const maxPages = 100;
+    let res = await fetchNextPage();
+    while (res.hasNextPage && !res.isError && (res.data?.pages.length ?? 0) < maxPages) {
+      res = await fetchNextPage();
+    }
+  };
 
   const entries =
-    (listQuery.data as Bundle<Resource> | undefined)?.entry?.flatMap((e) =>
-      e.resource ? [e.resource] : [],
+    listQuery.data?.pages.flatMap(
+      (page) =>
+        (page as Bundle<Resource>).entry?.flatMap((e) =>
+          e.resource ? [e.resource] : [],
+        ) ?? [],
     ) ?? [];
   const inlineQuery = `${type}?${param}=${target}&_count=${pageSize}`;
 
@@ -220,15 +242,24 @@ function RevIncludeSection({
                 })}
               </ul>
             )}
-            {!showAll && typeof total === "number" && total > entries.length && (
+            {!showAll && hasNextPage && (
               <button
                 type="button"
-                onClick={() => setShowAll(true)}
+                onClick={() => void drainAll()}
                 data-testid={`revref-show-all-${type}-${param}`}
                 className="text-xs text-[var(--accent-text,#3730a3)] underline"
               >
-                Show all {total}
+                Show all {typeof total === "number" ? total : ""}
               </button>
+            )}
+            {showAll && (hasNextPage || isFetchingNextPage) && (
+              <p
+                data-testid={`revref-loading-more-${type}-${param}`}
+                className="text-xs text-[var(--text-muted,#64748b)]"
+              >
+                Loading all… ({entries.length}
+                {typeof total === "number" ? ` of ${total}` : ""})
+              </p>
             )}
           </>
         )}

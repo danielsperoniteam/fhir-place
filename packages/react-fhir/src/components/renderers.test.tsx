@@ -27,6 +27,40 @@ function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(ui, { wrapper: Wrapper, ...options });
 }
 
+describe("Quantity renderer (#368)", () => {
+  const renderer = defaultTypeRenderers.Quantity!;
+  const ctx = { path: "Observation.valueQuantity", typeCode: "Quantity" };
+
+  it("renders comparator + value + unit as one string", () => {
+    const { container } = render(
+      <>{renderer({ comparator: "<", value: 0.01, unit: "ng/mL" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("<0.01 ng/mL");
+  });
+
+  it("decodes a UCUM code when no display unit is present", () => {
+    const { container } = render(
+      <>{renderer({ value: 4.5, code: "10*9/L", system: "http://unitsofmeasure.org" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("4.5 10⁹/L");
+  });
+
+  it("badges the canonical UCUM code when unit and code differ", () => {
+    const { container } = render(
+      <>{renderer({ value: 130, unit: "mmHg", code: "mm[Hg]" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("130 mmHg");
+    expect(container.textContent).toContain("UCUM: mm[Hg]");
+  });
+
+  it("shows no badge when unit and code agree", () => {
+    const { container } = render(
+      <>{renderer({ value: 93, unit: "mg/dL", code: "mg/dL" }, ctx)}</>,
+    );
+    expect(container.textContent).not.toContain("UCUM:");
+  });
+});
+
 describe("codeSystemLabel", () => {
   it("returns a short label for well-known code systems", () => {
     expect(codeSystemLabel("http://snomed.info/sct")).toBe("SNOMED");

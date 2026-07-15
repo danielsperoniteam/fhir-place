@@ -97,7 +97,10 @@ describe("formatCodeableConcept", () => {
 describe("formatQuantity", () => {
   it("renders value + unit, preferring `unit` over `code`", () => {
     expect(formatQuantity({ value: 130, unit: "mmHg" })).toBe("130 mmHg");
-    expect(formatQuantity({ value: 130, code: "mm[Hg]" })).toBe("130 mm[Hg]");
+    // Code-only quantities decode the UCUM symbol for display (#368).
+    expect(formatQuantity({ value: 130, code: "mm[Hg]" })).toBe("130 mmHg");
+    expect(formatQuantity({ value: 4.5, code: "10*9/L" })).toBe("4.5 10⁹/L");
+    expect(formatQuantity({ value: 12, code: "ug/dL" })).toBe("12 µg/dL");
   });
 
   it("includes comparator when present", () => {
