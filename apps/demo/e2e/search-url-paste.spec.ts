@@ -56,6 +56,25 @@ test.describe("Paste a FHIR search URL", () => {
     await expect(page).toHaveURL(/\/fhir-ui\/Patient\?identifier=a&identifier=b$/);
   });
 
+  test("pasted patient reference filter normalizes to a working compartment view", async ({
+    page,
+  }) => {
+    await page.goto("/fhir-ui/Patient");
+
+    const paste = page.getByTestId("search-url-paste");
+    await paste
+      .getByTestId("search-url-paste-input")
+      .fill("/Observation?patient=Patient/ada");
+    await paste.getByTestId("search-url-paste-load").click();
+
+    // The reference form (`Patient/ada`) is normalized to the bare id the
+    // list page's compartment scoping expects — not left to produce a
+    // broken `Patient/Patient/ada` lookup.
+    await expect(page).toHaveURL(/\/fhir-ui\/Observation\?patient=ada$/);
+    // Compartment chrome resolves the patient's human-readable name.
+    await expect(page.getByText(/back to .*ada lovelace/i)).toBeVisible();
+  });
+
   test("invalid input shows an inline error instead of crashing", async ({
     page,
   }) => {

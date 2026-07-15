@@ -18,7 +18,20 @@ export function SearchUrlPaste() {
     if (!input.trim()) return;
     try {
       const parsed = parseSearchRequest(input);
-      const qs = buildSearchParams(parsed.params).toString();
+      // On the list page `?patient=<id>` doubles as compartment scoping, and
+      // that machinery expects a bare id. A pasted FHIR filter often uses the
+      // reference form (`patient=Patient/ada`) — normalize it so the pasted
+      // search lands as a working compartment view instead of a broken
+      // `Patient/Patient/ada` lookup.
+      const params = { ...parsed.params };
+      const bareId = (v: unknown) =>
+        typeof v === "string" ? v.replace(/^Patient\//, "") : v;
+      if (params.patient !== undefined) {
+        params.patient = Array.isArray(params.patient)
+          ? (params.patient.map(bareId) as string[])
+          : (bareId(params.patient) as string);
+      }
+      const qs = buildSearchParams(params).toString();
       setError(null);
       setInput("");
       navigate(`/fhir-ui/${parsed.resourceType}${qs ? `?${qs}` : ""}`);
