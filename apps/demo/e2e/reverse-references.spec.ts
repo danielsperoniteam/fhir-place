@@ -33,6 +33,14 @@ test.describe("Reverse-references panel", () => {
       "href",
       /\/fhir-ui\/Observation\//,
     );
+
+    // Clicking a chip navigates through the SPA router (no full reload,
+    // works under hash routing on the hosted build too). The MSW mock has
+    // no Observation read-by-id handler, so assert the route change and
+    // that the app shell survived — not the destination view's content.
+    await chips.first().click();
+    await expect(page).toHaveURL(/\/fhir-ui\/Observation\/obs-/);
+    await expect(page.getByTestId("fhir-ui-sidebar")).toBeVisible();
   });
 
   test("resource types without configured includes show an empty state", async ({

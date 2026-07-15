@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { defaultRevIncludes } from "../registries/revIncludes.js";
@@ -95,6 +95,42 @@ describe("ReverseReferences", () => {
     expect(chip).toHaveAttribute("href", "/fhir-ui/Encounter/e1");
     expect(listCalls.length).toBeGreaterThan(0);
     expect(listCalls[0]).toContain("subject=Patient%2Fada");
+  });
+
+  it("routes chip clicks through onNavigate with preventDefault when provided", async () => {
+    server.use(
+      http.get(`${BASE}/Encounter`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("_summary") === "count") {
+          return HttpResponse.json(countBundle(1));
+        }
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          total: 1,
+          entry: [{ resource: { resourceType: "Encounter", id: "e1" } }],
+        });
+      }),
+    );
+
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReverseReferences
+        resourceType="Patient"
+        id="ada"
+        includes={[["Encounter", "subject"]]}
+        hrefFor={(t, id) => `/fhir-ui/${t}/${id}`}
+        onNavigate={onNavigate}
+      />,
+      { wrapper: wrap() },
+    );
+
+    await user.click(screen.getByText("Encounter — subject"));
+    await user.click(await screen.findByRole("link", { name: "Encounter/e1" }));
+    expect(onNavigate).toHaveBeenCalledWith("Encounter", "e1");
+    // jsdom would throw on an actual navigation; reaching here means the
+    // click was intercepted (preventDefault) rather than followed.
   });
 
   it("offers Show all when more rows exist than the page size", async () => {

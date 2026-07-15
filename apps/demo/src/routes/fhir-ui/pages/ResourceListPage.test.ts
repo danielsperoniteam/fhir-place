@@ -22,6 +22,11 @@ describe("paramsFromUrl", () => {
       patient: "ada",
     });
   });
+
+  it("lets a URL _count override the seeded page size instead of arraying it", () => {
+    const url = new URLSearchParams("_count=50&gender=female");
+    expect(paramsFromUrl(url, 20)).toEqual({ _count: "50", gender: "female" });
+  });
 });
 
 // Regression for #400: `labelFromPath` previously picked the last dotted

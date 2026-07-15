@@ -16,6 +16,7 @@ import { CompartmentSection } from "../../../components/CompartmentSection.js";
 import { PatientCompartmentLinks } from "../../../components/PatientCompartmentLinks.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { PATIENT_COMPARTMENT } from "../../../compartment.js";
+import { USE_HASH_ROUTER } from "../../../config.js";
 import { patientFieldOptions } from "../../../patientFields.js";
 import { RESOURCE_LIST_CONFIG } from "../../../resourceListConfig.js";
 import { resourceCollectionLabel } from "../resourceLabels.js";
@@ -579,7 +580,13 @@ function ReferencesPane({
       <ReverseReferences
         resourceType={resource.resourceType}
         id={resource.id}
-        hrefFor={(type, id) => `/fhir-ui/${type}/${id}`}
+        // Router-aware: clicks go through the SPA router (works under
+        // BrowserRouter and the hosted build's HashRouter alike); the href
+        // stays correct for middle-click / copy in both modes.
+        hrefFor={(type, id) =>
+          USE_HASH_ROUTER ? `#/fhir-ui/${type}/${id}` : `/fhir-ui/${type}/${id}`
+        }
+        onNavigate={(type, id) => onNavigate(`/fhir-ui/${type}/${id}`)}
       />
     </div>
   ) : null;

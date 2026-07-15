@@ -15,6 +15,12 @@ export interface ReverseReferencesProps {
   includes?: readonly RevInclude[];
   /** Builds the link for a result chip; omit to render plain text. */
   hrefFor?: (resourceType: string, id: string) => string;
+  /**
+   * SPA navigation handler. When set, chip clicks call this (with
+   * preventDefault) instead of following the href — required under hash or
+   * basename routing where a root-relative href would leave the app.
+   */
+  onNavigate?: (resourceType: string, id: string) => void;
   /** Rows shown per section before "Show all". Default 10. */
   pageSize?: number;
 }
@@ -33,6 +39,7 @@ export function ReverseReferences({
   id,
   includes,
   hrefFor,
+  onNavigate,
   pageSize = 10,
 }: ReverseReferencesProps) {
   const pairs = includes ?? defaultRevIncludes(resourceType);
@@ -64,6 +71,7 @@ export function ReverseReferences({
           param={param}
           target={target}
           hrefFor={hrefFor}
+          onNavigate={onNavigate}
           pageSize={pageSize}
           maxCount={maxCount}
           onCount={(n) =>
@@ -84,6 +92,7 @@ interface RevIncludeSectionProps {
   param: string;
   target: string;
   hrefFor?: (resourceType: string, id: string) => string;
+  onNavigate?: (resourceType: string, id: string) => void;
   pageSize: number;
   maxCount: number;
   onCount: (n: number) => void;
@@ -94,6 +103,7 @@ function RevIncludeSection({
   param,
   target,
   hrefFor,
+  onNavigate,
   pageSize,
   maxCount,
   onCount,
@@ -183,12 +193,21 @@ function RevIncludeSection({
               <ul className="space-y-0.5">
                 {entries.map((r) => {
                   const label = `${r.resourceType}/${r.id}`;
-                  const href = r.id && hrefFor ? hrefFor(r.resourceType, r.id) : null;
+                  const rid = r.id;
+                  const href = rid && hrefFor ? hrefFor(r.resourceType, rid) : null;
+                  const navigate =
+                    rid && onNavigate
+                      ? (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          onNavigate(r.resourceType, rid);
+                        }
+                      : undefined;
                   return (
                     <li key={label} className="font-mono text-xs">
-                      {href ? (
+                      {href || navigate ? (
                         <a
-                          href={href}
+                          href={href ?? "#"}
+                          onClick={navigate}
                           className="text-[var(--accent-text,#3730a3)] underline"
                         >
                           {label}

@@ -214,6 +214,12 @@ export const paramsFromUrl = (
   const out: SearchParams = { _count: pageSize };
   for (const [k, v] of urlParams.entries()) {
     if (k === "patient") continue;
+    // A _count in the URL overrides the seeded page-size default — arraying
+    // it with the seed would emit repeated _count keys on the wire.
+    if (k === "_count") {
+      out._count = v;
+      continue;
+    }
     // Repeated keys are FHIR AND semantics (e.g. identifier=a&identifier=b,
     // often arriving via the paste-a-URL box) — collapse to an array rather
     // than letting the last value win.
