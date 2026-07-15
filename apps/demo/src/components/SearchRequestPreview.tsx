@@ -1,6 +1,6 @@
 import { formatSearchRequest, type SearchParams } from "@fhir-place/react-fhir";
 import { useState } from "react";
-import { ACTIVE_SERVER_CONFIG, buildRequestHeaders } from "../config.js";
+import { loadActiveRequestHeaders } from "../config.js";
 import { formatAsCurl, formatAsFetch } from "../requestSnippets.js";
 
 type CopyFormat = "url" | "curl" | "fetch";
@@ -33,13 +33,16 @@ export function SearchRequestPreview({
 
   // Snippets carry the active server's real headers (auth + custom) so the
   // copied command runs against the server the demo is pointed at (#146).
+  // Resolved at copy time via loadActiveRequestHeaders — the same source the
+  // FetchFhirClient reads per request — so Settings edits made in this SPA
+  // session are reflected without a reload.
   const snippetFor = (f: CopyFormat): string => {
     if (f === "url") return preview.url;
     const envelope = {
       url: preview.url,
       headers: {
         Accept: "application/fhir+json",
-        ...buildRequestHeaders(ACTIVE_SERVER_CONFIG),
+        ...loadActiveRequestHeaders(),
       },
     };
     return f === "curl" ? formatAsCurl(envelope) : formatAsFetch(envelope);
