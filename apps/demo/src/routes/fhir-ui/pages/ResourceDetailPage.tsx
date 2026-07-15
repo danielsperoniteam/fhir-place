@@ -3,6 +3,7 @@ import {
   FhirError,
   HintedDetail,
   ResourceView,
+  ReverseReferences,
   getLayoutHint,
   useDeleteResource,
   useResource,
@@ -559,19 +560,43 @@ function ReferencesPane({
 }) {
   const refs = extractReferences(resource);
 
-  if (refs.length === 0) {
-    return (
+  // Incoming references ("Referenced by", #253) render below the outgoing
+  // list — additive, so the pane is useful even when either half is empty.
+  const referencedBy = resource.id ? (
+    <div style={{ marginTop: refs.length === 0 ? 0 : 14 }}>
       <div
         style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 13,
-          color: "var(--text-muted)",
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: 0.6,
+          textTransform: "uppercase",
+          color: "var(--text-subtle)",
+          margin: "0 0 6px",
         }}
       >
-        No references found
+        Referenced by
+      </div>
+      <ReverseReferences
+        resourceType={resource.resourceType}
+        id={resource.id}
+        hrefFor={(type, id) => `/fhir-ui/${type}/${id}`}
+      />
+    </div>
+  ) : null;
+
+  if (refs.length === 0) {
+    return (
+      <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--text-muted)",
+            padding: "8px 0 4px",
+          }}
+        >
+          No outgoing references found
+        </div>
+        {referencedBy}
       </div>
     );
   }
@@ -631,6 +656,7 @@ function ReferencesPane({
           );
         })}
       </div>
+      {referencedBy}
     </div>
   );
 }
