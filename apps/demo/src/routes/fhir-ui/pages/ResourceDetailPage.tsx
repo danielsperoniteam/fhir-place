@@ -3,6 +3,7 @@ import {
   FhirError,
   HintedDetail,
   ResourceView,
+  ReverseReferences,
   getLayoutHint,
   useDeleteResource,
   useResource,
@@ -15,6 +16,7 @@ import { CompartmentSection } from "../../../components/CompartmentSection.js";
 import { PatientCompartmentLinks } from "../../../components/PatientCompartmentLinks.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { PATIENT_COMPARTMENT } from "../../../compartment.js";
+import { USE_HASH_ROUTER } from "../../../config.js";
 import { patientFieldOptions } from "../../../patientFields.js";
 import { RESOURCE_LIST_CONFIG } from "../../../resourceListConfig.js";
 import { resourceCollectionLabel } from "../resourceLabels.js";
@@ -559,19 +561,49 @@ function ReferencesPane({
 }) {
   const refs = extractReferences(resource);
 
-  if (refs.length === 0) {
-    return (
+  // Incoming references ("Referenced by", #253) render below the outgoing
+  // list — additive, so the pane is useful even when either half is empty.
+  const referencedBy = resource.id ? (
+    <div style={{ marginTop: refs.length === 0 ? 0 : 14 }}>
       <div
         style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 13,
-          color: "var(--text-muted)",
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: 0.6,
+          textTransform: "uppercase",
+          color: "var(--text-subtle)",
+          margin: "0 0 6px",
         }}
       >
-        No references found
+        Referenced by
+      </div>
+      <ReverseReferences
+        resourceType={resource.resourceType}
+        id={resource.id}
+        // Router-aware: clicks go through the SPA router (works under
+        // BrowserRouter and the hosted build's HashRouter alike); the href
+        // stays correct for middle-click / copy in both modes.
+        hrefFor={(type, id) =>
+          USE_HASH_ROUTER ? `#/fhir-ui/${type}/${id}` : `/fhir-ui/${type}/${id}`
+        }
+        onNavigate={(type, id) => onNavigate(`/fhir-ui/${type}/${id}`)}
+      />
+    </div>
+  ) : null;
+
+  if (refs.length === 0) {
+    return (
+      <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--text-muted)",
+            padding: "8px 0 4px",
+          }}
+        >
+          No outgoing references found
+        </div>
+        {referencedBy}
       </div>
     );
   }
@@ -631,6 +663,7 @@ function ReferencesPane({
           );
         })}
       </div>
+      {referencedBy}
     </div>
   );
 }

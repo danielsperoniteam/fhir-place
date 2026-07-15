@@ -15,6 +15,7 @@ import type { SearchParams } from "@fhir-place/react-fhir";
 import { naturalLanguageToFhirQuery } from "../../../ask/anthropicQuery.js";
 import { PatientRowCounts } from "../../../components/PatientRowCounts.js";
 import { SearchRequestPreview } from "../../../components/SearchRequestPreview.js";
+import { SearchUrlPaste } from "../../../components/SearchUrlPaste.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { loadAnthropicApiKey } from "../../../config.js";
 import {
@@ -205,7 +206,7 @@ const collectPaths = (value: unknown, prefix = "", out = new Set<string>()): Set
   return out;
 };
 
-const paramsFromUrl = (
+export const paramsFromUrl = (
   urlParams: URLSearchParams,
   pageSize: number,
   patientId?: string,
@@ -213,7 +214,19 @@ const paramsFromUrl = (
   const out: SearchParams = { _count: pageSize };
   for (const [k, v] of urlParams.entries()) {
     if (k === "patient") continue;
-    out[k] = v;
+    // A _count in the URL overrides the seeded page-size default — arraying
+    // it with the seed would emit repeated _count keys on the wire.
+    if (k === "_count") {
+      out._count = v;
+      continue;
+    }
+    // Repeated keys are FHIR AND semantics (e.g. identifier=a&identifier=b,
+    // often arriving via the paste-a-URL box) — collapse to an array rather
+    // than letting the last value win.
+    const existing = out[k];
+    if (existing === undefined) out[k] = v;
+    else if (Array.isArray(existing)) existing.push(v);
+    else out[k] = [existing, v];
   }
   if (patientId) out.patient = patientId;
   return out;
@@ -540,6 +553,11 @@ export function ResourceListPage() {
               resourceType={resourceType}
               params={draftParams}
             />
+          </div>
+
+          {/* Paste a search URL → populate form / navigate (#145) */}
+          <div style={{ marginTop: 8 }}>
+            <SearchUrlPaste />
           </div>
         </div>
       </div>
