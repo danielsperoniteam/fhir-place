@@ -15,6 +15,7 @@ import type { SearchParams } from "@fhir-place/react-fhir";
 import { naturalLanguageToFhirQuery } from "../../../ask/anthropicQuery.js";
 import { PatientRowCounts } from "../../../components/PatientRowCounts.js";
 import { SearchRequestPreview } from "../../../components/SearchRequestPreview.js";
+import { SearchUrlPaste } from "../../../components/SearchUrlPaste.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { loadAnthropicApiKey } from "../../../config.js";
 import {
@@ -540,6 +541,11 @@ export function ResourceListPage() {
               resourceType={resourceType}
               params={draftParams}
             />
+          </div>
+
+          {/* Paste a search URL → populate form / navigate (#145) */}
+          <div style={{ marginTop: 8 }}>
+            <SearchUrlPaste />
           </div>
         </div>
       </div>
