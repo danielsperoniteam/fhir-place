@@ -350,6 +350,48 @@ describe("ResourceEditor", () => {
     expect(saved.name?.[0]?.given).toEqual(["Grace"]);
   });
 
+  it("blocks creating a Patient whose only 'identity' is whitespace or a bare identifier system", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    wrap(
+      <ResourceEditor
+        resource={
+          {
+            resourceType: "Patient",
+            identifier: [{ system: "http://example.org/mrn" }],
+            name: [{ text: "   ", given: [" "] }],
+          } as Patient
+        }
+        structureDefinition={PatientStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByTestId("resource-editor-form-error")).toHaveTextContent(
+      /no identifying information/i,
+    );
+  });
+
+  it("allows creating a Patient with an identifier value and no name", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    wrap(
+      <ResourceEditor
+        resource={
+          {
+            resourceType: "Patient",
+            identifier: [{ system: "http://example.org/mrn", value: "MRN-123" }],
+          } as Patient
+        }
+        structureDefinition={PatientStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+  });
+
   it("does not block saving an existing anonymized Patient", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();

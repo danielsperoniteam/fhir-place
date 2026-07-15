@@ -119,9 +119,12 @@ const observationValueQuantityUcumCodeGuardrail: ResourceEditorClinicalSafetyGua
 const patientIdentityGuardrail: ResourceEditorClinicalSafetyGuardrail = (draft) => {
   if (draft.resourceType !== "Patient" || draft.id) return [];
   const patient = draft as Patient;
-  const hasIdentifier = (patient.identifier ?? []).some((i) => i.value || i.system);
+  // Whitespace-only strings and identifiers with only a `system` don't make
+  // the Patient findable — require a real identifier value or name component.
+  const hasText = (s: string | undefined): boolean => Boolean(s?.trim());
+  const hasIdentifier = (patient.identifier ?? []).some((i) => hasText(i.value));
   const hasName = (patient.name ?? []).some(
-    (n) => n.text || n.family || (n.given ?? []).length > 0,
+    (n) => hasText(n.text) || hasText(n.family) || (n.given ?? []).some(hasText),
   );
   if (hasIdentifier || hasName) return [];
   return [
