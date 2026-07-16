@@ -10,13 +10,20 @@ import {
 } from "@fhir-place/react-fhir";
 import type { Patient, Reference, Resource } from "fhir/r4";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
 import { naturalLanguageToFhirQuery } from "../../../ask/anthropicQuery.js";
 import { PatientRowCounts } from "../../../components/PatientRowCounts.js";
 import { SearchRequestPreview } from "../../../components/SearchRequestPreview.js";
 import { SearchUrlPaste } from "../../../components/SearchUrlPaste.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
+import { usePinned } from "../../../state/pinned.js";
 import { loadAnthropicApiKey } from "../../../config.js";
 import {
   RESOURCE_LIST_CONFIG,
@@ -244,6 +251,14 @@ const formInitialFromUrl = (urlParams: URLSearchParams): Record<string, string> 
 export function ResourceListPage() {
   const { resourceType = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const { pinSearch } = usePinned();
+  // Snapshot of the URL taken when the save form opens — the user may run
+  // another search or hit Clear before submitting the label, and the save
+  // must target the query they clicked Save on, not whatever the URL says
+  // at submit time. null = form closed.
+  const [savingPath, setSavingPath] = useState<string | null>(null);
+  const [queryLabel, setQueryLabel] = useState("");
   const navigate = useNavigate();
   const client = useFhirClient();
 
@@ -300,6 +315,8 @@ export function ResourceListPage() {
   useEffect(() => setDraftParams(params), [params]);
   const formInitial = useMemo(() => formInitialFromUrl(searchParams), [searchParams]);
   const formKey = searchParams.toString();
+  // A query is savable once the URL carries any search params (#254 PR A).
+  const hasActiveQuery = formKey.length > 0;
 
   const {
     bundle,
@@ -526,7 +543,77 @@ export function ResourceListPage() {
               Search params
             </span>
             <div style={{ flex: 1 }} />
-            <button style={{ ...ccBtn("secondary"), fontSize: 12 }}>Clear</button>
+            {/* Saved queries v1 (#254 PR A): label the current query and pin
+                it to the sidebar's Pinned section (per-server localStorage). */}
+            {savingPath !== null ? (
+              <form
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  pinSearch(savingPath, queryLabel);
+                  setSavingPath(null);
+                }}
+              >
+                <input
+                  autoFocus
+                  value={queryLabel}
+                  onChange={(e) => setQueryLabel(e.target.value)}
+                  placeholder="Query name"
+                  data-testid="save-query-label"
+                  style={{
+                    fontSize: 12,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border-strong)",
+                    background: "var(--sunken)",
+                    color: "var(--text)",
+                    width: 180,
+                  }}
+                />
+                <button
+                  type="submit"
+                  data-testid="save-query-confirm"
+                  style={{ ...ccBtn("primary"), fontSize: 12 }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSavingPath(null)}
+                  style={{ ...ccBtn("ghost"), fontSize: 12 }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <button
+                data-testid="save-query"
+                disabled={!hasActiveQuery}
+                title={
+                  hasActiveQuery
+                    ? "Save this query to the sidebar"
+                    : "Run a search first — there is no query to save"
+                }
+                onClick={() => {
+                  setQueryLabel(`${resourceType}: ${formKey}`.slice(0, 60));
+                  setSavingPath(`${location.pathname}${location.search}`);
+                }}
+                style={{
+                  ...ccBtn("secondary"),
+                  fontSize: 12,
+                  opacity: hasActiveQuery ? 1 : 0.5,
+                }}
+              >
+                Save query
+              </button>
+            )}
+            <button
+              data-testid="clear-filters"
+              onClick={() => submitFilters({})}
+              style={{ ...ccBtn("secondary"), fontSize: 12 }}
+            >
+              Clear
+            </button>
           </div>
 
           <ResourceSearch
