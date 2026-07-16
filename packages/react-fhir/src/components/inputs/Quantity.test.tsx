@@ -63,6 +63,49 @@ describe("QuantityInput (#368)", () => {
     expect(screen.queryByTestId("quantity-comparator")).toBeNull();
   });
 
+  it("hides the comparator for versioned SimpleQuantity canonicals and bare type codes", () => {
+    const versionedCtx = ctxFor({
+      path: "MedicationRequest.dispenseRequest.quantity",
+      type: [
+        {
+          code: "Quantity",
+          profile: ["http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1"],
+        },
+      ],
+    });
+    const { unmount } = render(
+      <QuantityInput value={{ value: 1 }} onChange={() => {}} context={versionedCtx} />,
+    );
+    expect(screen.queryByTestId("quantity-comparator")).toBeNull();
+    unmount();
+
+    const bareTypeCtx = {
+      ...ctxFor({ type: [{ code: "SimpleQuantity" }] }),
+      typeCode: "SimpleQuantity",
+    };
+    render(
+      <QuantityInput value={{ value: 1 }} onChange={() => {}} context={bareTypeCtx} />,
+    );
+    expect(screen.queryByTestId("quantity-comparator")).toBeNull();
+  });
+
+  it("strips a pre-existing comparator from SimpleQuantity values on edit", () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <QuantityInput
+        value={{ value: 30, comparator: "<" } as Quantity}
+        onChange={onChange}
+        context={simpleQuantityCtx}
+      />,
+    );
+    // No comparator control renders, and editing any field drops the
+    // forbidden comparator instead of re-emitting it forever.
+    expect(screen.queryByTestId("quantity-comparator")).toBeNull();
+    const valueInput = container.querySelectorAll("input")[0]!;
+    fireEvent.change(valueInput, { target: { value: "31" } });
+    expect(onChange).toHaveBeenCalledWith({ value: 31 });
+  });
+
   it("defaults system to UCUM when a code is entered without one", () => {
     const onChange = vi.fn();
     const { container } = render(

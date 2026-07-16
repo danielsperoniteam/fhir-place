@@ -9,10 +9,11 @@ const COMPARATORS: Quantity["comparator"][] = ["<", "<=", ">=", ">"];
 /**
  * SimpleQuantity is `Quantity` with a profile that forbids `comparator`
  * (https://hl7.org/fhir/R4/datatypes.html#SimpleQuantity) — hide the field
- * entirely so the editor can't produce an invalid instance.
+ * entirely so the editor can't produce an invalid instance. Canonical URLs
+ * may carry a `|version` suffix; strip it before matching.
  */
 const isSimpleQuantity = (profiles: string[] | undefined): boolean =>
-  (profiles ?? []).some((p) => p.endsWith("/SimpleQuantity"));
+  (profiles ?? []).some((p) => p.split("|")[0]!.endsWith("/SimpleQuantity"));
 
 export const QuantityInput: FhirTypeInput<Quantity> = ({
   value,
@@ -21,11 +22,24 @@ export const QuantityInput: FhirTypeInput<Quantity> = ({
   error,
 }) => {
   const v = value ?? {};
-  const patch = (k: keyof Quantity, val: unknown) => onChange({ ...v, [k]: val });
   const codeErrorId = error ? "quantity-code-error" : undefined;
-  const allowComparator = !isSimpleQuantity(
-    context.element.type?.find((t) => t.code === "Quantity")?.profile,
-  );
+  // Some StructureDefinitions expose SimpleQuantity as the type code itself
+  // rather than as a profile on Quantity — treat both spellings the same.
+  const allowComparator =
+    context.typeCode !== "SimpleQuantity" &&
+    !isSimpleQuantity(
+      context.element.type?.find(
+        (t) => t.code === "Quantity" || t.code === "SimpleQuantity",
+      )?.profile,
+    );
+  const patch = (k: keyof Quantity, val: unknown) => {
+    const next: Quantity = { ...v, [k]: val };
+    // A pre-existing comparator on a SimpleQuantity (legacy data, external
+    // servers) has no visible control to clear it — drop it on the first
+    // edit rather than re-emitting the forbidden field forever.
+    if (!allowComparator) delete next.comparator;
+    onChange(next);
+  };
   return (
     <div className="grid grid-cols-1 gap-2 rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2 sm:grid-cols-[5rem_6rem_1fr_minmax(7rem,1fr)_8rem]">
       {allowComparator && (
@@ -92,11 +106,13 @@ export const QuantityInput: FhirTypeInput<Quantity> = ({
             const code = e.target.value || undefined;
             // Per the spec a unit code without a system is unreliable —
             // default the system to UCUM as soon as a code is entered.
-            onChange({
+            const next: Quantity = {
               ...v,
               code,
               system: code && !v.system ? UCUM_SYSTEM : v.system,
-            });
+            };
+            if (!allowComparator) delete next.comparator;
+            onChange(next);
           }}
         />
         {error && (
