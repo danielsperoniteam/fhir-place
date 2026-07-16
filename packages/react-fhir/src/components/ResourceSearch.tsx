@@ -204,19 +204,19 @@ export function ResourceSearch(props: ResourceSearchProps) {
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleAsk(e); } }}
               placeholder={`Ask in plain English… e.g. patients with diabetes over 65`}
               disabled={askLoading}
-              className="flex-1 rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1.5 text-sm text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:border-blue-500 focus:outline-none disabled:opacity-60"
+              className="flex-1 rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1.5 text-sm text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:border-[var(--accent,#3b82f6)] focus:outline-none disabled:opacity-60"
             />
             <button
               type="button"
               onClick={(e) => { void handleAsk(e); }}
               disabled={askLoading || !askQuestion.trim()}
-              className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              className="rounded bg-[var(--accent,#2563eb)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
             >
               {askLoading ? "Generating…" : "Generate filters"}
             </button>
           </div>
           {askError && (
-            <p className="text-xs text-red-600">{askError}</p>
+            <p className="text-xs text-[var(--danger,#dc2626)]">{askError}</p>
           )}
         </div>
       )}
@@ -264,7 +264,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
           </button>
           <button
             type="submit"
-            className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+            className="rounded bg-[var(--accent,#2563eb)] px-3 py-1 text-sm font-medium text-white shadow-sm hover:opacity-90"
           >
             Search
           </button>
@@ -323,7 +323,7 @@ function SearchField({ base, param, value, onChange, profile }: SearchFieldProps
       placeholder={inputPlaceholder(param.type)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
     />,
     param,
     base,
@@ -355,7 +355,7 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
       placeholder={tokenPlaceholder(element)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
     />
   );
 
@@ -383,7 +383,7 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
       aria-label={param.name}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
     >
       <option value="">—</option>
       {codes.map((c) => (
@@ -428,7 +428,7 @@ function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps
       placeholder={inputPlaceholder(param.type)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+      className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
     />
   );
 
@@ -533,7 +533,7 @@ function DateSearchField({ base, param, value, onChange }: DateSearchFieldProps)
         aria-label={`${param.name} prefix`}
         value={prefix}
         onChange={(e) => commit(e.target.value, date)}
-        className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+        className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
       >
         {DATE_PREFIXES.map((p) => (
           <option key={`${p.value}-${p.label}`} value={p.value} title={p.title}>
@@ -546,7 +546,7 @@ function DateSearchField({ base, param, value, onChange }: DateSearchFieldProps)
         aria-label={param.name}
         value={date}
         onChange={(e) => commit(prefix, e.target.value)}
-        className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+        className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
       />
     </div>,
     param,

@@ -184,9 +184,11 @@ export const bundlePageLinks = <T extends Resource>(
 export function useInfiniteSearch<T extends Resource = Resource>(
   type: string,
   params?: SearchParams,
+  options?: { enabled?: boolean },
 ) {
   const client = useFhirClient();
   return useInfiniteQuery({
+    enabled: options?.enabled,
     queryKey: [
       ...fhirQueryKeys.search(client.baseUrl, type, params),
       "infinite",

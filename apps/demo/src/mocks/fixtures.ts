@@ -144,7 +144,25 @@ export const conditionsFor = (patientId: string): Condition[] => {
       id: "cond-htn-ada",
       clinicalStatus: { text: "active" },
       verificationStatus: { text: "confirmed" },
-      code: { text: "Essential hypertension" },
+      // Dual-coded on purpose (#367): real-world Conditions routinely carry
+      // SNOMED + ICD-10-CM in parallel; the demo needs one so multi-coding
+      // rendering is visible against the mock.
+      code: {
+        text: "Essential hypertension",
+        coding: [
+          {
+            system: "http://snomed.info/sct",
+            code: "59621000",
+            display: "Essential hypertension (disorder)",
+            userSelected: true,
+          },
+          {
+            system: "http://hl7.org/fhir/sid/icd-10-cm",
+            code: "I10",
+            display: "Essential (primary) hypertension",
+          },
+        ],
+      },
       subject: adaSubject,
       onsetDateTime: "2022-03-14",
     },

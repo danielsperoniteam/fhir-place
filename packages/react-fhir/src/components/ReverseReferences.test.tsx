@@ -133,7 +133,15 @@ describe("ReverseReferences", () => {
     // click was intercepted (preventDefault) rather than followed.
   });
 
-  it("offers Show all when more rows exist than the page size", async () => {
+  it("falls back to _count=total when the server reports a total but no next links", async () => {
+    // Some servers honor `_count` but never emit `link[rel=next]`. The
+    // Show-all control must still appear and re-request with _count=total
+    // (Codex review on #729).
+    const all = [
+      { resource: { resourceType: "Observation", id: "o1" } },
+      { resource: { resourceType: "Observation", id: "o2" } },
+      { resource: { resourceType: "Observation", id: "o3" } },
+    ];
     server.use(
       http.get(`${BASE}/Observation`, ({ request }) => {
         const url = new URL(request.url);
@@ -141,16 +149,12 @@ describe("ReverseReferences", () => {
           return HttpResponse.json(countBundle(3));
         }
         const count = Number(url.searchParams.get("_count"));
-        const all = [
-          { resource: { resourceType: "Observation", id: "o1" } },
-          { resource: { resourceType: "Observation", id: "o2" } },
-          { resource: { resourceType: "Observation", id: "o3" } },
-        ];
         return HttpResponse.json({
           resourceType: "Bundle",
           type: "searchset",
           total: 3,
           entry: all.slice(0, count || all.length),
+          // deliberately no link[next]
         });
       }),
     );
@@ -171,7 +175,127 @@ describe("ReverseReferences", () => {
     expect(screen.queryByText("Observation/o3")).toBeNull();
 
     await user.click(screen.getByTestId("revref-show-all-Observation-subject"));
-    await screen.findByText("Observation/o3");
+    await screen.findByText("Observation/o3", {}, { timeout: 5000 });
+    // The one-shot fallback is spent: no dangling Show-all control remains.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("revref-show-all-Observation-subject"),
+      ).toBeNull(),
+    );
+  });
+
+  it("re-surfaces the Show-all control when the drain pauses at maxAutoPages", async () => {
+    const all = ["o1", "o2", "o3", "o4", "o5"].map((id) => ({
+      resource: { resourceType: "Observation", id },
+    }));
+    const page = (offset: number) => ({
+      resourceType: "Bundle",
+      type: "searchset",
+      total: all.length,
+      entry: all.slice(offset, offset + 1),
+      link:
+        offset + 1 < all.length
+          ? [{ relation: "next", url: `${BASE}/Observation?_page=${offset + 1}` }]
+          : [],
+    });
+    server.use(
+      http.get(`${BASE}/Observation`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("_summary") === "count") {
+          return HttpResponse.json(countBundle(all.length));
+        }
+        return HttpResponse.json(page(Number(url.searchParams.get("_page") ?? 0)));
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <ReverseReferences
+        resourceType="Patient"
+        id="ada"
+        includes={[["Observation", "subject"]]}
+        pageSize={1}
+        maxAutoPages={2}
+      />,
+      { wrapper: wrap() },
+    );
+
+    await user.click(await screen.findByText("Observation — subject"));
+    await screen.findByText("Observation/o1");
+
+    // First click drains 2 more pages (the cap), then pauses: no stuck
+    // "Loading all…" line, and the control returns to continue (Codex
+    // review on #729).
+    await user.click(screen.getByTestId("revref-show-all-Observation-subject"));
+    await screen.findByText("Observation/o3", {}, { timeout: 5000 });
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("revref-loading-more-Observation-subject"),
+      ).toBeNull(),
+    );
+    expect(screen.queryByText("Observation/o4")).toBeNull();
+    const again = screen.getByTestId("revref-show-all-Observation-subject");
+
+    // Second click finishes the drain.
+    await user.click(again);
+    await screen.findByText("Observation/o5", {}, { timeout: 5000 });
+  });
+
+  it("follows next links after Show all, even when the server caps _count", async () => {
+    // Server behaves like a capped real-world server: every page holds at
+    // most 2 rows regardless of the requested _count, with a Bundle
+    // link[next] to the following page (Codex review on #728 — a single
+    // `_count=total` request is not guaranteed to return everything).
+    const all = ["o1", "o2", "o3", "o4", "o5"].map((id) => ({
+      resource: { resourceType: "Observation", id },
+    }));
+    const page = (offset: number) => ({
+      resourceType: "Bundle",
+      type: "searchset",
+      total: all.length,
+      entry: all.slice(offset, offset + 2),
+      link:
+        offset + 2 < all.length
+          ? [{ relation: "next", url: `${BASE}/Observation?_page=${offset + 2}` }]
+          : [],
+    });
+    server.use(
+      http.get(`${BASE}/Observation`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("_summary") === "count") {
+          return HttpResponse.json(countBundle(all.length));
+        }
+        return HttpResponse.json(page(Number(url.searchParams.get("_page") ?? 0)));
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <ReverseReferences
+        resourceType="Patient"
+        id="ada"
+        includes={[["Observation", "subject"]]}
+        pageSize={2}
+      />,
+      { wrapper: wrap() },
+    );
+
+    await user.click(await screen.findByText("Observation — subject"));
+    await screen.findByText("Observation/o2");
+    expect(screen.queryByText("Observation/o3")).toBeNull();
+
+    // One click drains every page via link[next], not one capped request.
+    // Each page is a separate round-trip, so allow a longer wait.
+    await user.click(screen.getByTestId("revref-show-all-Observation-subject"));
+    await screen.findByText("Observation/o5", {}, { timeout: 5000 });
+    expect(screen.getByText("Observation/o3")).toBeInTheDocument();
+    expect(screen.getByText("Observation/o4")).toBeInTheDocument();
+    // The drain indicator disappears once everything is loaded.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("revref-loading-more-Observation-subject"),
+      ).toBeNull(),
+    );
   });
 
   it("renders a per-section empty message when the count is zero", async () => {

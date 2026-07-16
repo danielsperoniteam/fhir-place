@@ -224,6 +224,32 @@ describe("ResourceEditor", () => {
     expect(screen.queryByTestId("resource-editor-valuequantity-code-error")).toBeNull();
   });
 
+  it("does not UCUM-validate a valueQuantity whose system is not UCUM", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const obs: Observation = {
+      resourceType: "Observation",
+      status: "final",
+      code: { text: "Widget count" },
+      valueQuantity: {
+        value: 3,
+        unit: "widgets",
+        system: "http://example.org/units",
+        code: "widgets",
+      },
+    };
+    wrap(
+      <ResourceEditor
+        resource={obs}
+        structureDefinition={ObservationStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(screen.queryByTestId("resource-editor-valuequantity-code-error")).toBeNull();
+  });
+
   it("blocks save when Observation valueQuantity.code is not UCUM", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
