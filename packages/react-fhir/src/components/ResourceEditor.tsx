@@ -11,6 +11,7 @@ import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react"
 import { useStructureDefinition } from "../hooks/queries.js";
 import {
   directChildren,
+  isUcumQuantity,
   pathGet,
   pathRemove,
   pathSet,
@@ -101,6 +102,10 @@ const observationValueQuantityUcumCodeGuardrail: ResourceEditorClinicalSafetyGua
 ) => {
   if (draft.resourceType !== "Observation") return [];
   const quantity = (draft as Observation).valueQuantity;
+  // A code is only a UCUM code when the system says so (or is absent —
+  // FHIR's implicit default). Site-specific systems scope their own codes
+  // and must not be rejected by the UCUM validator.
+  if (quantity && !isUcumQuantity(quantity)) return [];
   const code = quantity?.code?.trim();
   if (!code || isValidUcumCode(code)) return [];
   return [
