@@ -69,6 +69,27 @@ test.describe("Saved queries", () => {
     ).toHaveCount(0);
   });
 
+  test("saves the query captured when the form opened, not the URL at submit time", async ({
+    page,
+  }) => {
+    const search = page.getByTestId("resource-search");
+    await search.getByRole("textbox", { name: "given" }).fill("Alan");
+    await search.getByRole("button", { name: "Search" }).click();
+    await expect(page).toHaveURL(/\?given=Alan/);
+
+    // Open the save form, then change the URL out from under it via Clear.
+    await page.getByTestId("save-query").click();
+    await page.getByTestId("clear-filters").click();
+    await expect(page).toHaveURL(/\/fhir-ui\/Patient$/);
+
+    // Submitting still saves the query the user clicked Save on.
+    await page.getByTestId("save-query-label").fill("Snapshot check");
+    await page.getByTestId("save-query-confirm").click();
+    const pinned = page.getByTestId("sidebar-pinned-section");
+    await pinned.getByText("Snapshot check").click();
+    await expect(page).toHaveURL(/\/fhir-ui\/Patient\?given=Alan$/);
+  });
+
   test("wired Clear button drops the active filters from the URL", async ({
     page,
   }) => {

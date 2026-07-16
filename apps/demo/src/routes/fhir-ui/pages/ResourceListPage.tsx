@@ -253,7 +253,11 @@ export function ResourceListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const { pinSearch } = usePinned();
-  const [savingQuery, setSavingQuery] = useState(false);
+  // Snapshot of the URL taken when the save form opens — the user may run
+  // another search or hit Clear before submitting the label, and the save
+  // must target the query they clicked Save on, not whatever the URL says
+  // at submit time. null = form closed.
+  const [savingPath, setSavingPath] = useState<string | null>(null);
   const [queryLabel, setQueryLabel] = useState("");
   const navigate = useNavigate();
   const client = useFhirClient();
@@ -541,16 +545,13 @@ export function ResourceListPage() {
             <div style={{ flex: 1 }} />
             {/* Saved queries v1 (#254 PR A): label the current query and pin
                 it to the sidebar's Pinned section (per-server localStorage). */}
-            {savingQuery ? (
+            {savingPath !== null ? (
               <form
                 style={{ display: "flex", alignItems: "center", gap: 6 }}
                 onSubmit={(e) => {
                   e.preventDefault();
-                  pinSearch(
-                    `${location.pathname}${location.search}`,
-                    queryLabel,
-                  );
-                  setSavingQuery(false);
+                  pinSearch(savingPath, queryLabel);
+                  setSavingPath(null);
                 }}
               >
                 <input
@@ -578,7 +579,7 @@ export function ResourceListPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSavingQuery(false)}
+                  onClick={() => setSavingPath(null)}
                   style={{ ...ccBtn("ghost"), fontSize: 12 }}
                 >
                   Cancel
@@ -595,7 +596,7 @@ export function ResourceListPage() {
                 }
                 onClick={() => {
                   setQueryLabel(`${resourceType}: ${formKey}`.slice(0, 60));
-                  setSavingQuery(true);
+                  setSavingPath(`${location.pathname}${location.search}`);
                 }}
                 style={{
                   ...ccBtn("secondary"),
