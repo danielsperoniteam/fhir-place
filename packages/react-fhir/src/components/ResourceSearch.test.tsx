@@ -241,6 +241,74 @@ describe("ResourceSearch", () => {
     expect((screen.getByLabelText("name modifier") as HTMLSelectElement).value).toBe("exact");
   });
 
+  it("preserves concurrent bare + modifier'd variants of the same param (#732 review)", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialParams={{ name: "Smith", "name:exact": "John" }}
+        initialVisible={8}
+      />,
+    );
+    // The form edits the first variant; the second is preserved verbatim.
+    expect((screen.getByLabelText("name") as HTMLInputElement).value).toBe("Smith");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      name: "Smith",
+      "name:exact": "John",
+    });
+  });
+
+  it(":in on a token swaps to a free-text canonical-URL input and wipes stale codes", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialParams={{ gender: "female" }}
+        initialVisible={8}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText("gender modifier"), "in");
+    const field = screen.getByLabelText("gender") as HTMLInputElement;
+    // Free text with the ValueSet grammar hint, stale code wiped.
+    expect(field.tagName).toBe("INPUT");
+    expect(field.placeholder).toBe("ValueSet canonical URL");
+    expect(field.value).toBe("");
+    await user.type(field, "http://example.org/ValueSet/genders");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      "gender:in": "http://example.org/ValueSet/genders",
+    });
+  });
+
+  it(":identifier on a reference hides the lookup picker and hints token syntax", async () => {
+    const user = userEvent.setup();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        initialVisible={8}
+      />,
+    );
+    // `organization` has a lookup picker by default…
+    expect(screen.queryAllByText(/or look up/i).length).toBeGreaterThan(0);
+    await user.selectOptions(
+      screen.getByLabelText("organization modifier"),
+      "identifier",
+    );
+    // …which disappears under :identifier, and the input hints system|value.
+    expect(screen.queryByText(/or look up/i)).toBeNull();
+    expect(
+      (screen.getByLabelText("organization") as HTMLInputElement).placeholder,
+    ).toBe("system|value");
+  });
+
   it("shows a friendly message when no params are advertised", () => {
     wrap(<ResourceSearch resourceType="UnknownType" capabilityStatement={cap} />);
     expect(screen.getByText(/no searchable parameters/i)).toBeInTheDocument();

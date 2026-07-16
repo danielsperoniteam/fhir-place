@@ -48,6 +48,15 @@ export interface ResourceSearchProps {
 
 type SpecType = CapabilityStatementRestResourceSearchParam["type"];
 
+/** Modifiers whose value shape differs from the param's normal grammar. */
+const GRAMMAR_CHANGING_MODIFIERS = new Set([
+  "missing",
+  "in",
+  "not-in",
+  "of-type",
+  "identifier",
+]);
+
 const inputPlaceholder = (type: SpecType): string => {
   switch (type) {
     case "token":
@@ -134,6 +143,12 @@ export function ResourceSearch(props: ResourceSearchProps) {
   const [modifiers, setModifiers] = useState<Record<string, string>>(
     () => splitIncomingParams(initialParams ?? {}).modifiers,
   );
+  // Extra variants of an already-claimed base name (`name=Smith` +
+  // `name:exact=John`) — not editable in the form but preserved verbatim on
+  // every submit so hydration never drops valid AND criteria.
+  const [passthrough, setPassthrough] = useState<Record<string, string>>(
+    () => splitIncomingParams(initialParams ?? {}).passthrough,
+  );
   const [showAll, setShowAll] = useState(false);
 
   const [askQuestion, setAskQuestion] = useState("");
@@ -151,7 +166,8 @@ export function ResourceSearch(props: ResourceSearchProps) {
         const split = splitIncomingParams(result);
         setValues(split.values);
         setModifiers(split.modifiers);
-        onSubmit?.(buildSearchParams(split.values, split.modifiers));
+        setPassthrough(split.passthrough);
+        onSubmit?.(buildSearchParams(split.values, split.modifiers, split.passthrough));
         setShowAll(true);
         setAskQuestion("");
       }
@@ -163,15 +179,15 @@ export function ResourceSearch(props: ResourceSearchProps) {
   };
 
   useEffect(() => {
-    onChange?.(buildSearchParams(values, modifiers));
+    onChange?.(buildSearchParams(values, modifiers, passthrough));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(values), JSON.stringify(modifiers)]);
+  }, [JSON.stringify(values), JSON.stringify(modifiers), JSON.stringify(passthrough)]);
 
   const visible = showAll ? params : params.slice(0, initialVisible);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit?.(buildSearchParams(values, modifiers));
+    onSubmit?.(buildSearchParams(values, modifiers, passthrough));
   };
 
   const setParam = (name: string, val: string) => {
@@ -190,12 +206,14 @@ export function ResourceSearch(props: ResourceSearchProps) {
       else next[name] = modifier;
       return next;
     });
-    // `:missing` takes true/false rather than the param's normal value shape
-    // — wipe the value when toggling in or out of it so a date/number value
-    // never rides along with the wrong semantics.
-    const wasMissing = modifiers[name] === "missing";
-    const isMissing = modifier === "missing";
-    if (wasMissing !== isMissing) setParam(name, "");
+    // Some modifiers change the VALUE grammar (`:missing` → true/false,
+    // `:in`/`:not-in` → ValueSet URL, `:of-type` → system|code|value,
+    // `:identifier` → system|value). Wipe the value when entering or
+    // leaving one so a stale value never rides along with the wrong
+    // semantics.
+    const wasGrammar = GRAMMAR_CHANGING_MODIFIERS.has(modifiers[name] ?? "");
+    const isGrammar = GRAMMAR_CHANGING_MODIFIERS.has(modifier);
+    if (wasGrammar || isGrammar) setParam(name, "");
   };
 
   if (!cap && capQuery.isLoading) {
@@ -287,6 +305,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
             onClick={() => {
               setValues({});
               setModifiers({});
+              setPassthrough({});
               // Clear is a "wipe and reload" affordance: also fire onSubmit so
               // the parent's active query resets without requiring a second
               // click on Search.
@@ -435,6 +454,16 @@ function SearchField({
  * Falls back to a plain text input when the binding can't be resolved or when
  * the ValueSet is too large to enumerate in a dropdown.
  */
+/**
+ * Token modifiers whose value is NOT a plain code: `:in`/`:not-in` take a
+ * ValueSet canonical URL, `:of-type` takes `system|code|value`. The bounded
+ * code <select> can't express those grammars — swap to free text.
+ */
+const TOKEN_FREE_GRAMMAR_MODIFIERS = new Set(["in", "not-in", "of-type"]);
+
+const tokenModifierPlaceholder = (modifier: string): string =>
+  modifier === "of-type" ? "system|code|value" : "ValueSet canonical URL";
+
 function TokenSearchField({ base, param, value, onChange, profile, modifier, onModifier }: SearchFieldProps): ReactNode {
   // Try the canonical SearchParameter first (covers custom IG params and the
   // few core params whose `expression` doesn't match the kebab→camel rule).
@@ -446,6 +475,26 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   const { valueSet: valueSetUrl } = bindingFor(element);
   const { data: vs, isLoading } = useValueSet(valueSetUrl);
   const codes = codesFromValueSet(vs);
+
+  // `:in`/`:not-in`/`:of-type` change the value grammar entirely — the
+  // bounded code select would submit a bare code where a canonical URL or
+  // triple is required (Codex review on #732).
+  if (modifier && TOKEN_FREE_GRAMMAR_MODIFIERS.has(modifier)) {
+    return fieldWrapper(
+      <input
+        type="text"
+        aria-label={param.name}
+        placeholder={tokenModifierPlaceholder(modifier)}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
+      />,
+      param,
+      base,
+      modifier,
+      onModifier,
+    );
+  }
 
   const fallbackInput = (
     <input
@@ -528,14 +577,17 @@ function ReferenceSearchField({ base, param, value, onChange, modifier, onModifi
     <input
       type="text"
       aria-label={param.name}
-      placeholder={inputPlaceholder(param.type)}
+      placeholder={modifier === "identifier" ? "system|value" : inputPlaceholder(param.type)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
     />
   );
 
-  if (targets.length === 0) {
+  // `:identifier` matches on Identifier token syntax (`system|value`), not a
+  // `Type/id` reference — the lookup picker would store the wrong shape
+  // (Codex review on #732), so drop it while that modifier is active.
+  if (targets.length === 0 || modifier === "identifier") {
     return fieldWrapper(textInput, param, base, modifier, onModifier);
   }
 
@@ -748,22 +800,37 @@ export function findSearchParamsForResource(
  */
 const splitIncomingParams = (
   incoming: Record<string, string>,
-): { values: Record<string, string>; modifiers: Record<string, string> } => {
+): {
+  values: Record<string, string>;
+  modifiers: Record<string, string>;
+  passthrough: Record<string, string>;
+} => {
   const values: Record<string, string> = {};
   const modifiers: Record<string, string> = {};
+  const passthrough: Record<string, string> = {};
   for (const [key, v] of Object.entries(incoming)) {
     const { name, modifier } = splitModifierKey(key);
+    // A second variant of an already-claimed base name (e.g. both
+    // `name=Smith` and `name:exact=John` — valid FHIR AND criteria) can't
+    // occupy the same form slot. Preserve it verbatim so submits keep the
+    // full query; the form edits only the first variant (v0 limit, same as
+    // repeated bare keys).
+    if (values[name] !== undefined) {
+      passthrough[key] = v;
+      continue;
+    }
     values[name] = v;
     if (modifier) modifiers[name] = modifier;
   }
-  return { values, modifiers };
+  return { values, modifiers, passthrough };
 };
 
 const buildSearchParams = (
   values: Record<string, string>,
   modifiers: Record<string, string> = {},
+  passthrough: Record<string, string> = {},
 ): SearchParams => {
-  const out: SearchParams = {};
+  const out: SearchParams = { ...passthrough };
   for (const [k, v] of Object.entries(values)) {
     if (v !== "" && v !== undefined) out[joinModifierKey(k, modifiers[k])] = v;
   }
