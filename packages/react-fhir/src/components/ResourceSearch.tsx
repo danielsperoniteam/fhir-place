@@ -12,6 +12,11 @@ import {
 } from "../hooks/queries.js";
 import type { SearchParams } from "../client/types.js";
 import { bindingFor, codesFromValueSet } from "../structure/binding.js";
+import {
+  joinModifierKey,
+  modifiersForType,
+  splitModifierKey,
+} from "../structure/searchModifiers.js";
 import { elementPathForSearchParam } from "../structure/searchBinding.js";
 import { clipSearchParamDoc } from "../structure/searchDoc.js";
 import { findElement } from "../structure/walker.js";
@@ -119,7 +124,16 @@ export function ResourceSearch(props: ResourceSearchProps) {
     [cap, resourceType, priorityParams.join("|")], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const [values, setValues] = useState<Record<string, string>>(initialParams ?? {});
+  // `values` is keyed by the BARE param name; active modifiers live in a
+  // sibling map and re-join into `name:modifier` keys on submit (#254 PR B).
+  // Incoming params (URL hydration, AI fill) may carry modifier'd keys —
+  // split them apart here.
+  const [values, setValues] = useState<Record<string, string>>(
+    () => splitIncomingParams(initialParams ?? {}).values,
+  );
+  const [modifiers, setModifiers] = useState<Record<string, string>>(
+    () => splitIncomingParams(initialParams ?? {}).modifiers,
+  );
   const [showAll, setShowAll] = useState(false);
 
   const [askQuestion, setAskQuestion] = useState("");
@@ -134,8 +148,10 @@ export function ResourceSearch(props: ResourceSearchProps) {
     try {
       const result = await onAskAI(askQuestion);
       if (result) {
-        setValues(result);
-        onSubmit?.(buildSearchParams(result));
+        const split = splitIncomingParams(result);
+        setValues(split.values);
+        setModifiers(split.modifiers);
+        onSubmit?.(buildSearchParams(split.values, split.modifiers));
         setShowAll(true);
         setAskQuestion("");
       }
@@ -147,15 +163,15 @@ export function ResourceSearch(props: ResourceSearchProps) {
   };
 
   useEffect(() => {
-    onChange?.(buildSearchParams(values));
+    onChange?.(buildSearchParams(values, modifiers));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(values)]);
+  }, [JSON.stringify(values), JSON.stringify(modifiers)]);
 
   const visible = showAll ? params : params.slice(0, initialVisible);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit?.(buildSearchParams(values));
+    onSubmit?.(buildSearchParams(values, modifiers));
   };
 
   const setParam = (name: string, val: string) => {
@@ -165,6 +181,21 @@ export function ResourceSearch(props: ResourceSearchProps) {
       else next[name] = val;
       return next;
     });
+  };
+
+  const setModifier = (name: string, modifier: string) => {
+    setModifiers((prev) => {
+      const next = { ...prev };
+      if (modifier === "") delete next[name];
+      else next[name] = modifier;
+      return next;
+    });
+    // `:missing` takes true/false rather than the param's normal value shape
+    // — wipe the value when toggling in or out of it so a date/number value
+    // never rides along with the wrong semantics.
+    const wasMissing = modifiers[name] === "missing";
+    const isMissing = modifier === "missing";
+    if (wasMissing !== isMissing) setParam(name, "");
   };
 
   if (!cap && capQuery.isLoading) {
@@ -230,6 +261,8 @@ export function ResourceSearch(props: ResourceSearchProps) {
             param={p}
             value={values[p.name!] ?? ""}
             onChange={(v) => setParam(p.name!, v)}
+            modifier={modifiers[p.name!] ?? ""}
+            onModifier={(m) => setModifier(p.name!, m)}
           />
         ))}
       </div>
@@ -253,6 +286,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
             type="button"
             onClick={() => {
               setValues({});
+              setModifiers({});
               // Clear is a "wipe and reload" affordance: also fire onSubmit so
               // the parent's active query resets without requiring a second
               // click on Search.
@@ -280,19 +314,51 @@ interface SearchFieldProps {
   param: CapabilityStatementRestResourceSearchParam;
   value: string;
   onChange: (v: string) => void;
+  /** Active modifier for this param ("" = none). Optional for sub-fields. */
+  modifier?: string;
+  onModifier?: (m: string) => void;
 }
 
+/**
+ * Shared label/doc shell. When the param's type admits modifiers and the
+ * caller wired `onModifier`, a compact modifier select renders next to the
+ * type pill (#254 PR B) — options narrowed per FHIR type so invalid
+ * combinations (e.g. `string:not`) can't be built.
+ */
 const fieldWrapper = (
   children: ReactNode,
   param: CapabilityStatementRestResourceSearchParam,
   base: string,
+  modifier?: string,
+  onModifier?: (m: string) => void,
 ): ReactNode => {
   const doc = clipSearchParamDoc(param.documentation, base);
+  const available = onModifier ? modifiersForType(param.type) : [];
   return (
     <label className="block">
       <span className="mb-1 flex items-baseline justify-between gap-2">
         <span className="text-xs font-medium text-[var(--text-muted)]">{param.name}</span>
-        <span className="text-[10px] uppercase text-[var(--text-subtle)]">{param.type}</span>
+        <span className="flex items-baseline gap-1.5">
+          {available.length > 0 && (
+            <select
+              aria-label={`${param.name} modifier`}
+              value={modifier ?? ""}
+              // Inside a <label>, a click would toggle focus back to the
+              // first input — stop it from bubbling into label behavior.
+              onClick={(e) => e.preventDefault()}
+              onChange={(e) => onModifier?.(e.target.value)}
+              className="rounded border border-[var(--border)] bg-[var(--sunken)] px-1 py-0 text-[10px] text-[var(--text-muted)] focus:border-[var(--accent,#3b82f6)] focus:outline-none"
+            >
+              <option value="">modifier…</option>
+              {available.map((m) => (
+                <option key={m} value={m}>
+                  :{m}
+                </option>
+              ))}
+            </select>
+          )}
+          <span className="text-[10px] uppercase text-[var(--text-subtle)]">{param.type}</span>
+        </span>
       </span>
       {children}
       {doc && (
@@ -302,18 +368,49 @@ const fieldWrapper = (
   );
 };
 
-function SearchField({ base, param, value, onChange, profile }: SearchFieldProps): ReactNode {
+function SearchField({
+  base,
+  param,
+  value,
+  onChange,
+  profile,
+  modifier,
+  onModifier,
+}: SearchFieldProps): ReactNode {
+  // `:missing` takes true/false regardless of the param's type — swap the
+  // type-specific input for a uniform boolean select while it's active.
+  if (modifier === "missing") {
+    return fieldWrapper(
+      <select
+        aria-label={param.name}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
+      >
+        <option value="">—</option>
+        <option value="true">missing (element absent)</option>
+        <option value="false">present (element populated)</option>
+      </select>,
+      param,
+      base,
+      modifier,
+      onModifier,
+    );
+  }
   if (param.type === "token") {
     return (
-      <TokenSearchField base={base} param={param} value={value} onChange={onChange} profile={profile} />
+      <TokenSearchField base={base} param={param} value={value} onChange={onChange} profile={profile} modifier={modifier} onModifier={onModifier} />
     );
   }
   if (param.type === "date") {
-    return <DateSearchField base={base} param={param} value={value} onChange={onChange} />;
+    return <DateSearchField base={base} param={param} value={value} onChange={onChange} modifier={modifier} onModifier={onModifier} />;
+  }
+  if (param.type === "number" || param.type === "quantity") {
+    return <PrefixedValueField base={base} param={param} value={value} onChange={onChange} modifier={modifier} onModifier={onModifier} />;
   }
   if (param.type === "reference") {
     return (
-      <ReferenceSearchField base={base} param={param} value={value} onChange={onChange} />
+      <ReferenceSearchField base={base} param={param} value={value} onChange={onChange} modifier={modifier} onModifier={onModifier} />
     );
   }
   return fieldWrapper(
@@ -327,6 +424,8 @@ function SearchField({ base, param, value, onChange, profile }: SearchFieldProps
     />,
     param,
     base,
+    modifier,
+    onModifier,
   );
 }
 
@@ -336,7 +435,7 @@ function SearchField({ base, param, value, onChange, profile }: SearchFieldProps
  * Falls back to a plain text input when the binding can't be resolved or when
  * the ValueSet is too large to enumerate in a dropdown.
  */
-function TokenSearchField({ base, param, value, onChange, profile }: SearchFieldProps): ReactNode {
+function TokenSearchField({ base, param, value, onChange, profile, modifier, onModifier }: SearchFieldProps): ReactNode {
   // Try the canonical SearchParameter first (covers custom IG params and the
   // few core params whose `expression` doesn't match the kebab→camel rule).
   // Falls through silently when the server doesn't expose SearchParameter.
@@ -371,11 +470,13 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
       />,
       param,
       base,
+      modifier,
+      onModifier,
     );
   }
 
   if (codes.length === 0 || codes.length > 100) {
-    return fieldWrapper(fallbackInput, param, base);
+    return fieldWrapper(fallbackInput, param, base, modifier, onModifier);
   }
 
   return fieldWrapper(
@@ -394,6 +495,8 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
     </select>,
     param,
     base,
+    modifier,
+    onModifier,
   );
 }
 
@@ -412,7 +515,7 @@ function TokenSearchField({ base, param, value, onChange, profile }: SearchField
  * still works against servers that don't surface SearchParameter. When no
  * targets can be derived we drop the picker and keep just the text input.
  */
-function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps): ReactNode {
+function ReferenceSearchField({ base, param, value, onChange, modifier, onModifier }: SearchFieldProps): ReactNode {
   const { data: spec } = useSearchParameter(base, param.name ?? "");
 
   const targets = useMemo(() => {
@@ -433,7 +536,7 @@ function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps
   );
 
   if (targets.length === 0) {
-    return fieldWrapper(textInput, param, base);
+    return fieldWrapper(textInput, param, base, modifier, onModifier);
   }
 
   return fieldWrapper(
@@ -457,6 +560,8 @@ function ReferenceSearchField({ base, param, value, onChange }: SearchFieldProps
     </div>,
     param,
     base,
+    modifier,
+    onModifier,
   );
 }
 
@@ -485,7 +590,7 @@ function defaultReferenceTargets(name: string): string[] {
 
 /* ---------- date ---------- */
 
-type DatePrefix = "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "ap";
+type DatePrefix = "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "ap" | "sa" | "eb";
 
 interface DatePrefixOption {
   value: DatePrefix | "";
@@ -502,14 +607,11 @@ const DATE_PREFIXES: DatePrefixOption[] = [
   { value: "gt", label: ">", title: "greater than" },
   { value: "ge", label: "≥", title: "greater than or equal" },
   { value: "ap", label: "~", title: "approximately" },
+  { value: "sa", label: "sa", title: "starts after (period param)" },
+  { value: "eb", label: "eb", title: "ends before (period param)" },
 ];
 
-interface DateSearchFieldProps {
-  base: string;
-  param: CapabilityStatementRestResourceSearchParam;
-  value: string;
-  onChange: (v: string) => void;
-}
+type DateSearchFieldProps = SearchFieldProps;
 
 /**
  * FHIR date search field: a prefix selector (eq/ne/lt/gt/ge/le/ap) paired with
@@ -517,12 +619,17 @@ interface DateSearchFieldProps {
  * in sync with whatever the parent holds — e.g. `ge2024-01-01` splits into
  * prefix="ge" + date="2024-01-01".
  */
-function DateSearchField({ base, param, value, onChange }: DateSearchFieldProps): ReactNode {
-  const match = value.match(/^(eq|ne|lt|le|gt|ge|ap)?(\d{4}-\d{2}-\d{2})?$/);
-  const prefix = (match?.[1] ?? "") as DatePrefix | "";
+function DateSearchField({ base, param, value, onChange, modifier, onModifier }: DateSearchFieldProps): ReactNode {
+  const match = value.match(/^(eq|ne|lt|le|gt|ge|ap|sa|eb)?(\d{4}-\d{2}-\d{2})?$/);
   const date = match?.[2] ?? "";
+  // A prefix picked before any date exists can't live in `value` (a bare
+  // "ge" is not a submittable date) — park it locally so prefix-then-date
+  // ordering works, and let a parsed prefix from the value win once set.
+  const [pendingPrefix, setPendingPrefix] = useState<DatePrefix | "">("");
+  const prefix = ((match?.[1] as DatePrefix | undefined) ?? (date ? "" : pendingPrefix));
 
   const commit = (nextPrefix: string, nextDate: string) => {
+    setPendingPrefix(nextPrefix as DatePrefix | "");
     if (!nextDate) return onChange("");
     onChange(`${nextPrefix}${nextDate}`);
   };
@@ -551,6 +658,66 @@ function DateSearchField({ base, param, value, onChange }: DateSearchFieldProps)
     </div>,
     param,
     base,
+    modifier,
+    onModifier,
+  );
+}
+
+/* ---------- number / quantity ---------- */
+
+/**
+ * Number and quantity search field (#254 PR B): the same prefix vocabulary
+ * as dates (FHIR applies eq/ne/lt/le/gt/ge/ap/sa/eb to all ordered types)
+ * in front of a free-value input — `gt` + `5.4|http://unitsofmeasure.org|mg`
+ * round-trips as `gt5.4|…|mg`.
+ */
+function PrefixedValueField({
+  base,
+  param,
+  value,
+  onChange,
+  modifier,
+  onModifier,
+}: SearchFieldProps): ReactNode {
+  const match = value.match(/^(eq|ne|lt|le|gt|ge|ap|sa|eb)?(.*)$/);
+  const rest = match?.[2] ?? "";
+  // See DateSearchField: park a prefix picked before any value exists.
+  const [pendingPrefix, setPendingPrefix] = useState<DatePrefix | "">("");
+  const prefix = ((match?.[1] as DatePrefix | undefined) ?? (rest ? "" : pendingPrefix));
+
+  const commit = (nextPrefix: string, nextValue: string) => {
+    setPendingPrefix(nextPrefix as DatePrefix | "");
+    if (!nextValue) return onChange("");
+    onChange(`${nextPrefix}${nextValue}`);
+  };
+
+  return fieldWrapper(
+    <div className="flex gap-1">
+      <select
+        aria-label={`${param.name} prefix`}
+        value={prefix}
+        onChange={(e) => commit(e.target.value, rest)}
+        className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
+      >
+        {DATE_PREFIXES.map((p) => (
+          <option key={`${p.value}-${p.label}`} value={p.value} title={p.title}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      <input
+        type="text"
+        aria-label={param.name}
+        placeholder={param.type === "quantity" ? "123|system|code" : "123"}
+        value={rest}
+        onChange={(e) => commit(prefix, e.target.value)}
+        className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
+      />
+    </div>,
+    param,
+    base,
+    modifier,
+    onModifier,
   );
 }
 
@@ -574,10 +741,31 @@ export function findSearchParamsForResource(
   });
 }
 
-const buildSearchParams = (values: Record<string, string>): SearchParams => {
+/**
+ * Split incoming params (URL hydration, AI fill) into bare-name values and
+ * their modifiers: `{ "given:exact": "Ada" }` → values `{ given: "Ada" }`,
+ * modifiers `{ given: "exact" }`. Chained keys pass through untouched.
+ */
+const splitIncomingParams = (
+  incoming: Record<string, string>,
+): { values: Record<string, string>; modifiers: Record<string, string> } => {
+  const values: Record<string, string> = {};
+  const modifiers: Record<string, string> = {};
+  for (const [key, v] of Object.entries(incoming)) {
+    const { name, modifier } = splitModifierKey(key);
+    values[name] = v;
+    if (modifier) modifiers[name] = modifier;
+  }
+  return { values, modifiers };
+};
+
+const buildSearchParams = (
+  values: Record<string, string>,
+  modifiers: Record<string, string> = {},
+): SearchParams => {
   const out: SearchParams = {};
   for (const [k, v] of Object.entries(values)) {
-    if (v !== "" && v !== undefined) out[k] = v;
+    if (v !== "" && v !== undefined) out[joinModifierKey(k, modifiers[k])] = v;
   }
   return out;
 };

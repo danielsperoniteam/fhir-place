@@ -191,6 +191,56 @@ describe("ResourceSearch", () => {
     expect(screen.getByRole("searchbox", { name: /search organization/i })).toBeInTheDocument();
   });
 
+  it("modifier menus narrow to the param's type and rewrite the submitted key (#254)", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch resourceType="Patient" capabilityStatement={cap} onSubmit={onSubmit} initialVisible={8} />,
+    );
+
+    // string param offers :exact but not :not…
+    const nameModifier = screen.getByLabelText("name modifier") as HTMLSelectElement;
+    const nameOptions = Array.from(nameModifier.options).map((o) => o.value);
+    expect(nameOptions).toContain("exact");
+    expect(nameOptions).not.toContain("not");
+    // …token param offers :not but not :exact.
+    const genderModifier = screen.getByLabelText("gender modifier") as HTMLSelectElement;
+    const genderOptions = Array.from(genderModifier.options).map((o) => o.value);
+    expect(genderOptions).toContain("not");
+    expect(genderOptions).not.toContain("exact");
+
+    await user.type(screen.getByLabelText("name"), "Ada");
+    await user.selectOptions(nameModifier, "exact");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({ "name:exact": "Ada" });
+  });
+
+  it(":missing swaps the input for a boolean select and submits name:missing", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch resourceType="Patient" capabilityStatement={cap} onSubmit={onSubmit} initialVisible={8} />,
+    );
+    await user.selectOptions(screen.getByLabelText("birthdate modifier"), "missing");
+    // The date picker is replaced by a true/false select.
+    await user.selectOptions(screen.getByLabelText("birthdate"), "true");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({ "birthdate:missing": "true" });
+  });
+
+  it("hydrates modifier'd initialParams back into the form", () => {
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        initialParams={{ "name:exact": "Ada" }}
+        initialVisible={8}
+      />,
+    );
+    expect((screen.getByLabelText("name") as HTMLInputElement).value).toBe("Ada");
+    expect((screen.getByLabelText("name modifier") as HTMLSelectElement).value).toBe("exact");
+  });
+
   it("shows a friendly message when no params are advertised", () => {
     wrap(<ResourceSearch resourceType="UnknownType" capabilityStatement={cap} />);
     expect(screen.getByText(/no searchable parameters/i)).toBeInTheDocument();

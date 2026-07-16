@@ -50,7 +50,8 @@ describe("ResourceSearch — date search fields", () => {
     const prefix = screen.getByRole("combobox", { name: "birthdate prefix" });
     const options = within(prefix).getAllByRole("option");
     expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(
-      ["", "eq", "ne", "lt", "le", "gt", "ge", "ap"],
+      // sa/eb joined in #254 PR B (period-param prefixes).
+      ["", "eq", "ne", "lt", "le", "gt", "ge", "ap", "sa", "eb"],
     );
   });
 
