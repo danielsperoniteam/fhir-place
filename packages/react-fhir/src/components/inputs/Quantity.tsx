@@ -27,7 +27,7 @@ export const QuantityInput: FhirTypeInput<Quantity> = ({
     context.element.type?.find((t) => t.code === "Quantity")?.profile,
   );
   return (
-    <div className="grid grid-cols-1 gap-2 rounded border border-slate-200 bg-slate-50 p-2 sm:grid-cols-[5rem_6rem_1fr_minmax(7rem,1fr)_8rem]">
+    <div className="grid grid-cols-1 gap-2 rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2 sm:grid-cols-[5rem_6rem_1fr_minmax(7rem,1fr)_8rem]">
       {allowComparator && (
         <label>
           <span className={subLabel}>Comparator</span>
@@ -103,7 +103,7 @@ export const QuantityInput: FhirTypeInput<Quantity> = ({
           <span
             id={codeErrorId}
             data-testid="resource-editor-valuequantity-code-error"
-            className="mt-1 block text-xs text-red-600"
+            className="mt-1 block text-xs text-[var(--danger,#dc2626)]"
           >
             {error}
           </span>

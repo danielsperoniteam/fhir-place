@@ -133,6 +133,57 @@ describe("ReverseReferences", () => {
     // click was intercepted (preventDefault) rather than followed.
   });
 
+  it("falls back to _count=total when the server reports a total but no next links", async () => {
+    // Some servers honor `_count` but never emit `link[rel=next]`. The
+    // Show-all control must still appear and re-request with _count=total
+    // (Codex review on #729).
+    const all = [
+      { resource: { resourceType: "Observation", id: "o1" } },
+      { resource: { resourceType: "Observation", id: "o2" } },
+      { resource: { resourceType: "Observation", id: "o3" } },
+    ];
+    server.use(
+      http.get(`${BASE}/Observation`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("_summary") === "count") {
+          return HttpResponse.json(countBundle(3));
+        }
+        const count = Number(url.searchParams.get("_count"));
+        return HttpResponse.json({
+          resourceType: "Bundle",
+          type: "searchset",
+          total: 3,
+          entry: all.slice(0, count || all.length),
+          // deliberately no link[next]
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <ReverseReferences
+        resourceType="Patient"
+        id="ada"
+        includes={[["Observation", "subject"]]}
+        pageSize={2}
+      />,
+      { wrapper: wrap() },
+    );
+
+    await user.click(await screen.findByText("Observation — subject"));
+    await screen.findByText("Observation/o2");
+    expect(screen.queryByText("Observation/o3")).toBeNull();
+
+    await user.click(screen.getByTestId("revref-show-all-Observation-subject"));
+    await screen.findByText("Observation/o3", {}, { timeout: 5000 });
+    // The one-shot fallback is spent: no dangling Show-all control remains.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("revref-show-all-Observation-subject"),
+      ).toBeNull(),
+    );
+  });
+
   it("re-surfaces the Show-all control when the drain pauses at maxAutoPages", async () => {
     const all = ["o1", "o2", "o3", "o4", "o5"].map((id) => ({
       resource: { resourceType: "Observation", id },

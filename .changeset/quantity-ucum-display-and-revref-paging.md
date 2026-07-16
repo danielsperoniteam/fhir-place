@@ -11,7 +11,13 @@ Quantity rendering and editing (#368), plus reverse-references paging:
 - `ReverseReferences` "Show all" now follows `Bundle.link[next]` until every row is loaded instead of assuming one `_count=total` request returns everything — servers are allowed to cap page size. A new `maxAutoPages` prop (default 100) caps each click; when the cap pauses a huge drain the control reappears to continue.
 - `useInfiniteSearch` accepts an `options.enabled` flag.
 
+- `ReverseReferences` also handles servers that report a `total` beyond the returned rows without emitting `link[rel=next]`: the Show-all control re-requests once with `_count=total`.
+
 Multi-coding CodeableConcept rendering (#367):
 
 - The `CodedValue` popover decodes `translation` extensions on a coding's display (both the spec-correct `_display` carrier and codings that attach them directly), rendering each language + content line.
 - Registry adds ICD-10-PCS and HCPCS system labels.
+
+Theme tokens (#245 shape):
+
+- Every component now styles through `var(--token, lightFallback)` instead of hard-coded slate/white/blue utilities — `--text`, `--text-muted`, `--text-subtle`, `--surface`, `--sunken`, `--chip`, `--border`, `--border-strong`, `--accent`, `--accent-soft`, `--accent-text`, `--danger`, `--danger-soft`, `--warn`, `--warn-soft`. Apps that define these tokens (e.g. with a `.dark` scope) get dark mode across the editor, inputs, search, and renderers for free; apps that don't keep the previous light rendering via the fallbacks.

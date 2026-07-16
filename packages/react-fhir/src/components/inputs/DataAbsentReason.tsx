@@ -46,7 +46,7 @@ export const DataAbsentReasonInput: FhirTypeInput<CodeableConcept> = ({
         type="button"
         data-testid="data-absent-reason-toggle"
         onClick={() => onChange(standardConcept("unknown"))}
-        className="rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-slate-400"
+        className="rounded border border-dashed border-[var(--border-strong,#cbd5e1)] px-2 py-1 text-xs text-[var(--text-muted,#475569)] hover:border-[var(--border-strong,#94a3b8)]"
       >
         + Mark result as missing
       </button>
@@ -85,7 +85,7 @@ export const DataAbsentReasonInput: FhirTypeInput<CodeableConcept> = ({
           type="button"
           onClick={() => onChange(undefined)}
           aria-label="Clear reason"
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:border-red-400 hover:text-red-600"
+          className="rounded border border-[var(--border-strong,#cbd5e1)] bg-[var(--surface,#ffffff)] px-2 py-1 text-xs text-[var(--text-muted,#475569)] hover:border-[var(--danger,#f87171)] hover:text-[var(--danger,#dc2626)]"
         >
           ×
         </button>

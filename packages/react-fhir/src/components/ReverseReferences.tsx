@@ -120,6 +120,11 @@ function RevIncludeSection({
 }: RevIncludeSectionProps) {
   const [open, setOpen] = useState(false);
   const [draining, setDraining] = useState(false);
+  // Requested _count for the first page. Raised to `total` as a fallback
+  // when a server reports more rows than it returned but omits
+  // `link[rel=next]` — without paging links, one big request is the only
+  // way to get the rest.
+  const [countParam, setCountParam] = useState(pageSize);
 
   const countQuery = useSearch(type, {
     [param]: target,
@@ -139,7 +144,7 @@ function RevIncludeSection({
   // `next` links until every row is loaded (Codex review on #728).
   const listQuery = useInfiniteSearch(
     type,
-    { [param]: target, _count: pageSize },
+    { [param]: target, _count: countParam },
     { enabled: open },
   );
   const { hasNextPage, fetchNextPage } = listQuery;
@@ -153,7 +158,33 @@ function RevIncludeSection({
   // the cap pauses the drain early, `draining` resets so the Show-all
   // control reappears to continue rather than stranding an infinite
   // loading state.
+  const entries =
+    listQuery.data?.pages.flatMap(
+      (page) =>
+        (page as Bundle<Resource>).entry?.flatMap((e) =>
+          e.resource ? [e.resource] : [],
+        ) ?? [],
+    ) ?? [];
+
+  // A section is truncated when the server advertises a next link OR
+  // reports a total beyond what it returned without any paging links (some
+  // servers honor `_count` but never emit `link[rel=next]`). The latter is
+  // recoverable exactly once, by re-requesting with `_count=total`.
+  const truncatedWithoutLinks =
+    !hasNextPage &&
+    typeof total === "number" &&
+    total > entries.length &&
+    countParam !== total;
+  const canShowAll = hasNextPage || truncatedWithoutLinks;
+
   const drainAll = async () => {
+    if (truncatedWithoutLinks) {
+      // No paging links to follow — raise the first-page _count to total.
+      // The params change resets the query, which refetches while
+      // `listQuery.isLoading` shows the existing loading state.
+      setCountParam(total);
+      return;
+    }
     setDraining(true);
     try {
       let fetched = 0;
@@ -167,14 +198,6 @@ function RevIncludeSection({
       setDraining(false);
     }
   };
-
-  const entries =
-    listQuery.data?.pages.flatMap(
-      (page) =>
-        (page as Bundle<Resource>).entry?.flatMap((e) =>
-          e.resource ? [e.resource] : [],
-        ) ?? [],
-    ) ?? [];
   const inlineQuery = `${type}?${param}=${target}&_count=${pageSize}`;
 
   // Log-scaled fan-out bar: width relative to the largest group.
@@ -261,7 +284,7 @@ function RevIncludeSection({
                 })}
               </ul>
             )}
-            {!draining && hasNextPage && (
+            {!draining && canShowAll && (
               <button
                 type="button"
                 onClick={() => void drainAll()}

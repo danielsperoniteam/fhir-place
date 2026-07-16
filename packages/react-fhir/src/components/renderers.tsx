@@ -73,13 +73,13 @@ const DateTime_: FhirTypeRenderer = (value) => {
   return <time dateTime={s}>{formatDateTime(s) || s}</time>;
 };
 const Code_: FhirTypeRenderer = (value) => (
-  <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{String(value)}</code>
+  <code className="rounded bg-[var(--chip,#f1f5f9)] px-1 py-0.5 text-xs">{String(value)}</code>
 );
 const Uri_: FhirTypeRenderer = (value) => {
   const s = String(value);
   if (/^https?:\/\//i.test(s)) {
     return (
-      <a className="text-blue-700 underline" href={s} target="_blank" rel="noreferrer">
+      <a className="text-[var(--accent-text,#1d4ed8)] underline" href={s} target="_blank" rel="noreferrer">
         {s}
       </a>
     );
@@ -96,7 +96,7 @@ const HumanNameRenderer: FhirTypeRenderer = (value) => {
   return (
     <span>
       {formatted}
-      {useLabel && <span className="text-slate-400">{useLabel}</span>}
+      {useLabel && <span className="text-[var(--text-subtle,#94a3b8)]">{useLabel}</span>}
     </span>
   );
 };
@@ -106,7 +106,7 @@ const AddressRenderer: FhirTypeRenderer = (value) => {
   const label = a.use ? `${a.use} ` : "";
   return (
     <span>
-      {label && <span className="text-slate-400">{label}</span>}
+      {label && <span className="text-[var(--text-subtle,#94a3b8)]">{label}</span>}
       {formatAddress(a)}
     </span>
   );
@@ -114,36 +114,36 @@ const AddressRenderer: FhirTypeRenderer = (value) => {
 
 const ContactPointRenderer: FhirTypeRenderer = (value) => {
   const c = value as ContactPoint;
-  if (!c.value) return <span className="text-slate-400">—</span>;
+  if (!c.value) return <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
   const sys = c.system ? `${c.system}: ` : "";
   const use = c.use ? ` (${c.use})` : "";
   if (c.system === "email") {
     return (
       <span>
-        <span className="text-slate-400">{sys}</span>
-        <a className="text-blue-700 underline" href={`mailto:${c.value}`}>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{sys}</span>
+        <a className="text-[var(--accent-text,#1d4ed8)] underline" href={`mailto:${c.value}`}>
           {c.value}
         </a>
-        <span className="text-slate-400">{use}</span>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{use}</span>
       </span>
     );
   }
   if (c.system === "phone" || c.system === "fax") {
     return (
       <span>
-        <span className="text-slate-400">{sys}</span>
-        <a className="text-blue-700 underline" href={`tel:${c.value}`}>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{sys}</span>
+        <a className="text-[var(--accent-text,#1d4ed8)] underline" href={`tel:${c.value}`}>
           {c.value}
         </a>
-        <span className="text-slate-400">{use}</span>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{use}</span>
       </span>
     );
   }
   return (
     <span>
-      <span className="text-slate-400">{sys}</span>
+      <span className="text-[var(--text-subtle,#94a3b8)]">{sys}</span>
       {c.value}
-      <span className="text-slate-400">{use}</span>
+      <span className="text-[var(--text-subtle,#94a3b8)]">{use}</span>
     </span>
   );
 };
@@ -245,7 +245,7 @@ const CodingRenderer: FhirTypeRenderer = (value, ctx) => {
 const CodeableConceptRenderer: FhirTypeRenderer = (value, ctx) => {
   const cc = value as CodeableConcept;
   if (!cc.text && !cc.coding?.length) {
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
   }
   return <CodedValue value={cc} tone={ctx.tone} />;
 };
@@ -267,12 +267,12 @@ const QuantityRenderer: FhirTypeRenderer = (value) => {
     <span>
       {comparator}
       {q.value ?? ""}{" "}
-      <span className="text-slate-500" title={q.system}>
+      <span className="text-[var(--text-muted,#64748b)]" title={q.system}>
         {unit}
       </span>
       {showCodeBadge && (
         <span
-          className="ml-1 rounded bg-slate-100 px-1 font-mono text-[10px] text-slate-500"
+          className="ml-1 rounded bg-[var(--chip,#f1f5f9)] px-1 font-mono text-[10px] text-[var(--text-muted,#64748b)]"
           title={q.system ?? "UCUM code"}
         >
           UCUM: {q.code}
@@ -286,9 +286,9 @@ const RangeRenderer: FhirTypeRenderer = (value, ctx) => {
   const r = value as Range;
   return (
     <span>
-      {r.low ? QuantityRenderer(r.low, ctx) : <span className="text-slate-400">—</span>}
-      <span className="mx-1 text-slate-400">to</span>
-      {r.high ? QuantityRenderer(r.high, ctx) : <span className="text-slate-400">—</span>}
+      {r.low ? QuantityRenderer(r.low, ctx) : <span className="text-[var(--text-subtle,#94a3b8)]">—</span>}
+      <span className="mx-1 text-[var(--text-subtle,#94a3b8)]">to</span>
+      {r.high ? QuantityRenderer(r.high, ctx) : <span className="text-[var(--text-subtle,#94a3b8)]">—</span>}
     </span>
   );
 };
@@ -298,7 +298,7 @@ const RatioRenderer: FhirTypeRenderer = (value, ctx) => {
   return (
     <span>
       {r.numerator ? QuantityRenderer(r.numerator, ctx) : "?"}
-      <span className="mx-1 text-slate-400">/</span>
+      <span className="mx-1 text-[var(--text-subtle,#94a3b8)]">/</span>
       {r.denominator ? QuantityRenderer(r.denominator, ctx) : "?"}
     </span>
   );
@@ -308,7 +308,7 @@ const MoneyRenderer: FhirTypeRenderer = (value) => {
   const m = value as Money;
   return (
     <span>
-      {m.value ?? ""} <span className="text-slate-500">{m.currency ?? ""}</span>
+      {m.value ?? ""} <span className="text-[var(--text-muted,#64748b)]">{m.currency ?? ""}</span>
     </span>
   );
 };
@@ -324,7 +324,7 @@ const PeriodRenderer: FhirTypeRenderer = (value) => {
   return (
     <span>
       <time {...(p.start ? { dateTime: p.start } : {})}>{startText}</time>
-      <span className="mx-1 text-slate-400">→</span>
+      <span className="mx-1 text-[var(--text-subtle,#94a3b8)]">→</span>
       <time {...(p.end ? { dateTime: p.end } : {})}>{endText}</time>
     </span>
   );
@@ -332,12 +332,12 @@ const PeriodRenderer: FhirTypeRenderer = (value) => {
 
 const IdentifierRenderer: FhirTypeRenderer = (value) => {
   const i = value as Identifier;
-  const sys = i.system ? <span className="text-slate-400">{i.system} </span> : null;
+  const sys = i.system ? <span className="text-[var(--text-subtle,#94a3b8)]">{i.system} </span> : null;
   return (
     <span>
       {sys}
-      <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{i.value}</code>
-      {i.use && <span className="ml-1 text-slate-400">({i.use})</span>}
+      <code className="rounded bg-[var(--chip,#f1f5f9)] px-1 py-0.5 text-xs">{i.value}</code>
+      {i.use && <span className="ml-1 text-[var(--text-subtle,#94a3b8)]">({i.use})</span>}
     </span>
   );
 };
@@ -356,7 +356,7 @@ function ReferenceCellLink({
   return (
     <button
       type="button"
-      className="text-blue-700 underline"
+      className="text-[var(--accent-text,#1d4ed8)] underline"
       onClick={() => onClick(reference)}
     >
       {label}
@@ -378,7 +378,7 @@ const AttachmentRenderer: FhirTypeRenderer = (value) => {
   const label = a.title ?? a.url ?? a.contentType ?? "attachment";
   if (a.url) {
     return (
-      <a className="text-blue-700 underline" href={a.url} target="_blank" rel="noreferrer">
+      <a className="text-[var(--accent-text,#1d4ed8)] underline" href={a.url} target="_blank" rel="noreferrer">
         {label}
       </a>
     );
@@ -446,18 +446,18 @@ const MetaRenderer: FhirTypeRenderer = (value, ctx) => {
   }
 
   if (fields.length === 0) {
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
   }
 
   return (
     <details className="group">
-      <summary className="cursor-pointer text-slate-600 marker:text-slate-400">
+      <summary className="cursor-pointer text-[var(--text-muted,#475569)] marker:text-[var(--text-subtle,#94a3b8)]">
         {summaryParts.join(" · ")}
       </summary>
-      <dl className="mt-2 grid grid-cols-1 gap-x-3 gap-y-1 border-l-2 border-slate-200 pl-3 sm:grid-cols-[minmax(6rem,1fr)_3fr]">
+      <dl className="mt-2 grid grid-cols-1 gap-x-3 gap-y-1 border-l-2 border-[var(--border,#e2e8f0)] pl-3 sm:grid-cols-[minmax(6rem,1fr)_3fr]">
         {fields.map((f) => (
           <Fragment key={f.label}>
-            <dt className="text-xs font-medium text-slate-500">{f.label}</dt>
+            <dt className="text-xs font-medium text-[var(--text-muted,#64748b)]">{f.label}</dt>
             <dd className="text-sm">{f.node}</dd>
           </Fragment>
         ))}
@@ -471,15 +471,15 @@ const AnnotationRenderer: FhirTypeRenderer = (value) => {
   return (
     <div>
       {a.authorString && (
-        <span className="text-slate-400">{a.authorString}: </span>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{a.authorString}: </span>
       )}
       <span>{a.text}</span>
-      {a.time && <span className="ml-2 text-slate-400">({a.time})</span>}
+      {a.time && <span className="ml-2 text-[var(--text-subtle,#94a3b8)]">({a.time})</span>}
     </div>
   );
 };
 
-const Dash = () => <span className="text-slate-400">—</span>;
+const Dash = () => <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
 
 const TimingRenderer: FhirTypeRenderer = (value) => {
   const summary = formatTiming(value as Timing);
@@ -548,7 +548,7 @@ const DosageRenderer: FhirTypeRenderer = (value, ctx) => {
         <dl className="grid grid-cols-[minmax(5rem,max-content)_1fr] gap-x-3 gap-y-0.5">
           {rows.map((r, i) => (
             <Fragment key={`${r.label}-${i}`}>
-              <dt className="text-xs font-medium text-slate-500">{r.label}</dt>
+              <dt className="text-xs font-medium text-[var(--text-muted,#64748b)]">{r.label}</dt>
               <dd className="text-sm">{r.node}</dd>
             </Fragment>
           ))}
