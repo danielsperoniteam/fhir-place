@@ -63,6 +63,32 @@ describe("QuantityInput (#368)", () => {
     expect(screen.queryByTestId("quantity-comparator")).toBeNull();
   });
 
+  it("hides the comparator for versioned SimpleQuantity canonicals and bare type codes", () => {
+    const versionedCtx = ctxFor({
+      path: "MedicationRequest.dispenseRequest.quantity",
+      type: [
+        {
+          code: "Quantity",
+          profile: ["http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1"],
+        },
+      ],
+    });
+    const { unmount } = render(
+      <QuantityInput value={{ value: 1 }} onChange={() => {}} context={versionedCtx} />,
+    );
+    expect(screen.queryByTestId("quantity-comparator")).toBeNull();
+    unmount();
+
+    const bareTypeCtx = {
+      ...ctxFor({ type: [{ code: "SimpleQuantity" }] }),
+      typeCode: "SimpleQuantity",
+    };
+    render(
+      <QuantityInput value={{ value: 1 }} onChange={() => {}} context={bareTypeCtx} />,
+    );
+    expect(screen.queryByTestId("quantity-comparator")).toBeNull();
+  });
+
   it("defaults system to UCUM when a code is entered without one", () => {
     const onChange = vi.fn();
     const { container } = render(
