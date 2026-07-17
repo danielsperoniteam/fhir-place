@@ -35,6 +35,32 @@ See also:
 
 ---
 
+## Step 0 — create an isolated worktree
+
+Before touching any files, set up a worktree so this run never disturbs the
+primary checkout:
+
+```bash
+REPO_ROOT=$(pwd)
+HEAD_REF=$(gh pr view <pr_number> --json headRefName --jq '.headRefName')
+WORKTREE=../wt-pr-<pr_number>
+git fetch origin
+git branch --track "$HEAD_REF" "origin/$HEAD_REF" 2>/dev/null || true
+git worktree add "$WORKTREE" "$HEAD_REF"
+cd "$WORKTREE"
+```
+
+All subsequent git and file operations run inside `$WORKTREE`. At every exit
+point (success, needs-human, or any failure), remove the worktree. Use
+`git -C "$REPO_ROOT"` — `cd ..` from inside the worktree lands in the
+parent of the main checkout, which is not a git repository:
+
+```bash
+git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>
+```
+
+---
+
 ## Step 1 — enumerate unresolved threads
 
 Use the GraphQL API (`gh api graphql -f query=...`) to list every review
@@ -173,6 +199,9 @@ green yet.
 ---
 
 ## Exit table
+
+In every row below, remove the worktree before exiting:
+`git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>`
 
 | Failure | Action | Branch fate |
 | --- | --- | --- |

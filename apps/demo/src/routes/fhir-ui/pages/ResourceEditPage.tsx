@@ -18,13 +18,17 @@ export function ResourceEditPage() {
 
   return (
     <div className="space-y-4">
-      <nav className="text-sm text-slate-500">
+      <nav className="text-sm" style={{ color: "var(--text-muted)" }}>
         <Link to={`/fhir-ui/${resourceType}/${id}`} className="underline">
           ← Back to {resourceType}/{id}
         </Link>
       </nav>
       {isLoading && (
-        <p className="text-sm text-slate-500" data-testid="resource-loading">
+        <p
+          className="text-sm"
+          style={{ color: "var(--text-muted)" }}
+          data-testid="resource-loading"
+        >
           Loading {resourceType}/{id}…
         </p>
       )}
@@ -82,11 +86,18 @@ export function ResourceEditPage() {
             await update.mutateAsync(draft as Resource & { id: string });
             navigate(`/fhir-ui/${resourceType}/${id}`);
           }}
-          className="space-y-4 rounded border border-slate-200 bg-white p-4 shadow-sm"
+          className="cc-card space-y-4 rounded border p-4 shadow-sm"
         />
       )}
       {update.isError && (
-        <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p
+          className="rounded border p-3 text-sm"
+          style={{
+            borderColor: "var(--danger)",
+            background: "var(--danger-soft)",
+            color: "var(--danger)",
+          }}
+        >
           {(update.error as Error)?.message}
         </p>
       )}

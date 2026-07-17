@@ -8,7 +8,7 @@ test.describe("Patient compartment links + index pages", () => {
 
     // Every compartment type shows a chip. Fixture-populated counts:
     // Conditions 2, MedicationRequests 3, Allergies 1, Observations 3,
-    // Procedures 1, Encounters 2, Immunizations 1.
+    // Procedures 2, Encounters 2, Immunizations 1.
     await expect(
       page.getByTestId("compartment-chip-Condition"),
     ).toContainText(/Conditions\s*\(2\)/);
@@ -30,8 +30,13 @@ test.describe("Patient compartment links + index pages", () => {
     await expect(
       page.getByRole("heading", { name: "Condition", exact: true }),
     ).toBeVisible();
-    // New CC UI shows the patient scope as a back-link "← Back to Patient/ada".
-    await expect(page.getByRole("link", { name: /back to patient/i })).toBeVisible();
+    // New CC UI shows the patient scope as a back-link "← Back to Ada Lovelace".
+    // The link renders the human-readable patient name once the Patient read
+    // resolves, falling back to the raw UUID while the lookup is in flight.
+    // The raw `Patient/<id>` stays accessible via the link's `title` tooltip.
+    const backLink = page.getByRole("link", { name: /back to .*ada lovelace/i });
+    await expect(backLink).toBeVisible();
+    await expect(backLink).toHaveAttribute("title", "Patient/ada");
     // ResourceTable renders both desktop and mobile layouts in the DOM
     // at the same time, so scope to the desktop table to avoid
     // strict-mode duplicate matches.
@@ -62,7 +67,11 @@ test.describe("Patient compartment links + index pages", () => {
     page,
   }) => {
     await page.goto("/Condition?patient=ada");
-    await page.getByRole("link", { name: /back to patient/i }).click();
+    // The back-link renders the patient's name once the read resolves; the
+    // raw UUID lives in the `title` attribute for users who need it.
+    await page
+      .getByRole("link", { name: /back to .*ada lovelace/i })
+      .click();
     await expect(page).toHaveURL(/\/Patient\/ada$/);
   });
 

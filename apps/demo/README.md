@@ -86,7 +86,7 @@ interface ResourceListConfig<T extends Resource = Resource> {
 
 ### Configured resource types
 
-All 20 types in `TOP_RESOURCE_TYPES` have explicit configs: Patient, AllergyIntolerance, Appointment, CarePlan, CareTeam, Condition, DiagnosticReport, DocumentReference, Encounter, Goal, Immunization, Location, Medication, MedicationRequest, Observation, Organization, Practitioner, Procedure, ServiceRequest, Task.
+All 50 types in `TOP_RESOURCE_TYPES` appear in the sidebar: Patient, AllergyIntolerance, Appointment, Bundle, CarePlan, CareTeam, Claim, ClaimResponse, Communication, Composition, Condition, Consent, Coverage, Device, DeviceRequest, DiagnosticReport, DocumentReference, Encounter, Endpoint, ExplanationOfBenefit, FamilyMemberHistory, Goal, Group, HealthcareService, ImagingStudy, Immunization, List, Location, Measure, MeasureReport, Medication, MedicationAdministration, MedicationDispense, MedicationRequest, MedicationStatement, Observation, OperationOutcome, Organization, Practitioner, PractitionerRole, Procedure, Provenance, Questionnaire, QuestionnaireResponse, RelatedPerson, Schedule, ServiceRequest, Slot, Specimen, Task. The 20 types with hand-tuned `RESOURCE_LIST_CONFIG` entries are Patient, AllergyIntolerance, Appointment, CarePlan, CareTeam, Condition, DiagnosticReport, DocumentReference, Encounter, Goal, Immunization, Location, Medication, MedicationRequest, Observation, Organization, Practitioner, Procedure, ServiceRequest, Task; the rest fall through to the SD-derived fallback below.
 
 ### Fallback for unconfigured types
 
