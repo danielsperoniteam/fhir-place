@@ -1,5 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { labelFromPath, labelsForPaths } from "./ResourceListPage.js";
+import { labelFromPath, labelsForPaths, paramsFromUrl } from "./ResourceListPage.js";
+
+// Regression for the #145 review finding: repeated FHIR params
+// (identifier=a&identifier=b — AND semantics) must survive URL→search
+// hydration instead of collapsing to the last value.
+describe("paramsFromUrl", () => {
+  it("collapses repeated keys to arrays and keeps single keys as strings", () => {
+    const url = new URLSearchParams("identifier=a&identifier=b&gender=female");
+    expect(paramsFromUrl(url, 20)).toEqual({
+      _count: 20,
+      identifier: ["a", "b"],
+      gender: "female",
+    });
+  });
+
+  it("still injects the patient compartment id and page size", () => {
+    const url = new URLSearchParams("patient=ignored&name=smith");
+    expect(paramsFromUrl(url, 10, "ada")).toEqual({
+      _count: 10,
+      name: "smith",
+      patient: "ada",
+    });
+  });
+
+  it("lets a URL _count override the seeded page size instead of arraying it", () => {
+    const url = new URLSearchParams("_count=50&gender=female");
+    expect(paramsFromUrl(url, 20)).toEqual({ _count: "50", gender: "female" });
+  });
+});
 
 // Regression for #400: `labelFromPath` previously picked the last dotted
 // segment unconditionally, so any path ending in a FHIR structural element

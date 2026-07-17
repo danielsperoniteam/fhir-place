@@ -53,4 +53,24 @@ describe("colorJson", () => {
     // Bare punctuation has no JSON tokens to wrap; it should round-trip.
     expect(out).toBe("{");
   });
+
+  // Regression for #611: colons inside ISO timestamp string values were being
+  // treated as JSON key/value delimiters by later regex passes, inserting a
+  // stray space after each colon inside the rendered string.
+  it("does not insert stray spaces inside timestamp string values", () => {
+    const line = '  "lastUpdated": "2026-05-09T03:11:26.510-04:00"';
+    const out = colorJson(line);
+    // The timestamp must appear verbatim inside the rendered output.
+    expect(out).toContain("2026-05-09T03:11:26.510-04:00");
+    // Specifically, no space should appear after any colon inside the timestamp.
+    expect(out).not.toContain("03: 11");
+    expect(out).not.toContain("11: 26");
+    expect(out).not.toContain("-04: 00");
+  });
+
+  it("handles timestamps in arrays without stray spaces", () => {
+    const line = '    "2026-05-09T03:11:26.510-04:00"';
+    const out = colorJson(line);
+    expect(out).toContain("2026-05-09T03:11:26.510-04:00");
+  });
 });

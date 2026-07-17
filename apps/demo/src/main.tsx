@@ -12,13 +12,12 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, HashRouter } from "react-router-dom";
 import { App } from "./App.js";
 import {
-  ACTIVE_SERVER_CONFIG,
   FHIR_BASE_URL,
   ROUTER_BASENAME,
   TERMINOLOGY_BASE_URL,
   USE_HASH_ROUTER,
   USE_MOCK,
-  buildRequestHeaders,
+  loadActiveRequestHeaders,
 } from "./config.js";
 import "./index.css";
 
@@ -46,7 +45,7 @@ const queryClient = new QueryClient({
 
 const fhirClient = new FetchFhirClient({
   baseUrl: FHIR_BASE_URL,
-  headers: buildRequestHeaders(ACTIVE_SERVER_CONFIG),
+  getHeaders: loadActiveRequestHeaders,
 });
 
 // Terminology calls (ValueSet/$expand for SNOMED, LOINC, ICD-10, BCP-47…)
