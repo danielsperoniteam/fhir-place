@@ -3,6 +3,7 @@ import {
   formatAddress,
   formatCodeableConcept,
   formatCoding,
+  formatDateTime,
   formatDosage,
   formatHumanName,
   formatPeriod,
@@ -96,7 +97,28 @@ describe("formatCodeableConcept", () => {
 describe("formatQuantity", () => {
   it("renders value + unit, preferring `unit` over `code`", () => {
     expect(formatQuantity({ value: 130, unit: "mmHg" })).toBe("130 mmHg");
-    expect(formatQuantity({ value: 130, code: "mm[Hg]" })).toBe("130 mm[Hg]");
+    // Code-only quantities decode the UCUM symbol for display (#368).
+    expect(formatQuantity({ value: 130, code: "mm[Hg]" })).toBe("130 mmHg");
+    expect(formatQuantity({ value: 4.5, code: "10*9/L" })).toBe("4.5 10⁹/L");
+    expect(formatQuantity({ value: 12, code: "ug/dL" })).toBe("12 µg/dL");
+  });
+
+  it("only decodes the code as UCUM when the system is UCUM or absent", () => {
+    expect(
+      formatQuantity({
+        value: 37,
+        code: "Cel",
+        system: "http://unitsofmeasure.org",
+      }),
+    ).toBe("37 °C");
+    // A site-specific system scopes its own codes — leave them untouched.
+    expect(
+      formatQuantity({
+        value: 37,
+        code: "Cel",
+        system: "http://example.org/units",
+      }),
+    ).toBe("37 Cel");
   });
 
   it("includes comparator when present", () => {
@@ -112,12 +134,67 @@ describe("formatQuantity", () => {
   });
 });
 
-describe("formatPeriod", () => {
-  it("renders start → end with ellipsis fallbacks", () => {
-    expect(formatPeriod({ start: "2024-01-01", end: "2024-12-31" })).toBe(
-      "2024-01-01 → 2024-12-31",
+describe("formatDateTime", () => {
+  it("renders date-only values without a fabricated time", () => {
+    expect(formatDateTime("2018-08-30")).toBe("Aug 30, 2018");
+  });
+
+  it("renders full timestamps as wall-clock time in UTC", () => {
+    // UTC pin keeps the rendering deterministic across dev / CI / clinician
+    // browsers — 21:24 UTC is always "9:24 PM" in the output.
+    expect(formatDateTime("2018-08-30T21:24:36+00:00")).toBe(
+      "Aug 30, 2018, 9:24 PM",
     );
-    expect(formatPeriod({ start: "2024-01-01" })).toBe("2024-01-01 → …");
+    expect(formatDateTime("2018-08-30T21:24:36Z")).toBe(
+      "Aug 30, 2018, 9:24 PM",
+    );
+  });
+
+  it("renders partial-precision year and year-month forms", () => {
+    expect(formatDateTime("2018")).toBe("2018");
+    expect(formatDateTime("2018-08")).toBe("Aug 2018");
+  });
+
+  it("formats midnight and noon at boundary hours", () => {
+    expect(formatDateTime("2018-08-30T00:00:00Z")).toBe(
+      "Aug 30, 2018, 12:00 AM",
+    );
+    expect(formatDateTime("2018-08-30T12:00:00Z")).toBe(
+      "Aug 30, 2018, 12:00 PM",
+    );
+  });
+
+  it("returns '' for empty input and falls back to the raw string for unparseable inputs", () => {
+    expect(formatDateTime(undefined)).toBe("");
+    expect(formatDateTime("")).toBe("");
+    expect(formatDateTime("not a date")).toBe("not a date");
+  });
+});
+
+describe("formatPeriod", () => {
+  it("humanises start and end and joins them with an arrow", () => {
+    expect(formatPeriod({ start: "2024-01-01", end: "2024-12-31" })).toBe(
+      "Jan 1, 2024 → Dec 31, 2024",
+    );
+  });
+
+  it("collapses to a single date when start and end share the same UTC day", () => {
+    expect(
+      formatPeriod({
+        start: "2018-08-30T21:24:36+00:00",
+        end: "2018-08-30T21:41:36+00:00",
+      }),
+    ).toBe("Aug 30, 2018, 9:24 PM → 9:41 PM");
+  });
+
+  it("does not collapse when only one end has time precision", () => {
+    expect(
+      formatPeriod({ start: "2018-08-30", end: "2018-08-30T21:41:36Z" }),
+    ).toBe("Aug 30, 2018 → Aug 30, 2018, 9:41 PM");
+  });
+
+  it("falls back to ellipsis for missing bounds and returns '' for undefined", () => {
+    expect(formatPeriod({ start: "2024-01-01" })).toBe("Jan 1, 2024 → …");
     expect(formatPeriod({})).toBe("… → …");
     expect(formatPeriod(undefined)).toBe("");
   });
@@ -285,7 +362,7 @@ describe("formatTiming", () => {
   it("renders bounds-only timings instead of an em-dash", () => {
     expect(
       formatTiming({ repeat: { boundsPeriod: { start: "2024-01-01", end: "2024-03-01" } } }),
-    ).toBe("2024-01-01 → 2024-03-01");
+    ).toBe("Jan 1, 2024 → Mar 1, 2024");
     expect(
       formatTiming({ repeat: { boundsDuration: { value: 14, unit: "days" } } }),
     ).toBe("for 14 days");

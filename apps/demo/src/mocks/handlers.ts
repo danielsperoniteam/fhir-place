@@ -194,15 +194,35 @@ export const handlers = [
     const page = filtered.slice(offset, offset + count);
     const bundle = searchBundle(page);
     bundle.total = filtered.length;
+    // Pagination mode lets e2e exercise two server shapes without a second
+    // mount: "all" → emit first/prev/next/last (HAPI-shaped), "forward-only"
+    // → emit `next` only and use the `prev` spelling on tests that opt in.
+    // Default is "all" so existing screenshots continue to work.
+    const mode = qp.get("_pagination") ?? "all";
+    const prevRel = qp.get("_prev_spelling") === "prev" ? "prev" : "previous";
     const nextOffset = offset + count;
+    const linkAt = (nextOffset: number) => {
+      const u = new URL(url);
+      u.searchParams.set("_getpagesoffset", String(nextOffset));
+      return u.toString();
+    };
+    const links: Array<{ relation: string; url: string }> = [
+      { relation: "self", url: request.url },
+    ];
     if (nextOffset < filtered.length) {
-      const nextUrl = new URL(url);
-      nextUrl.searchParams.set("_getpagesoffset", String(nextOffset));
-      bundle.link = [
-        { relation: "self", url: request.url },
-        { relation: "next", url: nextUrl.toString() },
-      ];
+      links.push({ relation: "next", url: linkAt(nextOffset) });
     }
+    if (mode === "all") {
+      if (offset > 0) {
+        links.push({ relation: "first", url: linkAt(0) });
+        links.push({ relation: prevRel, url: linkAt(Math.max(0, offset - count)) });
+      }
+      const lastOffset = Math.max(0, Math.floor((filtered.length - 1) / count) * count);
+      if (offset < lastOffset) {
+        links.push({ relation: "last", url: linkAt(lastOffset) });
+      }
+    }
+    bundle.link = links;
     return okJson(bundle);
   }),
 

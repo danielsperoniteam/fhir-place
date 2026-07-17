@@ -33,11 +33,32 @@ test.describe("Generic ResourceCreatePage", () => {
     });
   });
 
+  // Regression for #588: a fully-empty Patient form must not silently POST
+  // `{ resourceType: "Patient" }` and navigate away.
+  test("blocks creating a Patient with no identifying information", async ({ page }) => {
+    await page.goto("/fhir-ui/Patient/new");
+
+    const editor = page.getByTestId("resource-editor");
+    await expect(editor).toBeVisible();
+    await editor.getByRole("button", { name: /create patient/i }).click();
+
+    // Stays on the create form and surfaces the guardrail banner.
+    await expect(page.getByTestId("resource-editor-form-error")).toContainText(
+      /no identifying information/i,
+    );
+    await expect(page).toHaveURL(/\/fhir-ui\/Patient\/new$/);
+  });
+
   test("back link returns to the resource index", async ({ page }) => {
-    await page.goto("/fhir-ui/Condition/new");
-    await page.getByRole("link", { name: /all conditions/i }).click();
-    await expect(page).toHaveURL(/\/fhir-ui\/Condition$/);
-    await expect(page.getByRole("heading", { name: /^conditions$/i })).toBeVisible();
+    await page.goto("/fhir-ui/MedicationRequest/new");
+
+    const backLink = page.getByTestId("resource-create-back-link");
+    await expect(backLink).toHaveText("← All MedicationRequests");
+    await expect(backLink).not.toContainText("medicationrequests");
+
+    await backLink.click();
+    await expect(page).toHaveURL(/\/fhir-ui\/MedicationRequest$/);
+    await expect(page.getByRole("heading", { name: /^medication requests$/i })).toBeVisible();
   });
 
   test("cancel button returns to the resource index", async ({ page }) => {
