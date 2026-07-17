@@ -13,6 +13,7 @@ test.describe("resource-type picker", () => {
     await page.goto("/fhir-ui/Patient");
 
     await page.getByTestId("new-tab-button").click();
+    await page.getByTestId("tab-kind-menu-item-browse").click();
     await expect(page.getByTestId("resource-type-picker-page")).toBeVisible();
     await expect(
       page.getByRole("heading", { name: /choose a resource type/i }),
