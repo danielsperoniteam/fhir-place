@@ -325,6 +325,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
         <div className="flex gap-2">
           <button
             type="button"
+            data-testid="search-clear"
             onClick={() => {
               setValues({});
               setModifiers({});
@@ -340,6 +341,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
           </button>
           <button
             type="submit"
+            data-testid="search-submit"
             className="rounded bg-[var(--accent,#2563eb)] px-3 py-1 text-sm font-medium text-white shadow-sm hover:opacity-90"
           >
             Search
@@ -387,6 +389,7 @@ const fieldWrapper = (
           {available.length > 0 && (
             <select
               aria-label={`${param.name} modifier`}
+              data-testid={`search-modifier-${param.name}`}
               value={modifier ?? ""}
               // Inside a <label>, a click would toggle focus back to the
               // first input — stop it from bubbling into label behavior.
@@ -428,6 +431,7 @@ function SearchField({
     return fieldWrapper(
       <select
         aria-label={param.name}
+        data-testid={`search-value-${param.name}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
@@ -462,6 +466,7 @@ function SearchField({
     <input
       type={inputType(param.type)}
       aria-label={param.name}
+      data-testid={`search-value-${param.name}`}
       placeholder={inputPlaceholder(param.type)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -525,6 +530,7 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
       <input
         type="text"
         aria-label={param.name}
+        data-testid={`search-value-${param.name}`}
         placeholder={tokenModifierPlaceholder(modifier)}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -537,6 +543,7 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
     <input
       type="text"
       aria-label={param.name}
+      data-testid={`search-value-${param.name}`}
       placeholder={tokenPlaceholder(element)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -549,6 +556,7 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
       <input
         type="text"
         aria-label={param.name}
+        data-testid={`search-value-${param.name}`}
         value={value}
         readOnly
         placeholder="Loading value set…"
@@ -564,6 +572,7 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   return wrap(
     <select
       aria-label={param.name}
+      data-testid={`search-value-${param.name}`}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
@@ -606,6 +615,7 @@ function ReferenceSearchField({ base, param, value, onChange, modifier, onModifi
     <input
       type="text"
       aria-label={param.name}
+      data-testid={`search-value-${param.name}`}
       placeholder={modifier === "identifier" ? "system|value" : inputPlaceholder(param.type)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -736,6 +746,7 @@ function DateSearchField({ base, param, value, onChange, modifier, onModifier }:
     <div className="flex gap-1">
       <select
         aria-label={`${param.name} prefix`}
+        data-testid={`search-prefix-${param.name}`}
         value={prefix}
         onChange={(e) => commit(e.target.value, date)}
         className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
@@ -749,6 +760,7 @@ function DateSearchField({ base, param, value, onChange, modifier, onModifier }:
       <input
         type="date"
         aria-label={param.name}
+        data-testid={`search-value-${param.name}`}
         value={date}
         onChange={(e) => commit(prefix, e.target.value)}
         className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
@@ -798,6 +810,7 @@ function PrefixedValueField({
     <div className="flex gap-1">
       <select
         aria-label={`${param.name} prefix`}
+        data-testid={`search-prefix-${param.name}`}
         value={prefix}
         onChange={(e) => commit(e.target.value, rest)}
         className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
@@ -811,6 +824,7 @@ function PrefixedValueField({
       <input
         type="text"
         aria-label={param.name}
+        data-testid={`search-value-${param.name}`}
         placeholder={param.type === "quantity" ? "123|system|code" : "123"}
         value={rest}
         onChange={(e) => commit(prefix, e.target.value)}
