@@ -16,6 +16,13 @@ describe("labelForSystem", () => {
     expect(labelForSystem("http://www.nlm.nih.gov/research/umls/rxnorm")).toBe(
       "RxNorm",
     );
+    // #367 — procedural and supply coding systems used in claims/orders.
+    expect(labelForSystem("http://www.cms.gov/Medicare/Coding/ICD10")).toBe(
+      "ICD-10-PCS",
+    );
+    expect(
+      labelForSystem("https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets"),
+    ).toBe("HCPCS");
   });
 
   it("strips a `|version` suffix before lookup", () => {

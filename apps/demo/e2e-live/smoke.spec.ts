@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /**
  * Live-site smoke tests. Run nightly by `.github/workflows/live-site-monitor.yml`
@@ -10,6 +11,19 @@ import { expect, test } from "@playwright/test";
  * specific patients there change. Assert structure and behavior, not literal
  * data values. Skip rather than fail if the prerequisite data isn't there.
  */
+
+/**
+ * `ResourceTable` renders a wide `resource-row` table layout above the `sm`
+ * breakpoint (640px) and a `resource-row-card` card stack below it. Both
+ * trees are always in the DOM — the breakpoint just `display:none`s the
+ * other one. The iPhone project runs at 390px, so a hard-coded
+ * `resource-row` locator resolves to the hidden table row and never becomes
+ * visible. Filter to the visible variant so the suite works on either
+ * viewport.
+ */
+function resourceRows(page: Page): Locator {
+  return page.getByTestId(/^resource-row(-card)?$/).filter({ visible: true });
+}
 
 const consoleErrors: string[] = [];
 
@@ -31,19 +45,24 @@ test("home redirects to Patient list and renders", async ({ page }) => {
 test("Patient list shows at least one row", async ({ page }) => {
   await page.goto("./#/Patient");
   await expect(page.getByRole("heading", { name: /patients/i })).toBeVisible();
-  const rows = page.getByTestId("resource-row");
+  const rows = resourceRows(page);
   await expect(rows.first()).toBeVisible({ timeout: 30_000 });
   expect(await rows.count()).toBeGreaterThan(0);
 });
 
 test("Patient detail page renders without an error wall", async ({ page }) => {
   await page.goto("./#/Patient");
-  const firstRow = page.getByTestId("resource-row").first();
+  const firstRow = resourceRows(page).first();
   await expect(firstRow).toBeVisible({ timeout: 30_000 });
   await firstRow.click();
 
-  // Detail pages render a Patient resource view + compartment chips.
-  await expect(page.getByText(/^Patient/i).first()).toBeVisible();
+  // Detail pages render a Patient resource view. Assert on the view's
+  // testid, not a `/^Patient/i` text match — that text also appears in
+  // hidden table headers / tab labels and a stray hidden match would
+  // fail `toBeVisible()` on the iPhone viewport.
+  await expect(page.getByTestId("resource-view")).toBeVisible({
+    timeout: 30_000,
+  });
   // No red error wall: assert "Failed to" / "Could not resolve" don't appear.
   const errorBanner = page.getByText(
     /failed to load|could not resolve structuredefinition|Cannot read properties of/i,
@@ -53,7 +72,12 @@ test("Patient detail page renders without an error wall", async ({ page }) => {
 
 test("Patient detail shows compartment chips", async ({ page }) => {
   await page.goto("./#/Patient");
-  await page.getByTestId("resource-row").first().click();
+  // Wait for the row before clicking: a bare `.click()` auto-waits with the
+  // unbounded default action timeout, which masks a slow list fetch as a
+  // 60s test timeout instead of a clean 30s locator failure.
+  const firstRow = resourceRows(page).first();
+  await expect(firstRow).toBeVisible({ timeout: 30_000 });
+  await firstRow.click();
   // The chip nav is rendered for every Patient detail page (counts may be 0).
   await expect(page.getByTestId("compartment-links")).toBeVisible({
     timeout: 30_000,

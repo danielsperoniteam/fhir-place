@@ -5,6 +5,7 @@ import {
   RESOURCE_LIST_CONFIG,
   isTopResourceType,
 } from "../../../resourceListConfig.js";
+import { resourceCollectionLabel } from "../resourceLabels.js";
 
 /**
  * Generic create form for any FHIR resource type. Renders the spec-driven
@@ -23,13 +24,16 @@ export function ResourceCreatePage() {
     ? RESOURCE_LIST_CONFIG[resourceType]
     : undefined;
   const singular = config?.singular ?? resourceType.toLowerCase();
-  const title = config?.title ?? resourceType;
 
   return (
     <div className="space-y-4">
-      <nav className="text-sm text-slate-500">
-        <Link to={`/fhir-ui/${resourceType}`} className="underline">
-          ← All {title.toLowerCase()}
+      <nav className="text-sm" style={{ color: "var(--text-muted)" }}>
+        <Link
+          to={`/fhir-ui/${resourceType}`}
+          className="underline"
+          data-testid="resource-create-back-link"
+        >
+          ← All {resourceCollectionLabel(resourceType)}
         </Link>
       </nav>
       <ResourceEditor
@@ -41,10 +45,17 @@ export function ResourceCreatePage() {
           const created = await create.mutateAsync(draft as Resource & { id?: string });
           navigate(`/fhir-ui/${resourceType}/${created.id}`);
         }}
-        className="space-y-4 rounded border border-slate-200 bg-white p-4 shadow-sm"
+        className="cc-card space-y-4 rounded border p-4 shadow-sm"
       />
       {create.isError && (
-        <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p
+          className="rounded border p-3 text-sm"
+          style={{
+            borderColor: "var(--danger)",
+            background: "var(--danger-soft)",
+            color: "var(--danger)",
+          }}
+        >
           {(create.error as Error)?.message}
         </p>
       )}

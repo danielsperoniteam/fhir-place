@@ -5,6 +5,7 @@ import type {
   CodeableConcept,
   Coding,
   ContactPoint,
+  Dosage,
   HumanName,
   Identifier,
   Meta,
@@ -15,14 +16,22 @@ import type {
   Ratio,
   Reference,
   Resource,
+  Timing,
 } from "fhir/r4";
 import type { ReactNode } from "react";
 import { Fragment } from "react";
 import {
   formatAddress,
+  formatCodeableConcept,
+  formatDateTime,
+  formatDosage,
   formatHumanName,
+  formatPeriod,
   formatReferenceLabel,
+  formatTiming,
+  isUcumQuantity,
 } from "../structure/format.js";
+import { ucumDisplay } from "../structure/ucumDisplay.js";
 import { useReadReference } from "../hooks/queries.js";
 import { CodedValue } from "./codedValue/index.js";
 
@@ -55,27 +64,22 @@ const Primitive: FhirTypeRenderer = (value) => <span>{String(value)}</span>;
 const Boolean_: FhirTypeRenderer = (value) => (
   <span className="font-mono">{value ? "true" : "false"}</span>
 );
-const Date_: FhirTypeRenderer = (value) => (
-  <time dateTime={String(value)}>{String(value)}</time>
-);
+const Date_: FhirTypeRenderer = (value) => {
+  const s = String(value);
+  return <time dateTime={s}>{formatDateTime(s) || s}</time>;
+};
 const DateTime_: FhirTypeRenderer = (value) => {
   const s = String(value);
-  let formatted = s;
-  try {
-    formatted = new Date(s).toLocaleString();
-  } catch {
-    // keep raw
-  }
-  return <time dateTime={s}>{formatted}</time>;
+  return <time dateTime={s}>{formatDateTime(s) || s}</time>;
 };
 const Code_: FhirTypeRenderer = (value) => (
-  <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{String(value)}</code>
+  <code className="rounded bg-[var(--chip,#f1f5f9)] px-1 py-0.5 text-xs">{String(value)}</code>
 );
 const Uri_: FhirTypeRenderer = (value) => {
   const s = String(value);
   if (/^https?:\/\//i.test(s)) {
     return (
-      <a className="text-blue-700 underline" href={s} target="_blank" rel="noreferrer">
+      <a className="text-[var(--accent-text,#1d4ed8)] underline" href={s} target="_blank" rel="noreferrer">
         {s}
       </a>
     );
@@ -92,7 +96,7 @@ const HumanNameRenderer: FhirTypeRenderer = (value) => {
   return (
     <span>
       {formatted}
-      {useLabel && <span className="text-slate-400">{useLabel}</span>}
+      {useLabel && <span className="text-[var(--text-subtle,#94a3b8)]">{useLabel}</span>}
     </span>
   );
 };
@@ -102,7 +106,7 @@ const AddressRenderer: FhirTypeRenderer = (value) => {
   const label = a.use ? `${a.use} ` : "";
   return (
     <span>
-      {label && <span className="text-slate-400">{label}</span>}
+      {label && <span className="text-[var(--text-subtle,#94a3b8)]">{label}</span>}
       {formatAddress(a)}
     </span>
   );
@@ -110,36 +114,36 @@ const AddressRenderer: FhirTypeRenderer = (value) => {
 
 const ContactPointRenderer: FhirTypeRenderer = (value) => {
   const c = value as ContactPoint;
-  if (!c.value) return <span className="text-slate-400">—</span>;
+  if (!c.value) return <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
   const sys = c.system ? `${c.system}: ` : "";
   const use = c.use ? ` (${c.use})` : "";
   if (c.system === "email") {
     return (
       <span>
-        <span className="text-slate-400">{sys}</span>
-        <a className="text-blue-700 underline" href={`mailto:${c.value}`}>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{sys}</span>
+        <a className="text-[var(--accent-text,#1d4ed8)] underline" href={`mailto:${c.value}`}>
           {c.value}
         </a>
-        <span className="text-slate-400">{use}</span>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{use}</span>
       </span>
     );
   }
   if (c.system === "phone" || c.system === "fax") {
     return (
       <span>
-        <span className="text-slate-400">{sys}</span>
-        <a className="text-blue-700 underline" href={`tel:${c.value}`}>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{sys}</span>
+        <a className="text-[var(--accent-text,#1d4ed8)] underline" href={`tel:${c.value}`}>
           {c.value}
         </a>
-        <span className="text-slate-400">{use}</span>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{use}</span>
       </span>
     );
   }
   return (
     <span>
-      <span className="text-slate-400">{sys}</span>
+      <span className="text-[var(--text-subtle,#94a3b8)]">{sys}</span>
       {c.value}
-      <span className="text-slate-400">{use}</span>
+      <span className="text-[var(--text-subtle,#94a3b8)]">{use}</span>
     </span>
   );
 };
@@ -241,7 +245,7 @@ const CodingRenderer: FhirTypeRenderer = (value, ctx) => {
 const CodeableConceptRenderer: FhirTypeRenderer = (value, ctx) => {
   const cc = value as CodeableConcept;
   if (!cc.text && !cc.coding?.length) {
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
   }
   return <CodedValue value={cc} tone={ctx.tone} />;
 };
@@ -249,12 +253,31 @@ const CodeableConceptRenderer: FhirTypeRenderer = (value, ctx) => {
 const QuantityRenderer: FhirTypeRenderer = (value) => {
   const q = value as Quantity;
   const comparator = q.comparator ?? "";
-  const unit = q.unit ?? q.code ?? "";
+  const ucum = isUcumQuantity(q);
+  // Prefer the human display unit, falling back to a decoded UCUM code
+  // ("10*9/L" → "10⁹/L") rather than the raw symbol (#368). The decode is
+  // gated on the system: non-UCUM systems scope their own codes and render
+  // them untouched.
+  const unit = q.unit ?? (ucum ? ucumDisplay(q.code) : q.code ?? "");
+  // When unit and UCUM code disagree (e.g. unit "mmHg", code "mm[Hg]"),
+  // surface the canonical UCUM form so the mapping is inspectable without
+  // opening the JSON pane.
+  const showCodeBadge = Boolean(ucum && q.code && q.unit && q.unit !== q.code);
   return (
     <span>
       {comparator}
       {q.value ?? ""}{" "}
-      <span className="text-slate-500">{unit}</span>
+      <span className="text-[var(--text-muted,#64748b)]" title={q.system}>
+        {unit}
+      </span>
+      {showCodeBadge && (
+        <span
+          className="ml-1 rounded bg-[var(--chip,#f1f5f9)] px-1 font-mono text-[10px] text-[var(--text-muted,#64748b)]"
+          title={q.system ?? "UCUM code"}
+        >
+          UCUM: {q.code}
+        </span>
+      )}
     </span>
   );
 };
@@ -263,9 +286,9 @@ const RangeRenderer: FhirTypeRenderer = (value, ctx) => {
   const r = value as Range;
   return (
     <span>
-      {r.low ? QuantityRenderer(r.low, ctx) : <span className="text-slate-400">—</span>}
-      <span className="mx-1 text-slate-400">to</span>
-      {r.high ? QuantityRenderer(r.high, ctx) : <span className="text-slate-400">—</span>}
+      {r.low ? QuantityRenderer(r.low, ctx) : <span className="text-[var(--text-subtle,#94a3b8)]">—</span>}
+      <span className="mx-1 text-[var(--text-subtle,#94a3b8)]">to</span>
+      {r.high ? QuantityRenderer(r.high, ctx) : <span className="text-[var(--text-subtle,#94a3b8)]">—</span>}
     </span>
   );
 };
@@ -275,7 +298,7 @@ const RatioRenderer: FhirTypeRenderer = (value, ctx) => {
   return (
     <span>
       {r.numerator ? QuantityRenderer(r.numerator, ctx) : "?"}
-      <span className="mx-1 text-slate-400">/</span>
+      <span className="mx-1 text-[var(--text-subtle,#94a3b8)]">/</span>
       {r.denominator ? QuantityRenderer(r.denominator, ctx) : "?"}
     </span>
   );
@@ -285,30 +308,36 @@ const MoneyRenderer: FhirTypeRenderer = (value) => {
   const m = value as Money;
   return (
     <span>
-      {m.value ?? ""} <span className="text-slate-500">{m.currency ?? ""}</span>
+      {m.value ?? ""} <span className="text-[var(--text-muted,#64748b)]">{m.currency ?? ""}</span>
     </span>
   );
 };
 
 const PeriodRenderer: FhirTypeRenderer = (value) => {
   const p = value as Period;
+  // Humanised text via formatPeriod (collapses same-day ranges into
+  // "Aug 30, 2018, 9:24 PM → 9:41 PM"). The semantic <time> tags still
+  // carry the raw ISO values in `dateTime` so screen-readers and machine
+  // consumers see the unaltered FHIR string.
+  const summary = formatPeriod(p);
+  const [startText = "…", endText = "…"] = summary.split(" → ");
   return (
     <span>
-      <time>{p.start ?? "…"}</time>
-      <span className="mx-1 text-slate-400">→</span>
-      <time>{p.end ?? "…"}</time>
+      <time {...(p.start ? { dateTime: p.start } : {})}>{startText}</time>
+      <span className="mx-1 text-[var(--text-subtle,#94a3b8)]">→</span>
+      <time {...(p.end ? { dateTime: p.end } : {})}>{endText}</time>
     </span>
   );
 };
 
 const IdentifierRenderer: FhirTypeRenderer = (value) => {
   const i = value as Identifier;
-  const sys = i.system ? <span className="text-slate-400">{i.system} </span> : null;
+  const sys = i.system ? <span className="text-[var(--text-subtle,#94a3b8)]">{i.system} </span> : null;
   return (
     <span>
       {sys}
-      <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{i.value}</code>
-      {i.use && <span className="ml-1 text-slate-400">({i.use})</span>}
+      <code className="rounded bg-[var(--chip,#f1f5f9)] px-1 py-0.5 text-xs">{i.value}</code>
+      {i.use && <span className="ml-1 text-[var(--text-subtle,#94a3b8)]">({i.use})</span>}
     </span>
   );
 };
@@ -327,7 +356,7 @@ function ReferenceCellLink({
   return (
     <button
       type="button"
-      className="text-blue-700 underline"
+      className="text-[var(--accent-text,#1d4ed8)] underline"
       onClick={() => onClick(reference)}
     >
       {label}
@@ -349,7 +378,7 @@ const AttachmentRenderer: FhirTypeRenderer = (value) => {
   const label = a.title ?? a.url ?? a.contentType ?? "attachment";
   if (a.url) {
     return (
-      <a className="text-blue-700 underline" href={a.url} target="_blank" rel="noreferrer">
+      <a className="text-[var(--accent-text,#1d4ed8)] underline" href={a.url} target="_blank" rel="noreferrer">
         {label}
       </a>
     );
@@ -417,18 +446,18 @@ const MetaRenderer: FhirTypeRenderer = (value, ctx) => {
   }
 
   if (fields.length === 0) {
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
   }
 
   return (
     <details className="group">
-      <summary className="cursor-pointer text-slate-600 marker:text-slate-400">
+      <summary className="cursor-pointer text-[var(--text-muted,#475569)] marker:text-[var(--text-subtle,#94a3b8)]">
         {summaryParts.join(" · ")}
       </summary>
-      <dl className="mt-2 grid grid-cols-1 gap-x-3 gap-y-1 border-l-2 border-slate-200 pl-3 sm:grid-cols-[minmax(6rem,1fr)_3fr]">
+      <dl className="mt-2 grid grid-cols-1 gap-x-3 gap-y-1 border-l-2 border-[var(--border,#e2e8f0)] pl-3 sm:grid-cols-[minmax(6rem,1fr)_3fr]">
         {fields.map((f) => (
           <Fragment key={f.label}>
-            <dt className="text-xs font-medium text-slate-500">{f.label}</dt>
+            <dt className="text-xs font-medium text-[var(--text-muted,#64748b)]">{f.label}</dt>
             <dd className="text-sm">{f.node}</dd>
           </Fragment>
         ))}
@@ -442,10 +471,89 @@ const AnnotationRenderer: FhirTypeRenderer = (value) => {
   return (
     <div>
       {a.authorString && (
-        <span className="text-slate-400">{a.authorString}: </span>
+        <span className="text-[var(--text-subtle,#94a3b8)]">{a.authorString}: </span>
       )}
       <span>{a.text}</span>
-      {a.time && <span className="ml-2 text-slate-400">({a.time})</span>}
+      {a.time && <span className="ml-2 text-[var(--text-subtle,#94a3b8)]">({a.time})</span>}
+    </div>
+  );
+};
+
+const Dash = () => <span className="text-[var(--text-subtle,#94a3b8)]">—</span>;
+
+const TimingRenderer: FhirTypeRenderer = (value) => {
+  const summary = formatTiming(value as Timing);
+  return summary ? <span>{summary}</span> : <Dash />;
+};
+
+const DosageRenderer: FhirTypeRenderer = (value, ctx) => {
+  const d = value as Dosage;
+  const headline = d.text ?? formatDosage(d);
+  const rows: { label: string; node: ReactNode }[] = [];
+
+  if (d.sequence != null) rows.push({ label: "Step", node: <span>{d.sequence}</span> });
+  for (const dr of d.doseAndRate ?? []) {
+    const typeText = formatCodeableConcept(dr.type);
+    const suffix = typeText ? ` (${typeText})` : "";
+    if (dr.doseQuantity) {
+      rows.push({ label: `Dose${suffix}`, node: QuantityRenderer(dr.doseQuantity, ctx) });
+    } else if (dr.doseRange) {
+      rows.push({ label: `Dose${suffix}`, node: RangeRenderer(dr.doseRange, ctx) });
+    }
+    if (dr.rateQuantity) {
+      rows.push({ label: `Rate${suffix}`, node: QuantityRenderer(dr.rateQuantity, ctx) });
+    } else if (dr.rateRatio) {
+      rows.push({ label: `Rate${suffix}`, node: RatioRenderer(dr.rateRatio, ctx) });
+    } else if (dr.rateRange) {
+      rows.push({ label: `Rate${suffix}`, node: RangeRenderer(dr.rateRange, ctx) });
+    }
+  }
+  const schedule = formatTiming(d.timing);
+  if (schedule) rows.push({ label: "Schedule", node: <span>{schedule}</span> });
+  const repeat = d.timing?.repeat;
+  if (repeat?.boundsPeriod) {
+    rows.push({ label: "Duration", node: PeriodRenderer(repeat.boundsPeriod, ctx) });
+  } else if (repeat?.boundsDuration) {
+    rows.push({ label: "Duration", node: QuantityRenderer(repeat.boundsDuration, ctx) });
+  } else if (repeat?.boundsRange) {
+    rows.push({ label: "Duration", node: RangeRenderer(repeat.boundsRange, ctx) });
+  }
+  if (d.route) rows.push({ label: "Route", node: CodeableConceptRenderer(d.route, ctx) });
+  if (d.site) rows.push({ label: "Site", node: CodeableConceptRenderer(d.site, ctx) });
+  if (d.method) rows.push({ label: "Method", node: CodeableConceptRenderer(d.method, ctx) });
+  if (d.asNeededBoolean) rows.push({ label: "As needed", node: <span>yes</span> });
+  else if (d.asNeededCodeableConcept) {
+    rows.push({ label: "As needed for", node: CodeableConceptRenderer(d.asNeededCodeableConcept, ctx) });
+  }
+  if (d.maxDosePerPeriod) rows.push({ label: "Max / period", node: RatioRenderer(d.maxDosePerPeriod, ctx) });
+  if (d.maxDosePerAdministration) {
+    rows.push({ label: "Max / dose", node: QuantityRenderer(d.maxDosePerAdministration, ctx) });
+  }
+  if (d.maxDosePerLifetime) {
+    rows.push({ label: "Max / lifetime", node: QuantityRenderer(d.maxDosePerLifetime, ctx) });
+  }
+  for (const ai of d.additionalInstruction ?? []) {
+    rows.push({ label: "Also", node: CodeableConceptRenderer(ai, ctx) });
+  }
+  if (d.patientInstruction) {
+    rows.push({ label: "Patient instruction", node: <span>{d.patientInstruction}</span> });
+  }
+
+  if (!headline && rows.length === 0) return <Dash />;
+
+  return (
+    <div className="space-y-1">
+      {headline && <div className="font-medium">{headline}</div>}
+      {rows.length > 0 && (
+        <dl className="grid grid-cols-[minmax(5rem,max-content)_1fr] gap-x-3 gap-y-0.5">
+          {rows.map((r, i) => (
+            <Fragment key={`${r.label}-${i}`}>
+              <dt className="text-xs font-medium text-[var(--text-muted,#64748b)]">{r.label}</dt>
+              <dd className="text-sm">{r.node}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      )}
     </div>
   );
 };
@@ -489,4 +597,6 @@ export const defaultTypeRenderers: TypeRenderers = {
   Attachment: AttachmentRenderer,
   Annotation: AnnotationRenderer,
   Meta: MetaRenderer,
+  Timing: TimingRenderer,
+  Dosage: DosageRenderer,
 };
