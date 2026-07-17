@@ -1,5 +1,11 @@
 import { formatSearchRequest, type SearchParams } from "@fhir-place/react-fhir";
 import { useState } from "react";
+import { loadActiveRequestHeaders } from "../config.js";
+import { formatAsCurl, formatAsFetch } from "../requestSnippets.js";
+
+type CopyFormat = "url" | "curl" | "fetch";
+
+const COPY_FORMATS: CopyFormat[] = ["url", "curl", "fetch"];
 
 export interface SearchRequestPreviewProps {
   baseUrl: string;
@@ -22,11 +28,29 @@ export function SearchRequestPreview({
 }: SearchRequestPreviewProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [copied, setCopied] = useState(false);
+  const [format, setFormat] = useState<CopyFormat>("url");
   const preview = formatSearchRequest(baseUrl, resourceType, params);
 
-  const copyUrl = async () => {
+  // Snippets carry the active server's real headers (auth + custom) so the
+  // copied command runs against the server the demo is pointed at (#146).
+  // Resolved at copy time via loadActiveRequestHeaders — the same source the
+  // FetchFhirClient reads per request — so Settings edits made in this SPA
+  // session are reflected without a reload.
+  const snippetFor = (f: CopyFormat): string => {
+    if (f === "url") return preview.url;
+    const envelope = {
+      url: preview.url,
+      headers: {
+        Accept: "application/fhir+json",
+        ...loadActiveRequestHeaders(),
+      },
+    };
+    return f === "curl" ? formatAsCurl(envelope) : formatAsFetch(envelope);
+  };
+
+  const copySnippet = async () => {
     try {
-      await navigator.clipboard.writeText(preview.url);
+      await navigator.clipboard.writeText(snippetFor(format));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -55,13 +79,40 @@ export function SearchRequestPreview({
             <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
               URL
             </span>
-            <button
-              type="button"
-              onClick={copyUrl}
-              className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface)]"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
+            <span className="flex items-center gap-1">
+              <span
+                className="inline-flex overflow-hidden rounded border border-[var(--border)]"
+                role="group"
+                aria-label="Copy format"
+                data-testid="copy-format-picker"
+              >
+                {COPY_FORMATS.map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFormat(f)}
+                    aria-pressed={format === f}
+                    data-testid={`copy-format-${f}`}
+                    className={
+                      "px-2 py-0.5 text-xs " +
+                      (format === f
+                        ? "bg-[var(--accent-soft)] text-[var(--accent-text)]"
+                        : "bg-[var(--sunken)] text-[var(--text-muted)] hover:bg-[var(--surface)]")
+                    }
+                  >
+                    {f === "url" ? "URL" : f}
+                  </button>
+                ))}
+              </span>
+              <button
+                type="button"
+                onClick={copySnippet}
+                data-testid="copy-snippet"
+                className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface)]"
+              >
+                {copied ? "Copied" : `Copy ${format === "url" ? "URL" : format}`}
+              </button>
+            </span>
           </div>
           <code
             data-testid="request-preview-url"

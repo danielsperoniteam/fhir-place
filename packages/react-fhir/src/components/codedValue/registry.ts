@@ -47,7 +47,17 @@ export const FHIR_CODE_SYSTEMS: Record<
   },
   "http://hl7.org/fhir/sid/icd-10": { label: "ICD-10", priority: 2 },
   "http://hl7.org/fhir/sid/icd-10-cm": { label: "ICD-10-CM", priority: 2 },
+  // ICD-10-PCS has no hl7.org/fhir/sid URI; THO registers the CMS URL.
+  "http://www.cms.gov/Medicare/Coding/ICD10": {
+    label: "ICD-10-PCS",
+    priority: 2,
+  },
   "http://hl7.org/fhir/sid/icd-9-cm": { label: "ICD-9-CM", priority: 2 },
+  // HCPCS Level II — THO-registered CMS URL (https scheme per THO).
+  "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets": {
+    label: "HCPCS",
+    priority: 2,
+  },
   "http://hl7.org/fhir/sid/cvx": { label: "CVX", priority: 2 },
   "http://hl7.org/fhir/sid/ndc": { label: "NDC", priority: 2 },
   "http://www.ama-assn.org/go/cpt": { label: "CPT", priority: 2 },

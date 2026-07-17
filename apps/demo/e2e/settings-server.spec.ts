@@ -107,7 +107,31 @@ test.describe("FHIR server settings", () => {
     );
 
     await form.getByTestId("use-server").click();
+    // After the reload triggered by Use, the sidebar must reflect the new server
+    // (regression: topbar/sidebar stayed stale until manual reload — issue #557).
     await expect(page.getByTestId("base-url")).toContainText(happyBaseUrl);
+    await expect(page.getByTestId("active-server-label")).toContainText("BYO Test");
+  });
+
+  test("topbar server pill reflects new active server after Use on mobile", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installFhirRoutes(page);
+
+    await page.goto("/fhir-ui/settings");
+    await page.getByTestId("add-server").click();
+
+    const form = page.getByTestId("server-form").last();
+    await form.getByTestId("server-card-toggle").click();
+    await form.getByTestId("server-label-input").fill("Mobile BYO");
+    await form.getByTestId("server-base-url-input").fill(happyBaseUrl);
+    await form.getByTestId("use-server").click();
+
+    // After reload the topbar pill (mobile-only) must show the new server label.
+    const pill = page.getByTestId("topbar-server-pill");
+    await expect(pill).toBeVisible();
+    await expect(pill).toContainText("Mobile BYO");
   });
 
   test("reports an error when the metadata URL cannot be reached", async ({

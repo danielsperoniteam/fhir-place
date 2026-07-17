@@ -28,7 +28,7 @@ export const BooleanInput: FhirTypeInput<boolean> = ({ value, onChange }) => (
       checked={Boolean(value)}
       onChange={(e) => onChange(e.target.checked ? true : undefined)}
     />
-    <span className="text-slate-500">{value ? "true" : "false"}</span>
+    <span className="text-[var(--text-muted,#64748b)]">{value ? "true" : "false"}</span>
   </label>
 );
 
