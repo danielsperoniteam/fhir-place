@@ -200,7 +200,7 @@ class ToolRegistry {
 }
 ```
 
-**Two invariants ToolRegistry enforces at `execute` time:**
+**Three invariants ToolRegistry enforces at `execute` time:**
 
 1. **Input schema validation.** The raw `unknown` input is validated against
    `inputSchema` (JSONSchema7, e.g. via `ajv`) **before** the executor is
@@ -210,6 +210,16 @@ class ToolRegistry {
 2. **Envelope-level redaction.** Every tool result passes through `ctx.redact`
    at the boundary, so `CompactBundleResult`s, skill summaries, and terminology
    payloads are all covered by the same seam — not just FHIR `Resource`s.
+3. **Write confirmation, centrally.** For any tool with `access: "write"` (and
+   only reachable at all when `ctx.readOnly === false`), the registry itself
+   computes a `RequestPlan` (method / URL / body / headers-to-be-applied) and
+   calls `ctx.confirmWrite` **before** invoking the executor. Individual
+   handlers do not opt in. When `confirmWrite` is undefined (MCP without
+   `--allow-writes`, or a browser session without a wired UI), the registry
+   refuses the write outright. This mirrors the read-side pattern (where
+   `confirmRead` is enforced at the `FetchFhirClient` boundary): the promise
+   of human-in-the-loop confirmation cannot be defeated by a handler forgetting
+   to opt in.
 
 **Model-neutral by design.** The registry deliberately does not expose a
 `toAnthropicTools()` method: that would drag `@anthropic-ai/sdk` into
@@ -279,7 +289,7 @@ identity, and the code carries a stable coding** — key
 computing `n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized
 to `subject.reference` when present, otherwise
 `subject.identifier.system + "|" + subject.identifier.value` (R4 permits either
-form; an identifier-only subject is valid). Two additional filters:
+form; an identifier-only subject is valid). Four additional filters:
 - **Status filter.** Include only `final`, `amended`, and `corrected`. Exclude
   `registered`, `preliminary`, `cancelled`, `entered-in-error`, and `unknown`;
   a retracted or in-error valueQuantity would otherwise land in `last/min/max`
@@ -287,11 +297,21 @@ form; an identifier-only subject is valid). Two additional filters:
 - **Coded unit identity, not `valueQuantity.unit` (display text).** UCUM
   `system|code` is the comparability primitive; two Observations with the same
   human-readable `unit` string but different UCUM codes are not comparable.
+- **Comparator absence.** `valueQuantity.comparator` (`<`, `<=`, `>=`, `>`)
+  means the value is a bound (`<5 mg/dL`), not an exact measurement. Treating
+  it as ordinary would produce false `min/max/last`. Aggregate only when
+  `comparator` is absent; preserve comparator quantities individually.
+- **Defined timestamp; explicit sort.** Bundle entry order is not chronological
+  and R4 does not require it. Establish a timestamp precedence —
+  `effectiveDateTime` → `effectivePeriod.start` (or `end`) → `effectiveInstant`
+  → `issued` — sort by it before computing `last/firstDate/lastDate`, and hold
+  Observations without any of those out of aggregation.
 Everything else — coded (`valueCodeableConcept`), string, boolean, range,
 ratio, sampled-data, period, time/dateTime, component-only (e.g. BP), and
 `dataAbsentReason` Observations, non-result-bearing statuses, quantity
 Observations whose siblings-by-code disagree on unit-coding, quantity
-Observations without a coded `system+code` unit, and quantity Observations
+Observations without a coded `system+code` unit, comparator-bearing quantities,
+quantity Observations lacking any usable timestamp, and quantity Observations
 whose `code` is text-only (no `coding[]` entry — valid R4; two different
 text-coded measurements would otherwise collapse under the same missing-code
 key) — is preserved as an **individual entry**, never coerced into a series.

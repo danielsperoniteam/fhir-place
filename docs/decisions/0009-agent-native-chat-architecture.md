@@ -42,8 +42,13 @@ Operating constraints:
   `access: "read" | "write"` (required, not optional — an unclassified tool
   would default to read and silently bypass the read-only default).
   `ToolRegistry` refuses to register a tool without it, and refuses to execute
-  a `write` tool when `ctx.readOnly`. Writes additionally require an explicit
-  `--allow-writes` flag (MCP) or a human-confirmation callback (browser).
+  a `write` tool when `ctx.readOnly`. When writes are enabled, the registry
+  itself computes a `RequestPlan` and calls `ctx.confirmWrite` **before** the
+  executor runs, refusing outright if `confirmWrite` is undefined; individual
+  handlers do not opt in. This mirrors the read-side pattern (`confirmRead`
+  enforced at the `FetchFhirClient` boundary): the promise of
+  human-in-the-loop cannot be defeated by a handler forgetting to call the
+  hook.
 - **`ToolRegistry.execute` validates every tool input against its
   `inputSchema` (JSONSchema7) before dispatch** and refuses on failure.
   Today's single-shot code only spot-checks that `resourceType` is a string and
