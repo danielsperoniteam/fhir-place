@@ -110,7 +110,7 @@ export function SortPicker({
         aria-controls={panelId}
         className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm shadow-sm ${
           activeField
-            ? "border-blue-300 bg-blue-50 text-blue-700"
+            ? "border-blue-300 bg-blue-50 text-[var(--accent-text,#1d4ed8)]"
             : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)]"
         }`}
       >
@@ -154,7 +154,7 @@ export function SortPicker({
               disabled={!activeField}
               className={`flex-1 rounded-l px-2 py-1 ${
                 activeDir === "asc" && activeField
-                  ? "bg-blue-600 text-white"
+                  ? "bg-[var(--accent,#2563eb)] text-white"
                   : "bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)] disabled:text-[var(--text-subtle)]"
               }`}
             >
@@ -167,7 +167,7 @@ export function SortPicker({
               disabled={!activeField}
               className={`flex-1 rounded-r border-l border-[var(--border)] px-2 py-1 ${
                 activeDir === "desc" && activeField
-                  ? "bg-blue-600 text-white"
+                  ? "bg-[var(--accent,#2563eb)] text-white"
                   : "bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)] disabled:text-[var(--text-subtle)]"
               }`}
             >
@@ -187,7 +187,7 @@ export function SortPicker({
                     aria-pressed={selected}
                     className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm ${
                       selected
-                        ? "bg-blue-600 text-white"
+                        ? "bg-[var(--accent,#2563eb)] text-white"
                         : "text-[var(--text)] hover:bg-[var(--sunken)]"
                     }`}
                   >
