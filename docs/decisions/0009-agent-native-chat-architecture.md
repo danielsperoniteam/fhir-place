@@ -82,16 +82,25 @@ Operating constraints:
   centrally by `ToolRegistry.execute` over every tool output — Bundles,
   compacted results, terminology payloads, skill summaries — so nothing that
   ships to the model bypasses the seam.
-- **Synthetic-only enforcement is a hard gate, not a declared posture.**
-  Every FHIR server config carries a `dataClass: "synthetic" | "phi"`
-  flag; built-in sandboxes ship as `synthetic`, user-added servers default
-  to `phi`. The agent chat loop refuses to start against a `phi` server
-  (single-shot `/ask` still works — it sends only the question and query
-  plan). The MCP server refuses to start under `phi` without an explicit
-  future `--phi-acknowledged` flag that will require BAA-covered hosting
-  and is out of scope here. Without this gate the "synthetic-only for now"
-  claim is unenforceable, since the multi-turn loop egresses compacted
-  resources to the model on every iteration.
+- **Synthetic-only enforcement is a hard gate, not a declared posture,
+  with three classes.** Every FHIR server config carries a
+  `dataClass: "synthetic-controlled" | "sandbox-shared" | "phi"` flag.
+  `synthetic-controlled` (MSW, our own local HAPI): auto-approved.
+  `sandbox-shared` (HAPI public, SMART Health IT — writable public
+  corpora we do not control): agent loop requires a per-session
+  acknowledgement, since third parties may have uploaded PHI. `phi`:
+  agent loop refused (single-shot `/ask` still works — it sends only the
+  question and query plan). User-added servers default to `phi`. MCP
+  requires `--sandbox-acknowledged` on `sandbox-shared` and a future
+  `--phi-acknowledged` on `phi` (out of scope; will require BAA hosting).
+  Without this gate, the multi-turn loop egresses compacted resources
+  to the model on every iteration and "synthetic-only" is unenforceable.
+- **MCP writes are gated by explicit flags, not by undefined hooks.**
+  With no flags, the MCP server auto-approves `confirmRead` and refuses
+  to register any `access: "write"` tool. `--allow-writes` installs an
+  auto-approving `confirmWrite` policy of the same shape. An undefined
+  hook cannot silently "become" an approval — an explicit policy object
+  is the sole mechanism.
 - **The browser front door preserves `/ask`'s plan → user-editable preview →
   run split.** `AgentContext` exposes an optional `confirmRead` hook that
   `FetchFhirClient` (or a thin middleware wrapping it) calls with the built

@@ -228,13 +228,17 @@ class ToolRegistry {
 2. **Envelope-level redaction.** Every tool result passes through `ctx.redact`
    at the boundary, so `CompactBundleResult`s, skill summaries, and terminology
    payloads are all covered by the same seam — not just FHIR `Resource`s.
-3. **Access-mode gating.** Tools with `access: "write"` are refused outright
-   when `ctx.readOnly === true`. Read-vs-write confirmation itself lives at
-   the `FetchFhirClient` boundary (§6), *not* at the registry — the registry
-   can't derive a `RequestPlan` from an opaque `execute()`, and skill-shaped
-   tools issue multiple HTTP requests whose plans aren't visible ahead of time.
-   Firing per-request at the client boundary handles all of that uniformly and
-   covers the Layer-3 `fhir_raw_write` escape hatch the same way.
+3. **Access-mode gating + plan-based confirmation.** Tools with
+   `access: "write"` are refused outright when `ctx.readOnly === true`.
+   When a tool declares `plan(input, ctx)` (required for Layer-2 primitives
+   and Layer-3 raw; optional for Layer-1 skills), the registry calls it
+   first and fires `ctx.confirmRead` / `ctx.confirmWrite` on the built
+   plan(s) before `execute()` — this is the edit-capable path (see §6:
+   `editedInput` triggers revalidation + `plan()` regeneration + re-confirm,
+   bounded to 3 iterations). When a tool omits `plan()` (Layer-1 skills
+   that make multiple hidden requests), the registry cannot derive a plan
+   ahead of time; the accept/reject-only backstop at the `FetchFhirClient`
+   boundary (§6 Layer B) catches each in-flight request.
 4. **Audit emission, centrally.** The registry emits `ctx.audit({event:
    "start" | "success" | "refused" | "failed", tool, input, outcome?, error?,
    ts})` around every call — regardless of whether the handler touches `audit`.
@@ -301,7 +305,13 @@ It (a) drops `text`/narrative and `meta`; drops `contained` resources
 be compacted into inline summaries, or a `MedicationRequest` with
 `medicationReference.reference = "#med"` loses its only copy of the Medication
 and no `drillRef` can recover it; (b) dedups `_include`/`_revinclude` resources
-by `Type/id` (using `entry.search.mode`);
+by **version-specific identity** (`entry.fullUrl` when present, otherwise
+`Type/id/_history/versionId` when the entry carries `meta.versionId`,
+falling back to `Type/id` only for unversioned entries) — using
+`entry.search.mode` to isolate the include set. Deduping by bare `Type/id`
+would collapse `Patient/123/_history/1` and `Patient/123/_history/2` into
+one entry despite different clinical data, undermining the version-aware
+`resolve_reference` from §5.2;
 (c) aggregates Observation series **only when the Observation is
 result-bearing, the value is a comparable numeric quantity with a coded unit
 identity, and the code carries a stable coding** — key
@@ -428,9 +438,18 @@ would fetch before the user can review or edit, breaking the current contract.
 
 The browser front door wires the hooks to the existing `/ask` preview UI
 (reads) and a distinct write-confirmation dialog (writes, per ADR 0003).
-The MCP path leaves both undefined — `confirmRead` auto-runs;
-`confirmWrite` when undefined refuses the write outright (parallel to the
-`--allow-writes` MCP flag).
+The MCP server's behavior is set by explicit flags, not by leaving hooks
+undefined:
+- **No flags**: `confirmRead` is an auto-approving policy
+  (`async () => ({approved: true})`); `confirmWrite` is undefined and the
+  registry refuses to register any `access: "write"` tool.
+- **`--allow-writes`**: `confirmWrite` is installed as an auto-approving
+  policy of the same shape. This is what actually enables the writes
+  promised in §7 — an undefined hook cannot "become" an approval.
+- A future `--confirm-writes-via-elicitation` (MCP 2025-06+ elicitation
+  spec) would install a hook that round-trips confirmation to the host
+  agent's UI, for hosted MCP deployments that want write with
+  human-in-the-loop.
 
 The chat surfaces the resources behind each answer (via `drillRefs`) so the user
 can verify, which is both a trust feature and the honest answer to "where did
@@ -485,24 +504,35 @@ summaries, and terminology payloads** to the model on every iteration; if a
 user has configured a real-PHI FHIR endpoint in `config.ts`, the loop would
 egress PHI to the model provider despite our declared posture. Not acceptable.
 
-**The gate:**
+**The gate — three classes, not two:**
 
-- Every FHIR server in `config.ts` carries a `dataClass: "synthetic" | "phi"`
-  flag. The built-in servers (HAPI public, SMART Health IT, MSW) ship as
-  `synthetic`. **User-added servers default to `phi`** — the safer default.
-- The agent chat loop refuses to start when the active server's `dataClass`
-  is `phi`. The `/ask` page shows a banner: *"This server is marked
-  PHI-capable. The agent chat is disabled here until we ship the hosted
-  BAA-covered path (§8.4). You can still use single-shot Ask, which sends
-  only your question and the query plan to Anthropic."*
-- A user who *knows* a custom server is synthetic can explicitly flip its
-  flag to `synthetic` in server settings, behind a modal confirmation
-  spelling out what "synthetic" means (no real patient data, not a
-  production system).
-- MCP path: the same flag lives in the server config the customer supplies;
-  the MCP server refuses to start under `phi` unless explicitly overridden
-  by a `--phi-acknowledged` flag (which will require BAA-covered hosting
-  when we get to §8.4 — for now, that flag is unimplemented).
+- Every FHIR server in `config.ts` carries a
+  `dataClass: "synthetic-controlled" | "sandbox-shared" | "phi"` flag.
+  - **`synthetic-controlled`**: closed corpus we own (MSW handlers, local
+    HAPI seeded from our fixtures). Agent loop auto-approves.
+  - **`sandbox-shared`**: public writable sandboxes — HAPI public, SMART
+    Health IT. Anyone can POST anything, including PHI accidentally
+    uploaded by a third party; the corpus is not controlled and we cannot
+    guarantee it. Agent loop requires an explicit **per-session**
+    acknowledgement banner: *"This is a shared public sandbox — anyone can
+    upload data to it. Any PHI others uploaded would be egressed to
+    Anthropic if you continue. Continue for this session?"* Acknowledgement
+    does not persist across reloads. This is exactly the class the current
+    integration tests target (they `create` arbitrary Patients against
+    HAPI public).
+  - **`phi`**: real patient data. Agent loop refuses to start; single-shot
+    `/ask` still works (it sends only question + query plan).
+- **User-added servers default to `phi`** — the safer default. A user who
+  knows a custom server is either controlled-synthetic or a public sandbox
+  can flip the class explicitly, behind a modal confirmation spelling out
+  what each class means.
+- MCP path: the same three-class flag lives in the server config the
+  customer supplies. The MCP server refuses to start under `phi` unless
+  a future `--phi-acknowledged` flag is supplied (that flag will require
+  BAA-covered hosting per §8.4 and is unimplemented today). Under
+  `sandbox-shared`, an equivalent `--sandbox-acknowledged` flag is
+  required on the command line — no interactive banner is possible over
+  stdio.
 
 This is what makes the "bounded delta to PHI" honest — the delta is not just
 "masking, audit, BAA"; it is also "remove the gate."
