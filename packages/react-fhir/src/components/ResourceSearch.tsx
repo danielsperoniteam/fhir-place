@@ -543,6 +543,20 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   if (isNonCodedToken) {
     tokenModifiers = tokenModifiers.filter((m) => !CODED_ONLY_TOKEN_MODIFIERS.has(m));
   }
+
+  // Narrowing the *menu* stops a user picking an invalid modifier, but one can
+  // still be active from URL hydration (`_id:in=…`) or because the element
+  // metadata resolved *after* selection and narrowed the set. Left in place the
+  // select shows blank while `buildSearchParams` still submits the hidden
+  // criterion — the exact invalid query the narrowing exists to prevent. Clear
+  // it; `onModifier("")` → `setModifier` also drops the incompatible value on
+  // the grammar change (Codex review on #732).
+  const modifierUnavailable =
+    Boolean(modifier) && !tokenModifiers.includes(modifier as string);
+  useEffect(() => {
+    if (modifierUnavailable) onModifier?.("");
+  }, [modifierUnavailable, onModifier]);
+
   const wrap = (children: ReactNode): ReactNode =>
     fieldWrapper(children, param, base, modifier, onModifier, tokenModifiers);
 

@@ -386,6 +386,33 @@ describe("ResourceSearch", () => {
     }
   });
 
+  it("clears a hydrated token modifier its type doesn't allow (_id:in)", async () => {
+    // Narrowing the menu isn't enough: a URL can hydrate `_id:in=…` directly.
+    // The active-but-unavailable modifier must be stripped, not left to submit
+    // silently — otherwise the select shows blank while the hidden `_id:in`
+    // criterion still goes out.
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialParams={{ "_id:in": "http://example.org/ValueSet/x" }}
+        initialVisible={8}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText("_id modifier") as HTMLSelectElement).value,
+      ).toBe("");
+    });
+    // The incompatible value is dropped with the modifier, so a submit carries
+    // no `_id` criterion at all.
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({});
+  });
+
   it("wipes a stale value when the modifier grammar changes", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
