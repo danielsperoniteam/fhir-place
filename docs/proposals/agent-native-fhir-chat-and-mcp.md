@@ -224,14 +224,14 @@ the MCP tool schema. `agent-core` stays model-agnostic.
 |---|---|---|---|
 | **1 — skills** | One-shot answers to natural questions | `find_patient`, `latest_observation_by_code`, `lab_trend`, `summarize_chart` | compose primitives + `client.request('/Patient/{id}/$everything')` |
 | **2 — primitives** | Typed per-resource search/read | `search_resource`, `read_resource`, `resolve_reference` | `client.search` / `client.read` / `client.readReference` (handles absolute/relative refs — but see version-specific fix below) |
-| **3 — raw** | Escape hatch | `fhir_raw_request` | `client.request(init)` — GET-only unless `readOnly` is false |
+| **3 — raw** | Escape hatch (split by access) | `fhir_raw_get` (access: `read`) · `fhir_raw_write` (access: `write`) | `client.request(init)` — split so the required `AgentTool.access` classification is honest and the write form participates in write-gating |
 
 **Minimal v1 tool set** (do not generate all 148 SDs up front): `find_patient`,
 `search_resource` (reuses today's `{resourceType, params}` plan shape from
 `ask/url.ts`), `latest_observation_by_code`, `lab_trend`, `summarize_chart`,
 `get_resource_detail` / `resolve_reference`, the three `tx_*` tools, and
-`fhir_raw_request`. Every one of these maps onto a method that already exists on
-`FetchFhirClient`.
+`fhir_raw_get` (only `fhir_raw_write` if writes are enabled in that session).
+Every one of these maps onto a method that already exists on `FetchFhirClient`.
 
 **Version-specific references — required fix.** `resolve_reference` must
 recognize the `Type/id/_history/<version>` form and route it through
@@ -272,21 +272,29 @@ be compacted into inline summaries, or a `MedicationRequest` with
 `medicationReference.reference = "#med"` loses its only copy of the Medication
 and no `drillRef` can recover it; (b) dedups `_include`/`_revinclude` resources
 by `Type/id` (using `entry.search.mode`);
-(c) aggregates Observation series **only when the values are comparable
-numeric quantities with a shared unit AND the code carries a stable coding**
-— key **`(subjectId, code.coding[0].system|code, valueQuantity.unit)`**,
-computing
-`n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized to
-`subject.reference` when present, otherwise
+(c) aggregates Observation series **only when the Observation is
+result-bearing, the value is a comparable numeric quantity with a coded unit
+identity, and the code carries a stable coding** — key
+**`(subjectId, code.coding[0].system|code, valueQuantity.system|valueQuantity.code)`**,
+computing `n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized
+to `subject.reference` when present, otherwise
 `subject.identifier.system + "|" + subject.identifier.value` (R4 permits either
-form; an identifier-only subject is valid). Everything else — coded
-(`valueCodeableConcept`), string, boolean, range, ratio, sampled-data,
-period, time/dateTime, component-only (e.g. BP), and `dataAbsentReason`
-Observations, quantity Observations whose siblings-by-code disagree on unit,
-**and quantity Observations whose `code` is text-only** (no `coding[]` entry —
-valid R4; two different text-coded measurements would otherwise collapse under
-the same missing-code key) — is preserved as an **individual entry**, never
-coerced into a series.
+form; an identifier-only subject is valid). Two additional filters:
+- **Status filter.** Include only `final`, `amended`, and `corrected`. Exclude
+  `registered`, `preliminary`, `cancelled`, `entered-in-error`, and `unknown`;
+  a retracted or in-error valueQuantity would otherwise land in `last/min/max`
+  while its status disappears from the compacted view.
+- **Coded unit identity, not `valueQuantity.unit` (display text).** UCUM
+  `system|code` is the comparability primitive; two Observations with the same
+  human-readable `unit` string but different UCUM codes are not comparable.
+Everything else — coded (`valueCodeableConcept`), string, boolean, range,
+ratio, sampled-data, period, time/dateTime, component-only (e.g. BP), and
+`dataAbsentReason` Observations, non-result-bearing statuses, quantity
+Observations whose siblings-by-code disagree on unit-coding, quantity
+Observations without a coded `system+code` unit, and quantity Observations
+whose `code` is text-only (no `coding[]` entry — valid R4; two different
+text-coded measurements would otherwise collapse under the same missing-code
+key) — is preserved as an **individual entry**, never coerced into a series.
 Observations with neither a subject reference nor a usable identifier are also
 held out of aggregation. Subject **must** be part of the key: `search_resource`
 is not necessarily patient-scoped (population queries return Observations across
