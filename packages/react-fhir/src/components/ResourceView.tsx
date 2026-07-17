@@ -65,7 +65,7 @@ export function ResourceView(props: ResourceViewProps) {
     if (sdQuery.isError) {
       return (
         <div className={className} data-testid="resource-view-error">
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-[var(--danger,#dc2626)]">
             Failed to load StructureDefinition for {resource.resourceType}:{" "}
             {sdQuery.error?.message}
           </p>

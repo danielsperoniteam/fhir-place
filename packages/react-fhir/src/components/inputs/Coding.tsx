@@ -34,7 +34,7 @@ const FreeFormCoding = ({
   const v = value ?? {};
   const patch = (k: keyof Coding, val: unknown) => onChange({ ...v, [k]: val });
   return (
-    <div className="grid grid-cols-1 gap-2 rounded border border-slate-200 bg-slate-50 p-2 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-2 rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2 sm:grid-cols-3">
       <label>
         <span className={subLabel}>System</span>
         <input
@@ -150,7 +150,7 @@ export const CodingInput: FhirTypeInput<Coding> = ({
           fieldName={fieldName}
         />
         {allowFreeText && (
-          <details className="text-xs text-slate-500">
+          <details className="text-xs text-[var(--text-muted,#64748b)]">
             <summary className="cursor-pointer select-none">
               Enter a custom code…
             </summary>

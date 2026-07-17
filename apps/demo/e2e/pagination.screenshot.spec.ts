@@ -1,79 +1,95 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-test.describe("Patient index pagination (#15)", () => {
-  test("Load more appends the next page; button hides when exhausted", async ({
-    page,
-  }) => {
-    await page.goto("/Patient");
+const SHOT_DIR =
+  "../../screenshots/pr-issue-304-adaptive-pagination-ui-handle-servers-that-only";
+
+// `<main>` is an internal scroll container, so a top-of-document fullPage
+// screenshot misses the pagination buttons entirely — scroll them into view
+// before capturing.
+const shot = async (page: Page, name: string) => {
+  await page.getByTestId("pagination-controls").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${SHOT_DIR}/${name}.png` });
+};
+
+// Fully-linked server (HAPI / Smile CDR shape): emits first / previous /
+// next / last on Bundle.link. First/Prev disable on the first page;
+// Next/Last disable on the last.
+test.describe("Adaptive pagination — fully-linked server (#304)", () => {
+  test("first page disables First/Prev, last page disables Next/Last", async ({ page }) => {
+    await page.goto("/fhir-ui/Patient?_count=20");
     const rows = page.getByTestId("resource-row");
-    await expect(rows).toHaveCount(20); // first page: _count=20 of 36
+    await expect(rows).toHaveCount(20); // 36 total, 20 per page
 
-    const loadMore = page.getByTestId("load-more");
-    await expect(loadMore).toBeVisible();
-    await expect(loadMore).toContainText("Load more");
+    await expect(page.getByTestId("page-first")).toBeDisabled();
+    await expect(page.getByTestId("page-prev")).toBeDisabled();
+    await expect(page.getByTestId("page-next")).toBeEnabled();
+    await expect(page.getByTestId("page-last")).toBeEnabled();
+    await expect(page.getByTestId("results-showing")).toContainText("Showing 1–20 of 36");
+    await shot(page, "01-fully-linked-first-page-desktop");
 
-    await page.screenshot({
-      path: "../../screenshots/10-pagination-first-page.png",
-      fullPage: true,
-    });
+    await page.getByTestId("page-next").click();
+    await expect(rows).toHaveCount(16);
+    // 16 < 20 → page-size picker surfaces the actual count alongside the request.
+    await expect(page.getByTestId("page-size-picker")).toContainText("16 of 20");
+    await expect(page.getByTestId("page-first")).toBeEnabled();
+    await expect(page.getByTestId("page-prev")).toBeEnabled();
+    await expect(page.getByTestId("page-next")).toBeDisabled();
+    await expect(page.getByTestId("page-last")).toBeDisabled();
+    await expect(page.getByTestId("results-showing")).toContainText("Showing 21–36 of 36");
+    await shot(page, "02-fully-linked-last-page-desktop");
 
-    await loadMore.click();
-    await expect(rows).toHaveCount(36);
-    await expect(loadMore).not.toBeVisible();
-
-    await page.screenshot({
-      path: "../../screenshots/11-pagination-loaded-all.png",
-      fullPage: true,
-    });
-  });
-
-  test("Newly loaded rows are reachable by scrolling the main pane", async ({
-    page,
-  }) => {
-    // Regression: the page used `height: 100%` + `flex: 1` on the results
-    // pane, so its content overflowed visually but didn't grow `<main>`'s
-    // scrollHeight. Rows past the first viewport were rendered but
-    // unreachable — `<main>` could only scroll a few px, far short of the
-    // last row.
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("/Patient");
-    const rows = page.getByTestId("resource-row");
+    await page.getByTestId("page-first").click();
     await expect(rows).toHaveCount(20);
-
-    await page.getByTestId("load-more").click();
-    await expect(rows).toHaveCount(36);
-
-    // Programmatically scroll <main> to the bottom (mirroring what a user's
-    // mouse wheel would do) and check the last row is now in the viewport.
-    const lastRowInView = await page.evaluate(() => {
-      const main = document.querySelector("main") as HTMLElement;
-      main.scrollTop = main.scrollHeight;
-      const rows = document.querySelectorAll<HTMLElement>(
-        '[data-testid="resource-row"]',
-      );
-      const last = rows[rows.length - 1];
-      const rect = last.getBoundingClientRect();
-      return rect.top < window.innerHeight && rect.bottom > 0;
-    });
-    expect(lastRowInView).toBe(true);
+    await expect(page.getByTestId("page-first")).toBeDisabled();
   });
 
-  test("Search filter resets pagination", async ({ page }) => {
-    await page.goto("/Patient");
-    const search = page.getByTestId("resource-search");
-    await search.getByRole("textbox", { name: "family" }).fill("Nguyen");
-    await search.getByRole("button", { name: "Search" }).click();
-
-    const rows = page.getByTestId("resource-row");
-    // Filtered down below one-page threshold — no Load more.
-    await expect(rows.first()).toBeVisible();
-    await expect(page.getByTestId("load-more")).not.toBeVisible();
+  test("accepts the `prev` spelling as well as `previous`", async ({ page }) => {
+    // The mock emits "prev" instead of "previous" when _prev_spelling=prev.
+    await page.goto("/fhir-ui/Patient?_count=20&_prev_spelling=prev");
+    await page.getByTestId("page-next").click();
+    await expect(page.getByTestId("resource-row").first()).toBeVisible();
+    await expect(page.getByTestId("page-prev")).toBeEnabled();
+    await page.getByTestId("page-prev").click();
+    await expect(page.getByTestId("page-first")).toBeDisabled();
   });
 
-  test("Larger page-size options (500, 1000) are available", async ({ page }) => {
-    await page.goto("/Patient");
-    await page.getByTestId("page-size-picker").click();
-    await expect(page.getByTestId("page-size-option-500")).toBeVisible();
-    await expect(page.getByTestId("page-size-option-1000")).toBeVisible();
+  test("mobile viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/fhir-ui/Patient?_count=20");
+    await expect(page.getByTestId("pagination-controls")).toBeAttached();
+    await shot(page, "03-fully-linked-first-page-mobile");
+  });
+});
+
+// Forward-only server (Epic, parts of HealthLake): only `next` ever
+// populated; `first`, `previous`, `last` are absent. UI must disable those
+// three buttons even on a middle page.
+test.describe("Adaptive pagination — forward-only server (#304)", () => {
+  test("only Next is enabled; First/Prev/Last stay disabled across pages", async ({ page }) => {
+    await page.goto("/fhir-ui/Patient?_count=20&_pagination=forward-only");
+    await expect(page.getByTestId("resource-row")).toHaveCount(20);
+
+    await expect(page.getByTestId("page-first")).toBeDisabled();
+    await expect(page.getByTestId("page-prev")).toBeDisabled();
+    await expect(page.getByTestId("page-last")).toBeDisabled();
+    await expect(page.getByTestId("page-next")).toBeEnabled();
+    await expect(page.getByTestId("results-showing")).toContainText("Showing 1–20 of 36");
+    await shot(page, "04-forward-only-first-page-desktop");
+
+    await page.getByTestId("page-next").click();
+    await expect(page.getByTestId("resource-row")).toHaveCount(16);
+    // After advancing, server *still* doesn't advertise previous/first/last.
+    await expect(page.getByTestId("page-first")).toBeDisabled();
+    await expect(page.getByTestId("page-prev")).toBeDisabled();
+    await expect(page.getByTestId("page-next")).toBeDisabled();
+    await expect(page.getByTestId("page-last")).toBeDisabled();
+    await shot(page, "05-forward-only-second-page-desktop");
+  });
+
+  test("mobile viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/fhir-ui/Patient?_count=20&_pagination=forward-only");
+    await expect(page.getByTestId("pagination-controls")).toBeAttached();
+    await shot(page, "06-forward-only-first-page-mobile");
   });
 });

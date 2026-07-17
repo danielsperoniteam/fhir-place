@@ -44,6 +44,7 @@ concurrency:
 
 jobs:
   dispatch:
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 90    # 3 tickets × ~25 min budget + overhead
     steps:
