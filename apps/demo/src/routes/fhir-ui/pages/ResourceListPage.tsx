@@ -401,9 +401,8 @@ export function ResourceListPage() {
       // navigate themselves out of the compartment they came in on.
       if (k === "patient" && patientId) continue;
       if (v === undefined || v === "" || v === null) continue;
-      // Arrays are repeated FHIR AND criteria (e.g. two `name:exact` values)
-      // — emit one URL entry per value, not a comma-joined string (which the
-      // server reads as OR / a composite). Review on #732.
+      // Repeated FHIR AND criteria (arrays) — emit one URL entry per value,
+      // not a comma-joined string (which a server reads as OR / composite).
       if (Array.isArray(v)) {
         for (const item of v) {
           if (item !== undefined && item !== "" && item !== null) {

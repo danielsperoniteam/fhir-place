@@ -38,22 +38,6 @@ test.describe("Search modifiers and prefixes", () => {
     await expect(rehydrated.getByLabel("birthdate prefix")).toHaveValue("ge");
   });
 
-  test("repeated AND criteria serialize as repeated URL keys, not a comma join", async ({
-    page,
-  }) => {
-    // Hydrate a URL with a bare + modifier'd variant of the same param, then
-    // move the editable field onto the passthrough variant's key and search.
-    // The two criteria must survive as repeated keys (AND), not `a,b` (OR).
-    await page.goto("/fhir-ui/Patient?name=Smith&name:exact=John");
-    const search = page.getByTestId("resource-search");
-    await search.getByLabel("name modifier").selectOption("exact");
-    await search.getByRole("button", { name: /^search$/i }).click();
-
-    await expect(page).toHaveURL(/name%3Aexact=John/);
-    await expect(page).toHaveURL(/name%3Aexact=Smith/);
-    await expect(page).not.toHaveURL(/John%2CSmith|John,Smith/);
-  });
-
   test("modifier menus narrow by type: string offers :exact, token does not", async ({
     page,
   }) => {

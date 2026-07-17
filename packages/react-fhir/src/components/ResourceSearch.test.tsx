@@ -241,25 +241,22 @@ describe("ResourceSearch", () => {
     expect((screen.getByLabelText("name modifier") as HTMLSelectElement).value).toBe("exact");
   });
 
-  it("preserves concurrent bare + modifier'd variants of the same param (#732 review)", async () => {
-    const user = userEvent.setup();
-    const onSubmit = vi.fn();
+  it("hydrates one editable input per param (v0 — last variant wins)", async () => {
+    // The form is one input per param (#254 v0 limit). When a URL carries two
+    // variants of the same base name, the form shows the last; the underlying
+    // query still runs both via paramsFromUrl until the user edits.
     wrap(
       <ResourceSearch
         resourceType="Patient"
         capabilityStatement={cap}
-        onSubmit={onSubmit}
         initialParams={{ name: "Smith", "name:exact": "John" }}
         initialVisible={8}
       />,
     );
-    // The form edits the first variant; the second is preserved verbatim.
-    expect((screen.getByLabelText("name") as HTMLInputElement).value).toBe("Smith");
-    await user.click(screen.getByRole("button", { name: /^search$/i }));
-    expect(onSubmit).toHaveBeenLastCalledWith({
-      name: "Smith",
-      "name:exact": "John",
-    });
+    expect((screen.getByLabelText("name") as HTMLInputElement).value).toBe("John");
+    expect((screen.getByLabelText("name modifier") as HTMLSelectElement).value).toBe(
+      "exact",
+    );
   });
 
   it(":in on a token swaps to a free-text canonical-URL input and wipes stale codes", async () => {
@@ -309,7 +306,7 @@ describe("ResourceSearch", () => {
     ).toBe("system|value");
   });
 
-  it("merges a form edit that collides with a passthrough variant as AND values", async () => {
+  it(":text on a token swaps to a free-text display-text input", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     wrap(
@@ -317,17 +314,18 @@ describe("ResourceSearch", () => {
         resourceType="Patient"
         capabilityStatement={cap}
         onSubmit={onSubmit}
-        initialParams={{ name: "Smith", "name:exact": "John" }}
+        initialParams={{ gender: "female" }}
         initialVisible={8}
       />,
     );
-    // Switching the editable variant onto the preserved variant's key must
-    // not overwrite it — both criteria survive as repeated values.
-    await user.selectOptions(screen.getByLabelText("name modifier"), "exact");
+    await user.selectOptions(screen.getByLabelText("gender modifier"), "text");
+    const field = screen.getByLabelText("gender") as HTMLInputElement;
+    expect(field.tagName).toBe("INPUT");
+    expect(field.placeholder).toBe("display text");
+    expect(field.value).toBe("");
+    await user.type(field, "Female");
     await user.click(screen.getByRole("button", { name: /^search$/i }));
-    expect(onSubmit).toHaveBeenLastCalledWith({
-      "name:exact": ["John", "Smith"],
-    });
+    expect(onSubmit).toHaveBeenLastCalledWith({ "gender:text": "Female" });
   });
 
   it("number fields offer numeric prefixes only (no sa/eb)", () => {
