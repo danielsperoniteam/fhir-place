@@ -21,12 +21,20 @@ export interface ServerConfig {
   builtin?: boolean;
 }
 
+export const DEFAULT_FHIR_SERVER: ServerConfig = {
+  id: "builtin-local-hapi",
+  label: "Local HAPI (Docker)",
+  baseUrl: "http://localhost:8080/fhir",
+  authMode: "none",
+  builtin: true,
+};
+
 /**
- * Built-in public FHIR R4 servers. Both support open access and CORS so the
- * browser can reach them directly. Users can layer auth/custom headers on top
- * via the Settings page (e.g. a personal access token for HAPI).
+ * Built-in FHIR R4 servers. Users can layer auth/custom headers on top via the
+ * Settings page (e.g. a personal access token for HAPI).
  */
 export const BUILTIN_SERVERS: ReadonlyArray<ServerConfig> = [
+  DEFAULT_FHIR_SERVER,
   {
     id: "builtin-smart",
     label: "SMART Health IT (R4)",
@@ -221,7 +229,7 @@ export const resolveActiveServer = (): ServerConfig => {
   const activeId = loadActiveServerId();
   if (activeId) {
     const match = servers.find((s) => s.id === activeId);
-    if (match) return match;
+    if (match?.baseUrl.trim()) return match;
   }
   const preferred = servers.find((s) => s.id === DEFAULT_ACTIVE_SERVER_ID);
   if (preferred) return preferred;
@@ -264,7 +272,7 @@ export const resolveEnvOverrideServer = (
 };
 
 const ACTIVE_SERVER: ServerConfig = (() => {
-  if (USE_MOCK) {
+  if (USE_MOCK && !loadActiveServerId()) {
     return {
       id: "mock",
       label: "Mock (MSW)",
@@ -294,6 +302,9 @@ export const buildRequestHeaders = (server: ServerConfig): Record<string, string
   }
   return headers;
 };
+
+export const loadActiveRequestHeaders = (): Record<string, string> =>
+  buildRequestHeaders(resolveActiveServer());
 
 /**
  * Separate terminology server for ValueSet/$expand. Most data servers (HAPI

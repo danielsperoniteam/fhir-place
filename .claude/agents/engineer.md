@@ -183,8 +183,58 @@ these as embedded in issue bodies — do not repeat that mistake.
     - `body`: must contain, in this order:
       1. `Closes #<N>`
       2. A **Summary** section (1–3 bullets, "why" not "what")
-      3. A **Test plan** checklist (commands you ran locally)
-      4. A **Test coverage** section — list the Playwright spec files
+      3. A **Why this change** section. Pick one of two shapes
+         based on whether you are fixing a bug or shipping anything
+         else. Use the headings exactly as written — the PR-review
+         routine grep-checks for them.
+
+         **If the issue is a bug** (label `kind: bug`, or the issue
+         describes broken behavior) the body must include:
+
+         ```
+         ### Bug being fixed
+         <one sentence — the symptom, not the cause>
+
+         ### Reproduce on `main`
+         1. <preconditions: server, route, mock-vs-live, viewport>
+         2. <action: exact click / keystroke / curl / URL>
+         3. <observe: the actual broken behavior, verbatim>
+
+         ### Expected behavior
+         <what should happen instead>
+
+         ### Root cause
+         <one sentence; "see diff" is allowed if the diff is the explanation>
+         ```
+
+         Every repro step must be concrete enough that someone who
+         has never seen the code can paste/click and observe the
+         bug. "Open the app and notice it's broken" is not a repro
+         step. If you cannot write a real repro, the issue is not
+         a bug — exit `needs-human` and ask for one.
+
+         **If the issue is anything else** (feature, refactor,
+         infra, docs, dep bump) the body must include:
+
+         ```
+         ### Customer / user problem this solves
+         <2–3 sentences in the voice of the person it hurts:
+         developer evaluating fhir-place, clinical informaticist,
+         on-call, future maintainer. If the linked issue states
+         the problem well, paste that paragraph verbatim and link
+         the issue — do not make the reviewer click through.>
+
+         ### Why now / why this approach
+         <1–2 sentences. Name a rejected alternative if there was one.>
+         ```
+
+         Pure infra / CI / dep bumps may write
+         `### Customer / user problem this solves` →
+         `N/A — internal hygiene, no user-facing problem.`
+         No other section may use that escape hatch.
+
+      4. A **Test plan** checklist (commands you ran locally)
+      5. A **Test coverage** section — list the Playwright spec files
          and the specific `test` / `expect` calls that assert the
          acceptance criteria from the issue. For example:
          `apps/demo/e2e/patient-table.screenshot.spec.ts` →
