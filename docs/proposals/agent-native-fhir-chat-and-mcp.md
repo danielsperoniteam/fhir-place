@@ -142,7 +142,10 @@ interface AgentContext {
   compactor: BundleCompactor;
   readOnly: boolean;           // default true
   audit: (e: AuditEvent) => void;   // seam; console sink for now
-  redact: (r: Resource) => Resource; // seam; no-op on synthetic data
+  redact: <T>(payload: T) => T;     // envelope-level seam applied centrally by
+                                    // ToolRegistry.execute to EVERY tool output
+                                    // (Resource, CompactBundle, tx result,
+                                    // skill summary). No-op on synthetic data.
   signal?: AbortSignal;
 }
 
@@ -158,10 +161,29 @@ interface AgentTool<I = unknown, O = unknown> {
 class ToolRegistry {
   register(t: AgentTool): void;
   list(filter?: { layers?: string[]; capability?: CapabilitySnapshot }): AgentTool[];
-  toAnthropicTools(): Anthropic.Messages.Tool[];   // adapter for front door A
+  describe(): ToolDescriptor[]; // model-neutral (name, description, inputSchema);
+                                // each consumer adapts to its LLM SDK
   execute(name: string, input: unknown, ctx: AgentContext): Promise<unknown>;
 }
 ```
+
+**Two invariants ToolRegistry enforces at `execute` time:**
+
+1. **Input schema validation.** The raw `unknown` input is validated against
+   `inputSchema` (JSONSchema7, e.g. via `ajv`) **before** the executor is
+   called, and the call is refused on failure. Today's single-shot code only
+   spot-checks that `resourceType` is a string and `params` is a non-null
+   object — nominal, not real. Real validation lives here.
+2. **Envelope-level redaction.** Every tool result passes through `ctx.redact`
+   at the boundary, so `CompactBundleResult`s, skill summaries, and terminology
+   payloads are all covered by the same seam — not just FHIR `Resource`s.
+
+**Model-neutral by design.** The registry deliberately does not expose a
+`toAnthropicTools()` method: that would drag `@anthropic-ai/sdk` into
+`agent-core` and break ADR 0009's no-LLM-SDK invariant. Instead each front
+door owns its own adapter: `apps/demo/src/ask/chatLoop.ts` maps
+`describe()` output to `Anthropic.Messages.Tool[]`; the MCP server maps it to
+the MCP tool schema. `agent-core` stays model-agnostic.
 
 ### 5.2 Three-layer tool model, mapped to existing client methods
 
@@ -203,13 +225,21 @@ interface CompactBundleResult {
 interface BundleCompactor { compact(b: Bundle, opts?: CompactOptions): CompactBundleResult; }
 ```
 
-It (a) drops `text`/narrative, `meta`, redundant `contained`; (b) dedups
-`_include`/`_revinclude` resources by `Type/id` (using `entry.search.mode`);
-(c) aggregates Observation series by `code.coding.system|code` + unit into
-`n/last/min/max/firstDate/lastDate`; (d) always emits stable `drillRefs` so the
-model can fetch full detail via `get_resource_detail`. Default `maxEntries: 20`
-matches today's `_count=20` default. This is a pure function — trivially
-unit-testable and the first thing to build after the registry.
+It (a) drops `text`/narrative and `meta`; drops `contained` resources
+**except** those whose `id` is referenced from the parent via `#…` — those must
+be compacted into inline summaries, or a `MedicationRequest` with
+`medicationReference.reference = "#med"` loses its only copy of the Medication
+and no `drillRef` can recover it; (b) dedups `_include`/`_revinclude` resources
+by `Type/id` (using `entry.search.mode`);
+(c) aggregates Observation series by **`(subject.reference, code.coding.system|code, unit)`**
+into `n/last/min/max/firstDate/lastDate`. Subject **must** be part of the key:
+`search_resource` is not necessarily patient-scoped (population queries return
+Observations across many patients), and a key of only `(code, unit)` would
+silently merge values from different people and report bogus min/max/last;
+(d) always emits stable `drillRefs` so the model can fetch full detail via
+`get_resource_detail`. Default `maxEntries: 20` matches today's `_count=20`
+default. This is a pure function — trivially unit-testable and the first thing
+to build after the registry.
 
 ### 5.4 Terminology binding (kills code hallucination)
 
@@ -316,12 +346,18 @@ deferrable:** anything touching the API key.
 | Audit-logging interface on every tool call | **interface + console sink** | HIPAA §164.312(b) needs every access logged; can't add to N handlers after the fact |
 | Error redaction (`FetchFhirClient` leaks URL + `OperationOutcome.diagnostics` into thrown text) | **implement (cheap)** | same path PHI would leak through later; make redaction habitual |
 | `sameOrigin` token-leak guard | **keep + extend** | already correct; extend to MCP outbound calls and to *all* custom headers, not just bearer |
+| **Origin/credential enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | today's `sameOrigin` only concretely protects `search_resource` at UI-rendering time. `client.readReference` accepts absolute URLs, and `fhir_raw_request` will let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. Without a client-side check, a cross-origin absolute reference — from the model or from a resource's own `Reference.reference` — leaks the active server's credentials. Extend the check into a hard refusal (or credential-strip) at the request boundary, applied by both front doors. |
+| **Tool-input JSONSchema7 validation in `ToolRegistry.execute`** | **implement** | this is the real first line against prompt-injected steering; see §5.1 |
 
 **Already correct in the codebase, worth preserving:** the `sameOrigin` guard
-(`ask/url.ts`), `mergeWithBuiltins` pinning built-in `label`/`baseUrl` against
-`localStorage` tampering (anti-retargeting), and strict `input_schema` +
-output validation on the model call (first line against prompt injection from
-FHIR free-text fields).
+(`ask/url.ts`) — the right primitive, though currently applied only at UI-render
+time (see the new §8.2 row); and `mergeWithBuiltins` pinning built-in
+`label`/`baseUrl` against `localStorage` tampering (anti-retargeting). The
+current output check in `anthropicQuery.ts` (`resourceType` is a string, `params`
+is a non-null object) is only a token-shape sanity check, **not** schema
+validation — sending `input_schema` to the model is not local output validation.
+The real guardrail is the §5.1 registry-side JSONSchema7 validation of every
+tool input before dispatch.
 
 ### 8.3 The synthetic → PHI delta (enumerable)
 

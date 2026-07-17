@@ -40,6 +40,24 @@ Operating constraints:
 
 - **Tools are read-only by default.** Writes require an explicit `--allow-writes`
   flag (MCP) or a human-confirmation callback (browser).
+- **`ToolRegistry.execute` validates every tool input against its
+  `inputSchema` (JSONSchema7) before dispatch** and refuses on failure.
+  Today's single-shot code only spot-checks that `resourceType` is a string and
+  `params` is a non-null object — that is a shape sanity check, not schema
+  validation, and it is not sufficient once the model drives multi-turn tool
+  calls.
+- **Origin/credential enforcement moves inside the FHIR client.** The existing
+  `sameOrigin` guard runs only at UI-render time and concretely protects only
+  the `/ask` search preview. `FetchFhirClient.readReference` accepts absolute
+  URLs and `request()` unconditionally merges auth headers, so a cross-origin
+  reference (from the model or from a resource's own
+  `Reference.reference`) can leak credentials. The check moves to the request
+  boundary — hard refusal or credential strip on cross-origin — and applies to
+  both front doors.
+- **PHI-masking seam is envelope-level, not `Resource → Resource`.** Applied
+  centrally by `ToolRegistry.execute` over every tool output — Bundles,
+  compacted results, terminology payloads, skill summaries — so nothing that
+  ships to the model bypasses the seam.
 - **Synthetic/sandbox data only for now**, but bake in the seams that make real
   PHI a bounded delta. All of these are new code to add, except the `sameOrigin`
   guard which already exists and is extended: a PHI-masking hook at the
