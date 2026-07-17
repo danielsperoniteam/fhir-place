@@ -14,7 +14,7 @@ export const HumanNameInput: FhirTypeInput<HumanName> = ({ value, onChange }) =>
     );
   };
   return (
-    <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
+    <div className="space-y-2 rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2">
       <div className={subRow}>
         <label>
           <span className={subLabel}>Given (comma-separated)</span>

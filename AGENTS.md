@@ -26,6 +26,32 @@
 - Use `data-testid` selectors; avoid CSS class names and positional selectors.
 - See `apps/demo/e2e/README.md` for the full test map and update rules.
 
+## PR body — repro for bugs, customer problem for everything else
+
+A reviewer should be able to read the PR body and answer "should we
+ship this?" without opening the diff. The template
+(`.github/pull_request_template.md`) carries the canonical schema; the
+short version:
+
+- **Bug fix** → the body must include `### Bug being fixed`,
+  `### Reproduce on \`main\`` (numbered, copy-pasteable steps —
+  preconditions / action / observed broken behavior),
+  `### Expected behavior`, and `### Root cause`. "Open the app and
+  notice it's broken" is not a repro step. If you can't write a real
+  repro, the issue is not a bug — push back on triage rather than
+  open the PR.
+- **Feature / refactor / infra / docs / dep bump** → the body must
+  include `### Customer / user problem this solves` (2–3 sentences in
+  the voice of the person it hurts; paste verbatim from the linked
+  issue if it states it well — don't make the reviewer click through)
+  and `### Why now / why this approach`. Pure internal hygiene may
+  write `N/A — internal hygiene, no user-facing problem.` in the
+  problem section, but no other section gets that escape hatch.
+
+Headings are checked verbatim by `docs/prompts/pr-review.md`. The
+review is advisory today (a missing block is a comment, not a
+blocker), but it's surfaced in every review.
+
 ## Screenshots on PRs
 
 - **Every PR that changes anything user-visible** — demo apps under

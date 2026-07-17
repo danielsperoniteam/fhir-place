@@ -139,7 +139,10 @@ export function CCSidebar() {
             }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}>
+            <div
+              data-testid="active-server-label"
+              style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}
+            >
               {ACTIVE_SERVER_CONFIG.label}
             </div>
             <div
@@ -307,7 +310,14 @@ export function CCSidebar() {
             marginBottom: 1,
           }}
         >
-          <span style={{ fontSize: 13, flex: 1, minWidth: 0 }}>All resources</span>
+          {/* #363: the count sums only the curated types listed below, so the
+              label must not claim to be a server-wide total. */}
+          <span
+            style={{ fontSize: 13, flex: 1, minWidth: 0 }}
+            title="Sum of the resource types listed below — not a server-wide total"
+          >
+            Top types
+          </span>
           <SidebarCount
             value={allResourcesLoading && allResourcesTotal === 0 ? undefined : allResourcesTotal}
             isActive={false}
