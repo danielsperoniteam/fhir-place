@@ -368,6 +368,24 @@ describe("ResourceSearch", () => {
     expect(genderOptions).not.toContain("of-type");
   });
 
+  it("withholds coded-only modifiers on the non-coded _id token param", () => {
+    // `_id` is an opaque id, not a coded token, so subsumption (:above/:below)
+    // and ValueSet membership (:in/:not-in) don't apply — a server rejects
+    // them. They must be dropped even though _id is a token; :not/:text/:missing
+    // (which work on any token) stay.
+    wrap(
+      <ResourceSearch resourceType="Patient" capabilityStatement={cap} initialVisible={8} />,
+    );
+    const idOptions = Array.from(
+      (screen.getByLabelText("_id modifier") as HTMLSelectElement).options,
+    ).map((o) => o.value);
+    expect(idOptions).toContain("not");
+    expect(idOptions).toContain("missing");
+    for (const m of ["above", "below", "in", "not-in"]) {
+      expect(idOptions).not.toContain(m);
+    }
+  });
+
   it("wipes a stale value when the modifier grammar changes", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();

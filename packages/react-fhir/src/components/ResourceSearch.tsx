@@ -493,6 +493,15 @@ function SearchField({
  */
 const TOKEN_FREE_GRAMMAR_MODIFIERS = new Set(["in", "not-in", "of-type", "text"]);
 
+/** Token target `type.code`s that carry a code system, so subsumption and
+ *  ValueSet-membership modifiers apply. Everything else (Identifier,
+ *  ContactPoint, boolean, id, …) is a non-coded token. */
+const CODED_TOKEN_TYPES = new Set(["code", "Coding", "CodeableConcept"]);
+
+/** Modifiers FHIR R4 restricts to coded token targets: `:above`/`:below`
+ *  (subsumption) and `:in`/`:not-in` (ValueSet membership). */
+const CODED_ONLY_TOKEN_MODIFIERS = new Set(["above", "below", "in", "not-in"]);
+
 const tokenModifierPlaceholder = (modifier: string): string => {
   if (modifier === "of-type") return "system|code|value";
   if (modifier === "text") return "display text";
@@ -516,9 +525,24 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   // element can't be resolved we can't confirm Identifier backing, so we
   // stay conservative and hide it (Codex review on #732).
   const isIdentifierBacked = element?.type?.some((t) => t.code === "Identifier") ?? false;
-  const tokenModifiers = isIdentifierBacked
-    ? modifiersForType("token")
-    : modifiersForType("token").filter((m) => m !== "of-type");
+  // Subsumption (`:above`/`:below`) and ValueSet membership (`:in`/`:not-in`)
+  // only apply to *coded* token targets. A token that resolves to a non-coded
+  // type (Identifier, ContactPoint, boolean, …) — or the opaque-id `_id` param
+  // — can't use them, and a server would reject the query. Narrow those out
+  // when we can positively tell the target isn't coded; stay permissive when
+  // the element can't be resolved, so a coded param with no published SD keeps
+  // its full menu (Codex review on #732).
+  const isCodedToken =
+    element?.type?.some((t) => CODED_TOKEN_TYPES.has(t.code)) ?? false;
+  const isNonCodedToken =
+    param.name === "_id" || (element !== undefined && !isCodedToken);
+  let tokenModifiers = modifiersForType("token");
+  if (!isIdentifierBacked) {
+    tokenModifiers = tokenModifiers.filter((m) => m !== "of-type");
+  }
+  if (isNonCodedToken) {
+    tokenModifiers = tokenModifiers.filter((m) => !CODED_ONLY_TOKEN_MODIFIERS.has(m));
+  }
   const wrap = (children: ReactNode): ReactNode =>
     fieldWrapper(children, param, base, modifier, onModifier, tokenModifiers);
 
