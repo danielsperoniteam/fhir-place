@@ -197,6 +197,15 @@ interface AgentTool<I = unknown, O = unknown> {
                                // refuses to register a tool without it and
                                // refuses to execute an "write" tool when
                                // ctx.readOnly.
+
+  // Side-effect-free plan derivation. REQUIRED for Layer-2 primitives and
+  // Layer-3 raw tools (whose input maps to exactly one HTTP request).
+  // Optional for Layer-1 skills — a skill may return its first request as
+  // a preview, or omit plan() and rely on accept/reject-only confirmation.
+  // The middleware calls plan() BEFORE execute() to build the preview and
+  // to handle the edit → revalidate → re-plan → re-confirm loop.
+  plan?(input: I, ctx: AgentContext): Promise<RequestPlan[]>;
+
   execute(input: I, ctx: AgentContext): Promise<O>;
 }
 
@@ -300,7 +309,12 @@ identity, and the code carries a stable coding** — key
 computing `n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized
 to `subject.reference` when present, otherwise
 `subject.identifier.system + "|" + subject.identifier.value` (R4 permits either
-form; an identifier-only subject is valid). Four additional filters:
+form; an identifier-only subject is valid). **Local (contained) references
+(`#…`) are held out of aggregation entirely** — they are scoped to the parent
+resource, so two Observations from different Bundle entries can each carry
+`subject.reference = "#patient"` referring to different Patients; normalizing
+them by string would merge distinct people. Emit those Observations as
+individual entries. Four additional filters:
 - **Status filter.** Include only `final`, `amended`, and `corrected`. Exclude
   `registered`, `preliminary`, `cancelled`, `entered-in-error`, and `unknown`;
   a retracted or in-error valueQuantity would otherwise land in `last/min/max`
@@ -385,36 +399,38 @@ flag `degraded: true` rather than exposing nothing.
 NL → plan (Anthropic) from plan → run (user-editable preview + explicit button).
 A naive multi-turn loop that dispatches straight through `registry.execute`
 would fetch before the user can review or edit, breaking the current contract.
-The fix is a pair of hooks on `AgentContext` — `confirmRead` and `confirmWrite`
-— **enforced at a single choke point, the `FetchFhirClient` boundary, not
-per-tool.** A thin middleware wrapping the client calls the appropriate hook
-before *any* authenticated FHIR request leaves the browser, selecting by HTTP
-method (`GET`/`HEAD` → `confirmRead`; `POST`/`PUT`/`PATCH`/`DELETE` →
-`confirmWrite`). That covers every path — Layer-2 primitives, Layer-1 skills
-that go through `client.request('/Patient/{id}/$everything')`, and both raw
-escape hatches — so the model cannot pick a skill or `fhir_raw_write` call to
-bypass the preview. The browser front door wires `confirmRead` to the existing
-`/ask` request-preview UI so the plan → preview → run split survives verbatim,
-and `confirmWrite` to a distinct write-confirmation dialog (per ADR 0003 agent
-safety). The MCP path leaves both undefined — `confirmRead` auto-runs;
+
+**Two confirmation layers, chosen by capability, not by front door:**
+
+- **Layer A — tool-orchestration boundary (edit-capable).** For tools that
+  implement `plan(input, ctx)` — every Layer-2 primitive and both Layer-3
+  raw tools — `ToolRegistry.execute` calls `plan()` first (side-effect-free,
+  returns `RequestPlan[]`), invokes `confirmRead`/`confirmWrite` on the
+  built plan(s), and only calls `execute()` on approval. If the hook
+  returns `{ approved: true, editedInput }`, the registry **revalidates
+  `editedInput` against `inputSchema` and calls `plan(editedInput, ctx)`
+  again** — the plan is regenerated from scratch and re-presented. Bounded
+  to 3 iterations; the fourth pass is refused. Only `{ approved: true }`
+  without `editedInput` proceeds to `execute()`. This closes the round-7
+  loopholes: (a) executing an edit different from what was approved is
+  impossible (regen from `editedInput`); (b) ignoring the edit is impossible
+  (the loop won't exit until the hook returns without an edit); (c) skills
+  that already made prior requests are not affected, because `plan()` runs
+  before any `execute()` side effect.
+- **Layer B — client-boundary backstop (accept/reject-only).** Layer-1
+  skills that omit `plan()` still fire authenticated FHIR requests inside
+  their `execute()`. The `FetchFhirClient` middleware calls
+  `confirmRead`/`confirmWrite` before every request as a defense-in-depth
+  guard, but in **accept/reject-only mode** — no `editedInput`, because
+  editing an in-flight skill request has no coherent semantic. Users who
+  want editability run a Layer-2 primitive; users who invoke a skill
+  express trust in the skill's shape.
+
+The browser front door wires the hooks to the existing `/ask` preview UI
+(reads) and a distinct write-confirmation dialog (writes, per ADR 0003).
+The MCP path leaves both undefined — `confirmRead` auto-runs;
 `confirmWrite` when undefined refuses the write outright (parallel to the
 `--allow-writes` MCP flag).
-
-**Edit → revalidate → re-confirm.** When a hook returns
-`{ approved: true, editedInput }`, the middleware:
-1. **Revalidates** the edited input against the tool's `inputSchema` — an
-   edited call must still pass JSONSchema7 validation, or it is refused.
-2. **Rebuilds** the `RequestPlan` from scratch (method / URL / body / headers)
-   so the plan shown next reflects the edit exactly.
-3. **Re-invokes** the same hook with the new plan. The loop is bounded (default
-   3 iterations) to prevent an unbounded edit-approve ping-pong; the fourth
-   pass is refused. Only when the hook returns `{ approved: true }` **without**
-   an `editedInput` does the request actually fire.
-
-This closes the two loopholes that would otherwise defeat the preview: (a)
-using the edit without revalidation could execute a request different from
-the one approved; (b) ignoring the edit would make the promised editable
-preview ineffective.
 
 The chat surfaces the resources behind each answer (via `drillRefs`) so the user
 can verify, which is both a trust feature and the honest answer to "where did
@@ -460,7 +476,38 @@ Decision: **build for synthetic/sandbox data now; design so real PHI is a
 bounded delta.** The principle is to build the *seams* now where retrofitting
 them later would mean touching every call site.
 
-### 8.1 What is actually at risk during the synthetic phase
+### 8.1 Enforcing the synthetic-only boundary
+
+The proposal's synthetic-only posture is meaningless unless it is *enforced*.
+Today's single-shot `/ask` sends only the question + query plan to Anthropic —
+no resources. A multi-turn agent loop sends **compacted resources, skill
+summaries, and terminology payloads** to the model on every iteration; if a
+user has configured a real-PHI FHIR endpoint in `config.ts`, the loop would
+egress PHI to the model provider despite our declared posture. Not acceptable.
+
+**The gate:**
+
+- Every FHIR server in `config.ts` carries a `dataClass: "synthetic" | "phi"`
+  flag. The built-in servers (HAPI public, SMART Health IT, MSW) ship as
+  `synthetic`. **User-added servers default to `phi`** — the safer default.
+- The agent chat loop refuses to start when the active server's `dataClass`
+  is `phi`. The `/ask` page shows a banner: *"This server is marked
+  PHI-capable. The agent chat is disabled here until we ship the hosted
+  BAA-covered path (§8.4). You can still use single-shot Ask, which sends
+  only your question and the query plan to Anthropic."*
+- A user who *knows* a custom server is synthetic can explicitly flip its
+  flag to `synthetic` in server settings, behind a modal confirmation
+  spelling out what "synthetic" means (no real patient data, not a
+  production system).
+- MCP path: the same flag lives in the server config the customer supplies;
+  the MCP server refuses to start under `phi` unless explicitly overridden
+  by a `--phi-acknowledged` flag (which will require BAA-covered hosting
+  when we get to §8.4 — for now, that flag is unimplemented).
+
+This is what makes the "bounded delta to PHI" honest — the delta is not just
+"masking, audit, BAA"; it is also "remove the gate."
+
+### 8.2 What is actually at risk during the synthetic phase
 
 The asset is **not** PHI — it is (a) the user's **Anthropic API key** (a live
 billing credential in `localStorage` — the #1 real risk today), (b) any **FHIR
@@ -469,7 +516,7 @@ Genuinely fine to defer because data is synthetic: at-rest encryption of FHIR
 responses, KMS/CMK, 6-year audit retention, BAA execution, PHI scanning. **Not
 deferrable:** anything touching the API key.
 
-### 8.2 Guardrails to bake in now
+### 8.3 Guardrails to bake in now
 
 | Guardrail | Now | Why now |
 |---|---|---|
@@ -483,7 +530,7 @@ deferrable:** anything touching the API key.
 
 **Already correct in the codebase, worth preserving:** the `sameOrigin` guard
 (`ask/url.ts`) — the right primitive, though currently applied only at UI-render
-time (see the new §8.2 row); and `mergeWithBuiltins` pinning built-in
+time (see the new §8.3 row); and `mergeWithBuiltins` pinning built-in
 `label`/`baseUrl` against `localStorage` tampering (anti-retargeting). The
 current output check in `anthropicQuery.ts` (`resourceType` is a string, `params`
 is a non-null object) is only a token-shape sanity check, **not** schema
@@ -491,7 +538,7 @@ validation — sending `input_schema` to the model is not local output validatio
 The real guardrail is the §5.1 registry-side JSONSchema7 validation of every
 tool input before dispatch.
 
-### 8.3 The synthetic → PHI delta (enumerable)
+### 8.4 The synthetic → PHI delta (enumerable)
 
 When we choose to support real PHI, exactly these flip on — nothing else:
 
@@ -499,7 +546,7 @@ When we choose to support real PHI, exactly these flip on — nothing else:
    being a Business Associate at all) vs we-host.
 2. **Move the model call out of the browser** → backend proxy on HIPAA-eligible
    compute; key moves `localStorage` → Secrets Manager. (Largest single change;
-   the §8.2 seams are what keep it bounded.)
+   the §8.3 seams are what keep it bounded.)
 3. Short-lived FHIR tokens (App Launch / Backend Services) replace pasted bearers.
 4. PHI-masking hook gets a real implementation (mask-by-default + explicit
    `unmask`).

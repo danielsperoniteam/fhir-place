@@ -43,18 +43,19 @@ Operating constraints:
   would default to read and silently bypass the read-only default).
   `ToolRegistry` refuses to register a tool without it, and refuses to execute
   a `write` tool when `ctx.readOnly`.
-- **Both `confirmRead` and `confirmWrite` are enforced at the
-  `FetchFhirClient` boundary, not per-tool.** A single middleware wrapping the
-  client selects by HTTP method (`GET`/`HEAD` → `confirmRead`;
-  `POST`/`PUT`/`PATCH`/`DELETE` → `confirmWrite`) before **any** authenticated
-  FHIR request leaves the browser. Layer-1 skills (`$everything`), Layer-3 raw
-  tools, and Layer-2 primitives are covered uniformly, and the registry does
-  not need to derive a `RequestPlan` from an opaque `execute()` — which it
-  can't, since skill-shaped tools issue multiple requests whose plans aren't
-  visible in advance. When a hook returns an `editedInput`, the middleware
-  revalidates it against the tool's `inputSchema`, rebuilds the plan, and
-  re-invokes the hook (bounded to a small iteration cap) so an edit cannot
-  cause execution of a request the user did not approve.
+- **Confirmation has two layers, chosen by tool capability, not by front
+  door.** Every Layer-2 primitive and both Layer-3 raw tools implement a
+  side-effect-free `AgentTool.plan(input, ctx)` that returns the
+  `RequestPlan[]` they would fire. `ToolRegistry.execute` calls `plan()`
+  before `execute()`, invokes `confirmRead`/`confirmWrite` on the built
+  plan(s), and only proceeds on approval. If the hook returns an
+  `editedInput`, the registry revalidates it against `inputSchema` and calls
+  `plan()` again from scratch — the plan is regenerated, not mutated —
+  bounded to 3 iterations. Layer-1 skills that omit `plan()` still fire
+  authenticated requests inside `execute()`; those are guarded by an
+  accept/reject-only backstop at the `FetchFhirClient` boundary. This
+  addresses the round-7 confusion that put `confirmWrite` in the registry
+  with no way to derive a plan from an opaque `execute()`.
 - **`ToolRegistry.execute` emits audit events centrally** —
   start/success/refused/failed with `{tool, input, outcome?, error?, ts}`
   — regardless of whether the handler calls `ctx.audit`. HIPAA §164.312(b)
@@ -81,6 +82,16 @@ Operating constraints:
   centrally by `ToolRegistry.execute` over every tool output — Bundles,
   compacted results, terminology payloads, skill summaries — so nothing that
   ships to the model bypasses the seam.
+- **Synthetic-only enforcement is a hard gate, not a declared posture.**
+  Every FHIR server config carries a `dataClass: "synthetic" | "phi"`
+  flag; built-in sandboxes ship as `synthetic`, user-added servers default
+  to `phi`. The agent chat loop refuses to start against a `phi` server
+  (single-shot `/ask` still works — it sends only the question and query
+  plan). The MCP server refuses to start under `phi` without an explicit
+  future `--phi-acknowledged` flag that will require BAA-covered hosting
+  and is out of scope here. Without this gate the "synthetic-only for now"
+  claim is unenforceable, since the multi-turn loop egresses compacted
+  resources to the model on every iteration.
 - **The browser front door preserves `/ask`'s plan → user-editable preview →
   run split.** `AgentContext` exposes an optional `confirmRead` hook that
   `FetchFhirClient` (or a thin middleware wrapping it) calls with the built
