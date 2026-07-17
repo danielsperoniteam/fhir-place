@@ -401,13 +401,23 @@ export function ResourceListPage() {
       // navigate themselves out of the compartment they came in on.
       if (k === "patient" && patientId) continue;
       if (v === undefined || v === "" || v === null) continue;
-      if (Array.isArray(v)) entries.push([k, v.join(",")]);
-      else entries.push([k, String(v)]);
+      // Arrays are repeated FHIR AND criteria (e.g. two `name:exact` values)
+      // — emit one URL entry per value, not a comma-joined string (which the
+      // server reads as OR / a composite). Review on #732.
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (item !== undefined && item !== "" && item !== null) {
+            entries.push([k, String(item)]);
+          }
+        }
+      } else entries.push([k, String(v)]);
     }
     if (patientId && !entries.some(([k]) => k === "patient")) {
       entries.unshift(["patient", patientId]);
     }
-    setSearchParams(Object.fromEntries(entries), { replace: true });
+    // Build URLSearchParams from the entry list rather than an object so
+    // repeated keys survive (Object.fromEntries would collapse them).
+    setSearchParams(new URLSearchParams(entries), { replace: true });
   };
 
   const heading = patientId ? resourceType : config?.title ?? resourceType;

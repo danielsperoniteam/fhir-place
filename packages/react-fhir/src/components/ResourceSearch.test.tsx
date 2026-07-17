@@ -392,6 +392,24 @@ describe("ResourceSearch", () => {
     expect((screen.getByLabelText("gender") as HTMLInputElement).value).toBe("");
   });
 
+  it("resets a prefix parked before any value when Clear is pressed", async () => {
+    const user = userEvent.setup();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={() => {}}
+        initialVisible={8}
+      />,
+    );
+    // Pick a date prefix with no date entered — it's parked in local state.
+    await user.selectOptions(screen.getByLabelText("birthdate prefix"), "ge");
+    expect((screen.getByLabelText("birthdate prefix") as HTMLSelectElement).value).toBe("ge");
+    // Clear must drop the parked prefix (value never transitioned off "").
+    await user.click(screen.getByRole("button", { name: /^clear$/i }));
+    expect((screen.getByLabelText("birthdate prefix") as HTMLSelectElement).value).toBe("");
+  });
+
   it("keeps the value when switching between :in and :not-in (same grammar)", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();

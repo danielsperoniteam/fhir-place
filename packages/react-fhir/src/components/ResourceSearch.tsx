@@ -169,6 +169,10 @@ export function ResourceSearch(props: ResourceSearchProps) {
     () => splitIncomingParams(initialParams ?? {}).passthrough,
   );
   const [showAll, setShowAll] = useState(false);
+  // Bumped on bulk resets (Clear, AI fill) to remount the field subtree so
+  // fields drop local state a `value` transition can't reach — e.g. a prefix
+  // parked before any value was entered (review on #732).
+  const [resetNonce, setResetNonce] = useState(0);
 
   const [askQuestion, setAskQuestion] = useState("");
   const [askLoading, setAskLoading] = useState(false);
@@ -186,6 +190,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
         setValues(split.values);
         setModifiers(split.modifiers);
         setPassthrough(split.passthrough);
+        setResetNonce((n) => n + 1);
         onSubmit?.(buildSearchParams(split.values, split.modifiers, split.passthrough));
         setShowAll(true);
         setAskQuestion("");
@@ -294,7 +299,9 @@ export function ResourceSearch(props: ResourceSearchProps) {
         {visible.map((p) => (
           <SearchField
             profile={profile}
-            key={p.name}
+            // resetNonce remounts fields on bulk reset so parked local state
+            // (e.g. a prefix picked before any value) is dropped.
+            key={`${p.name}-${resetNonce}`}
             base={resourceType}
             param={p}
             value={values[p.name!] ?? ""}
@@ -326,6 +333,7 @@ export function ResourceSearch(props: ResourceSearchProps) {
               setValues({});
               setModifiers({});
               setPassthrough({});
+              setResetNonce((n) => n + 1);
               // Clear is a "wipe and reload" affordance: also fire onSubmit so
               // the parent's active query resets without requiring a second
               // click on Search.
