@@ -4,20 +4,30 @@ import {
   ResourceTable,
   SortPicker,
   useFhirClient,
-  useInfiniteSearch,
+  usePagedSearch,
+  useResource,
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
-import type { Reference, Resource } from "fhir/r4";
+import type { Patient, Reference, Resource } from "fhir/r4";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import type { SearchParams } from "@fhir-place/react-fhir";
 import { naturalLanguageToFhirQuery } from "../../../ask/anthropicQuery.js";
 import { PatientRowCounts } from "../../../components/PatientRowCounts.js";
 import { SearchRequestPreview } from "../../../components/SearchRequestPreview.js";
+import { SearchUrlPaste } from "../../../components/SearchUrlPaste.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
+import { usePinned } from "../../../state/pinned.js";
 import { loadAnthropicApiKey } from "../../../config.js";
 import {
   RESOURCE_LIST_CONFIG,
+  formatPatientName,
   genericFormatPrimary,
   isTopResourceType,
   type ResourceListColumn,
@@ -67,14 +77,112 @@ const readLayout = (rt: string, scoped: boolean): Layout => {
   return "table";
 };
 
-const labelFromPath = (path: string): string => {
-  const last = path.split(".").pop() ?? path;
-  return last
+// Path segments that name a FHIR sub-structure rather than a domain
+// concept. When a column path ends in one of these, the leaf doesn't tell
+// the user anything useful (`basedOn.reference` collapses three different
+// links into "Reference"). Prefer the parent segment in that case so the
+// header names the resource element instead.
+const STRUCTURAL_LEAF_SEGMENTS = new Set([
+  "reference",
+  "display",
+  "code",
+  "system",
+  "value",
+  "text",
+  "coding",
+]);
+
+const humanizeSegment = (segment: string): string =>
+  segment
     .replace(/\[\d+\]/g, "")
     .replace(/\[x\]$/, "")
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (c) => c.toUpperCase())
     .trim();
+
+/**
+ * Convert a dotted FHIR path into a column header.
+ *
+ * The naive "last segment wins" version produces duplicate "Reference" /
+ * "System" headers on auto-derived resource types whose interesting fields
+ * are nested under structural elements (`basedOn.reference`,
+ * `partOf.reference`, `category.coding.system`). We walk back past those
+ * structural leaves to the first domain-named segment so the header reads
+ * like the resource element ("Based On", "Part Of", "Category").
+ */
+export const labelFromPath = (path: string): string => {
+  const segments = path
+    .split(".")
+    .map((segment) => segment.replace(/\[\d+\]/g, "").replace(/\[x\]$/, ""))
+    .filter((segment) => segment.length > 0);
+
+  if (segments.length === 0) return humanizeSegment(path);
+
+  let index = segments.length - 1;
+  while (index > 0 && STRUCTURAL_LEAF_SEGMENTS.has(segments[index] ?? "")) {
+    index -= 1;
+  }
+  return humanizeSegment(segments[index] ?? path);
+};
+
+/**
+ * Apply per-path labels and de-duplicate collisions by appending the
+ * next-outer segment to the loser(s). Pure function so it can be unit
+ * tested without rendering React.
+ */
+export const labelsForPaths = (paths: string[]): Record<string, string> => {
+  const result: Record<string, string> = {};
+  const seen = new Map<string, string>(); // label -> first path that produced it
+
+  const disambiguate = (path: string): string => {
+    const segments = path
+      .split(".")
+      .map((segment) => segment.replace(/\[\d+\]/g, "").replace(/\[x\]$/, ""))
+      .filter((segment) => segment.length > 0);
+    if (segments.length < 2) return labelFromPath(path);
+    let index = segments.length - 1;
+    while (index > 0 && STRUCTURAL_LEAF_SEGMENTS.has(segments[index] ?? "")) {
+      index -= 1;
+    }
+    const primary = humanizeSegment(segments[index] ?? path);
+    // Prefer the next-outer domain segment as a qualifier. For sibling
+    // leaves under the same parent (e.g. `category.coding.system` vs
+    // `category.coding.code`) there is no outer domain segment, so use
+    // the actual structural leaf as the disambiguator — the user at
+    // least sees "Category Code" vs "Category System".
+    const outerStart = index - 1;
+    let outer = outerStart;
+    while (outer >= 0 && STRUCTURAL_LEAF_SEGMENTS.has(segments[outer] ?? "")) {
+      outer -= 1;
+    }
+    if (outer >= 0) {
+      return `${humanizeSegment(segments[outer] ?? "")} ${primary}`;
+    }
+    const leaf = segments[segments.length - 1] ?? "";
+    if (leaf && leaf !== segments[index]) {
+      return `${primary} ${humanizeSegment(leaf)}`;
+    }
+    return primary;
+  };
+
+  for (const path of paths) {
+    const base = labelFromPath(path);
+    const prior = seen.get(base);
+    if (prior === undefined) {
+      result[path] = base;
+      seen.set(base, path);
+      continue;
+    }
+    // Collision: rename both the current path and (once) the first one
+    // that claimed this label, so neither is left bare.
+    const disambiguated = disambiguate(path);
+    if (result[prior] === base) {
+      result[prior] = disambiguate(prior);
+    }
+    result[path] = disambiguated;
+  }
+
+  return result;
 };
 
 const summaryPathsFromStructure = (resourceType: string, paths: string[]): string[] => {
@@ -105,7 +213,7 @@ const collectPaths = (value: unknown, prefix = "", out = new Set<string>()): Set
   return out;
 };
 
-const paramsFromUrl = (
+export const paramsFromUrl = (
   urlParams: URLSearchParams,
   pageSize: number,
   patientId?: string,
@@ -113,7 +221,19 @@ const paramsFromUrl = (
   const out: SearchParams = { _count: pageSize };
   for (const [k, v] of urlParams.entries()) {
     if (k === "patient") continue;
-    out[k] = v;
+    // A _count in the URL overrides the seeded page-size default — arraying
+    // it with the seed would emit repeated _count keys on the wire.
+    if (k === "_count") {
+      out._count = v;
+      continue;
+    }
+    // Repeated keys are FHIR AND semantics (e.g. identifier=a&identifier=b,
+    // often arriving via the paste-a-URL box) — collapse to an array rather
+    // than letting the last value win.
+    const existing = out[k];
+    if (existing === undefined) out[k] = v;
+    else if (Array.isArray(existing)) existing.push(v);
+    else out[k] = [existing, v];
   }
   if (patientId) out.patient = patientId;
   return out;
@@ -131,6 +251,14 @@ const formInitialFromUrl = (urlParams: URLSearchParams): Record<string, string> 
 export function ResourceListPage() {
   const { resourceType = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const { pinSearch } = usePinned();
+  // Snapshot of the URL taken when the save form opens — the user may run
+  // another search or hit Clear before submitting the label, and the save
+  // must target the query they clicked Save on, not whatever the URL says
+  // at submit time. null = form closed.
+  const [savingPath, setSavingPath] = useState<string | null>(null);
+  const [queryLabel, setQueryLabel] = useState("");
   const navigate = useNavigate();
   const client = useFhirClient();
 
@@ -141,6 +269,21 @@ export function ResourceListPage() {
     if (match) navigate(`/fhir-ui/${match[1]}/${match[2]}`);
   };
   const patientId = searchParams.get("patient") ?? undefined;
+
+  // Fetch the patient that scopes this compartment view so we can show a
+  // human-readable name in place of the raw UUID. The lookup only fires
+  // when we're actually in a compartment view; on unscoped list pages
+  // `enabled: false` keeps it silent. The page must not block on this:
+  // if the patient hasn't loaded yet (or the read fails), fall back to
+  // the UUID so the back-link and chip are still useful.
+  const { data: compartmentPatient } = useResource<Patient>(
+    "Patient",
+    patientId,
+    { enabled: Boolean(patientId) },
+  );
+  const patientLabel = compartmentPatient
+    ? formatPatientName(compartmentPatient)
+    : patientId;
 
   const config: ResourceListConfig | undefined = isTopResourceType(resourceType)
     ? RESOURCE_LIST_CONFIG[resourceType]
@@ -172,25 +315,25 @@ export function ResourceListPage() {
   useEffect(() => setDraftParams(params), [params]);
   const formInitial = useMemo(() => formInitialFromUrl(searchParams), [searchParams]);
   const formKey = searchParams.toString();
+  // A query is savable once the URL carries any search params (#254 PR A).
+  const hasActiveQuery = formKey.length > 0;
 
   const {
-    data,
+    bundle,
     isLoading,
+    isFetching,
     isError,
     error,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-  } = useInfiniteSearch<Resource>(resourceType, params);
+    links,
+    goTo,
+  } = usePagedSearch<Resource>(resourceType, params);
 
   const resources = useMemo(
-    () =>
-      data?.pages.flatMap(
-        (b) => b.entry?.flatMap((e) => (e.resource ? [e.resource] : [])) ?? [],
-      ) ?? [],
-    [data?.pages],
+    () => bundle?.entry?.flatMap((e) => (e.resource ? [e.resource] : [])) ?? [],
+    [bundle?.entry],
   );
-  const totalAdvertised = data?.pages[0]?.total;
+  const totalAdvertised = bundle?.total;
+  const receivedCount = resources.length;
 
   const { data: structureDefinition } = useStructureDefinition(resourceType, {
     enabled: !config && Boolean(resourceType),
@@ -211,8 +354,9 @@ export function ResourceListPage() {
   const tableColumns: ResourceListColumn[] = useMemo(() => {
     if (config) return config.tableColumns;
     const fromRows = resources.flatMap((resource) => Array.from(collectPaths(resource)));
-    const unique = new Set<string>([...(derivedDefaults ?? []), ...fromRows]);
-    return Array.from(unique).map((path) => ({ path, label: labelFromPath(path) }));
+    const ordered = Array.from(new Set<string>([...(derivedDefaults ?? []), ...fromRows]));
+    const labels = labelsForPaths(ordered);
+    return ordered.map((path) => ({ path, label: labels[path] ?? labelFromPath(path) }));
   }, [config, derivedDefaults, resources]);
 
   const defaultVisibleColumns = useMemo(
@@ -272,9 +416,31 @@ export function ResourceListPage() {
   const priorityParams = config?.priorityParams;
 
   const totalStr = (() => {
-    if (!data) return "…";
+    if (!bundle) return "…";
     if (totalAdvertised !== undefined) return `${totalAdvertised.toLocaleString()} records`;
-    return `${resources.length} loaded`;
+    return `${receivedCount} loaded`;
+  })();
+
+  // "Showing X–Y of Z" when Bundle.total is present and we can recover an
+  // offset (HAPI-style _getpagesoffset, or first-page implicit zero); else
+  // "Showing N of Z"; else "Loaded N" (cursor servers commonly omit total).
+  const showingStr = (() => {
+    if (!bundle) return "…";
+    if (totalAdvertised === undefined) return `Loaded ${receivedCount}`;
+    const total = totalAdvertised.toLocaleString();
+    if (receivedCount === 0) return `Showing 0 of ${total}`;
+    const self = bundle.link?.find((l) => l.relation === "self")?.url;
+    let offset: number | null = null;
+    try {
+      const raw = self ? new URL(self).searchParams.get("_getpagesoffset") : null;
+      const parsed = raw === null ? NaN : Number(raw);
+      if (Number.isFinite(parsed) && parsed >= 0) offset = parsed;
+      else if (!links.previous) offset = 0; // first-page implicit offset
+    } catch {
+      if (!links.previous) offset = 0;
+    }
+    if (offset === null) return `Showing ${receivedCount} of ${total}`;
+    return `Showing ${offset + 1}–${offset + receivedCount} of ${total}`;
   })();
 
   return (
@@ -284,9 +450,10 @@ export function ResourceListPage() {
         <div style={{ padding: "12px 24px 0" }}>
           <Link
             to={`/fhir-ui/Patient/${patientId}`}
+            title={`Patient/${patientId}`}
             style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "none" }}
           >
-            ← Back to Patient/{patientId}
+            ← Back to {patientLabel}
           </Link>
         </div>
       )}
@@ -316,13 +483,14 @@ export function ResourceListPage() {
           </span>
           {patientId && (
             <span
+              title={`Patient/${patientId}`}
               style={{
                 fontSize: 12,
                 color: "var(--text-muted)",
-                fontFamily: CC_MONO,
+                fontFamily: compartmentPatient ? CC_FONT : CC_MONO,
               }}
             >
-              · Patient/<span style={{ color: "var(--accent-text)" }}>{patientId}</span>
+              · <span style={{ color: "var(--accent-text)" }}>{patientLabel}</span>
             </span>
           )}
           {showCreate && (
@@ -345,6 +513,7 @@ export function ResourceListPage() {
       {/* Search card */}
       <div style={{ padding: "16px 24px 0" }}>
         <div
+          className="search-params-panel"
           style={{
             background: "var(--surface)",
             border: "1px solid var(--border)",
@@ -374,7 +543,77 @@ export function ResourceListPage() {
               Search params
             </span>
             <div style={{ flex: 1 }} />
-            <button style={{ ...ccBtn("secondary"), fontSize: 12 }}>Clear</button>
+            {/* Saved queries v1 (#254 PR A): label the current query and pin
+                it to the sidebar's Pinned section (per-server localStorage). */}
+            {savingPath !== null ? (
+              <form
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  pinSearch(savingPath, queryLabel);
+                  setSavingPath(null);
+                }}
+              >
+                <input
+                  autoFocus
+                  value={queryLabel}
+                  onChange={(e) => setQueryLabel(e.target.value)}
+                  placeholder="Query name"
+                  data-testid="save-query-label"
+                  style={{
+                    fontSize: 12,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border-strong)",
+                    background: "var(--sunken)",
+                    color: "var(--text)",
+                    width: 180,
+                  }}
+                />
+                <button
+                  type="submit"
+                  data-testid="save-query-confirm"
+                  style={{ ...ccBtn("primary"), fontSize: 12 }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSavingPath(null)}
+                  style={{ ...ccBtn("ghost"), fontSize: 12 }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <button
+                data-testid="save-query"
+                disabled={!hasActiveQuery}
+                title={
+                  hasActiveQuery
+                    ? "Save this query to the sidebar"
+                    : "Run a search first — there is no query to save"
+                }
+                onClick={() => {
+                  setQueryLabel(`${resourceType}: ${formKey}`.slice(0, 60));
+                  setSavingPath(`${location.pathname}${location.search}`);
+                }}
+                style={{
+                  ...ccBtn("secondary"),
+                  fontSize: 12,
+                  opacity: hasActiveQuery ? 1 : 0.5,
+                }}
+              >
+                Save query
+              </button>
+            )}
+            <button
+              data-testid="clear-filters"
+              onClick={() => submitFilters({})}
+              style={{ ...ccBtn("secondary"), fontSize: 12 }}
+            >
+              Clear
+            </button>
           </div>
 
           <ResourceSearch
@@ -401,6 +640,11 @@ export function ResourceListPage() {
               resourceType={resourceType}
               params={draftParams}
             />
+          </div>
+
+          {/* Paste a search URL → populate form / navigate (#145) */}
+          <div style={{ marginTop: 8 }}>
+            <SearchUrlPaste />
           </div>
         </div>
       </div>
@@ -467,13 +711,15 @@ export function ResourceListPage() {
 
         <div style={{ flex: 1 }} />
 
-        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-          {data
-            ? `Showing ${resources.length}${totalAdvertised !== undefined ? ` of ${totalAdvertised.toLocaleString()}` : ""}`
-            : "…"}
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }} data-testid="results-showing">
+          {showingStr}
         </span>
 
-        <PageSizePicker value={pageSize} onChange={setPageSize} />
+        <PageSizePicker
+          value={pageSize}
+          onChange={setPageSize}
+          received={bundle ? receivedCount : undefined}
+        />
 
         {layout === "table" && (
           <ColumnPicker
@@ -602,23 +848,64 @@ export function ResourceListPage() {
 
       </div>
 
-      {/* Load more */}
-      {hasNextPage && (
-        <div style={{ display: "flex", justifyContent: "center", padding: "12px 24px" }}>
+      {/* Pagination — adaptive to Bundle.link rels the server actually emits */}
+      {bundle && (
+        <PagedNav links={links} onGoTo={goTo} isFetching={isFetching} />
+      )}
+    </div>
+  );
+}
+
+// ─── Pagination nav ──────────────────────────────────────────────────────────
+
+interface PagedNavProps {
+  links: { first?: string; previous?: string; next?: string; last?: string };
+  onGoTo: (url: string | undefined) => void;
+  isFetching: boolean;
+}
+
+// First / Prev / Next / Last buttons, each disabled when the server didn't
+// advertise the matching `Bundle.link` rel. Cursor-paginated servers
+// naturally degrade to "Next" only — we never synthesise a link the server
+// didn't send, because `next` URLs may be opaque continuation tokens.
+function PagedNav({ links, onGoTo, isFetching }: PagedNavProps) {
+  const buttons: Array<{ label: string; testId: string; url: string | undefined }> = [
+    { label: "« First", testId: "page-first", url: links.first },
+    { label: "‹ Prev", testId: "page-prev", url: links.previous },
+    { label: "Next ›", testId: "page-next", url: links.next },
+    { label: "Last »", testId: "page-last", url: links.last },
+  ];
+  return (
+    <div
+      data-testid="pagination-controls"
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        gap: 6,
+        padding: "12px 24px",
+        flexWrap: "wrap",
+      }}
+    >
+      {buttons.map(({ label, testId, url }) => {
+        const disabled = !url || isFetching;
+        return (
           <button
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-            data-testid="load-more"
+            key={testId}
+            data-testid={testId}
+            onClick={() => onGoTo(url)}
+            disabled={disabled}
+            aria-disabled={disabled}
             style={{
               ...ccBtn("secondary"),
               fontSize: 12,
-              opacity: isFetchingNextPage ? 0.6 : 1,
+              opacity: disabled ? 0.4 : 1,
+              cursor: disabled ? "not-allowed" : "pointer",
             }}
           >
-            {isFetchingNextPage ? "Loading…" : "Load more"}
+            {label}
           </button>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -628,9 +915,15 @@ export function ResourceListPage() {
 interface PageSizePickerProps {
   value: number;
   onChange: (size: number) => void;
+  /**
+   * Entries the server actually returned for the current page. Surfaced
+   * alongside the requested `value` when they differ so the user sees that
+   * the server capped `_count` (Epic ~50–100, HAPI default 20, etc.).
+   */
+  received?: number;
 }
 
-function PageSizePicker({ value, onChange }: PageSizePickerProps) {
+function PageSizePicker({ value, onChange, received }: PageSizePickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -643,15 +936,25 @@ function PageSizePicker({ value, onChange }: PageSizePickerProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Surface server-side capping. `_count` is a hint per FHIR R4 §3.1.0.5 —
+  // Epic caps at 50–100, Cerner ~100, HealthLake 100. When we asked for more
+  // than we got, show what we got so the user isn't misled.
+  const capped = received !== undefined && received < value;
+  const tooltip = capped
+    ? `Requested ${value}, server returned ${received}. The server may cap _count.`
+    : "Server may cap this value — actual page size comes from Bundle.entry.";
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-label={tooltip}
+        title={tooltip}
         data-testid="page-size-picker"
         style={{ ...ccBtn("ghost"), fontSize: 12 }}
       >
-        {value} / page
+        {capped ? `${received} of ${value} / page` : `${value} / page`}
         <svg
           style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 120ms" }}
           width="10"

@@ -239,18 +239,40 @@ morning is whatever live-site-monitor filed at 06:30.
 - **Workflow:** [`pr-resolve-conflicts.yml`](../../.github/workflows/pr-resolve-conflicts.yml)
 - **Prompt:** [`pr-resolve-conflicts.md`](../prompts/pr-resolve-conflicts.md)
 - **Trigger:** an `issue_comment` of `/resolve-conflicts` on a PR, posted
-  by a user with `OWNER` / `MEMBER` / `COLLABORATOR` association.
+  by a user with `OWNER` / `MEMBER` / `COLLABORATOR` association, or
+  `workflow_dispatch` from `pr-fixup-dispatch.yml` when a bot PR is
+  blocked by merge conflicts.
 - **Concurrency group:** `pr-resolve-conflicts-${{ pr_number }}`
 
 Acknowledges the request, checks out the PR head with full history,
-runs `git merge origin/<base_ref>`, resolves hand-authored conflicts
-inline, regenerates `pnpm-lock.yaml` if needed, runs
+runs `git merge origin/<base_ref>` (usually `main`), resolves
+hand-authored conflicts inline, regenerates `pnpm-lock.yaml` if needed, runs
 `typecheck`/`test:run`/`demo typecheck` to verify the build, commits
 with a structured "Resolved files:" message, and pushes. Never
 force-pushes; never targets a branch other than the PR head.
 
 The "needs-human" exit is taken whenever a conflict is in a binary
 file, generated file, or a lock-file hunk that differs semantically.
+
+### Staging stack agent resolver
+
+- **Workflow:** [`staging-stack-agent.yml`](../../.github/workflows/staging-stack-agent.yml)
+- **Prompt:** [`staging-stack-resolve-conflicts.md`](../prompts/staging-stack-resolve-conflicts.md)
+- **Trigger:** `workflow_dispatch` from `stack-approved-prs.yml` when an
+  approved PR conflicts with the current staging stack.
+- **Concurrency group:** `staging-stack-agent`
+
+The normal stacker still handles clean merges. When a conflict appears, it
+comments on the PR, dispatches this resolver, and defers the staging push. The
+resolver rebuilds `staging` from `origin/main` plus the approved PRs in
+PR-number order, resolves hand-authored conflicts directly in the staging
+artifact when the combined intent is clear, runs targeted verification, and
+pushes `staging` with `--force-with-lease`.
+
+The resolver does **not** push to PR branches. Its job is to produce the live
+UAT integration artifact. If the conflict is binary, generated, semantically
+ambiguous, or needs a product decision, it leaves that PR out of the staging
+artifact and escalates to `@danielsperoni` with the files that need judgment.
 
 ## Pages deploy — the deploy lane
 

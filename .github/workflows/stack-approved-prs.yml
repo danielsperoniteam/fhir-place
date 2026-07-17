@@ -11,6 +11,9 @@
 #
 # Staging has no branch protection — it's a deploy artifact, not a
 # source-of-truth branch. Each rebuild force-resets from main HEAD.
+# Clean merges are handled here. If a PR conflicts with the current staging
+# stack, this workflow dispatches the agent resolver to make the integration
+# judgment in the staging artifact instead of silently skipping the PR.
 #
 # Triggers:
 #   - pull_request_review: submitted | dismissed
@@ -34,8 +37,10 @@ on:
     branches: [main]
 
 permissions:
-  contents: write     # force-push staging
-  pull-requests: read
+  contents: write # force-push staging
+  actions: write # dispatch the agent resolver when a merge conflict needs judgment
+  issues: write # comment on PRs when conflict resolution is dispatched
+  pull-requests: write # edit `uat:` labels after stacking
 
 concurrency:
   group: stack-approved-prs
@@ -130,8 +135,12 @@ jobs:
           # truth.
           git checkout -B staging origin/main
 
-          # Stack each approved PR by merging its head into staging.
-          echo "$PRS" | jq -c '.[]' | while read -r pr; do
+          # Stack each approved PR by merging its head into staging. If a
+          # conflict appears, hand the full staging rebuild to the agent
+          # resolver; it can preserve both sides' intent in the deploy
+          # artifact, or escalate when a human decision is actually needed.
+          CONFLICT_DISPATCHED=0
+          while read -r pr; do
             NUM=$(echo "$pr" | jq -r '.number')
             HEAD=$(echo "$pr" | jq -r '.head')
             OWNER=$(echo "$pr" | jq -r '.owner')
@@ -145,30 +154,43 @@ jobs:
               git fetch origin "pull/$NUM/head:pr-$NUM"
               REF="pr-$NUM"
             fi
+            REF_SHA=$(git rev-parse "$REF")
             if git merge --no-edit --no-ff -m "stage: include PR #$NUM" "$REF"; then
               echo "Stacked PR #$NUM"
               # Transition the PR's UAT state: it's now on staging, awaiting
-              # the hourly UAT walker. Skip when the PR carries `uat: skip`
-              # (no user-visible change → no validation needed). Otherwise
-              # remove any prior `uat: unable` / `uat: needs-changes` /
-              # `uat: complete` so only `uat: requested` is set. Best-
-              # effort; label-missing errors are non-fatal.
-              if gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name] | any(. == "uat: skip")' 2>/dev/null | grep -q true; then
-                echo "  PR #$NUM has uat: skip — leaving label as-is"
-              else
-                gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" \
-                  --remove-label "uat: unable" \
-                  --remove-label "uat: needs-changes" \
-                  --remove-label "uat: complete" 2>/dev/null || true
-                gh pr edit "$NUM" --repo "$GITHUB_REPOSITORY" \
-                  --add-label "uat: requested" 2>/dev/null || true
-              fi
+              # the hourly UAT walker. The script handles the `uat: skip`
+              # short-circuit and the requested/stale label cleanup. It is
+              # runtime-agnostic — same invocation works from GHA, launchd,
+              # tmux, or a cloud webhook receiver.
+              node scripts/staging/transition-uat-label.mjs "$NUM"
             else
-              echo "::warning::PR #$NUM conflicts with staging; skipping. Manual rebase needed."
+              echo "::warning::PR #$NUM conflicts with staging; dispatching agent resolver."
               git merge --abort
+              MARKER="<!-- staging-stack-agent-dispatch pr=$NUM sha=$REF_SHA -->"
+              if gh pr view "$NUM" --repo "$GITHUB_REPOSITORY" --json comments --jq '.comments[].body' | grep -Fq "$MARKER"; then
+                echo "Agent resolver comment already exists for PR #$NUM at $REF_SHA"
+              else
+                BODY=$(printf '%s\n\n%s\n\n%s\n\n%s' \
+                  "$MARKER" \
+                  "Staging stack hit a merge conflict for this PR at \`$REF_SHA\`." \
+                  "The clean-merge path is handing this to the staging agent resolver instead of skipping the PR. The resolver rebuilds \`staging\` from \`origin/main\` plus the approved PR stack, resolves hand-authored conflicts in the staging artifact when it can preserve both sides' intent, and pushes \`staging\` for UAT." \
+                  "If the resolver finds a binary/generated conflict or an ambiguous product decision, it will stop and escalate to @danielsperoni with the files that need human judgment.")
+                gh pr comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+              fi
+              # Local poll-events daemon picks up the <!-- staging-stack-agent-dispatch -->
+              # comment above and runs the resolver via Claude Max subscription (no API key needed).
+              echo "Conflict marker posted — local daemon will resolve via Max subscription."
+              CONFLICT_DISPATCHED=1
+              echo "::endgroup::"
+              break
             fi
             echo "::endgroup::"
-          done
+          done < <(echo "$PRS" | jq -c '.[]')
+
+          if [ "$CONFLICT_DISPATCHED" = "1" ]; then
+            echo "Agent resolver dispatched; staging push deferred to staging-stack-agent.yml."
+            exit 0
+          fi
 
           # Force-push (staging is unprotected; this is its definition).
           # `--force-with-lease` so concurrent rebuilds don't silently

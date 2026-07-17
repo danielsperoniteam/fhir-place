@@ -1,4 +1,4 @@
-import type { CodeableConcept, Meta } from "fhir/r4";
+import type { CodeableConcept, Coding, Dosage, Meta } from "fhir/r4";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -26,6 +26,49 @@ function render(ui: ReactElement, options?: RenderOptions) {
   );
   return rtlRender(ui, { wrapper: Wrapper, ...options });
 }
+
+describe("Quantity renderer (#368)", () => {
+  const renderer = defaultTypeRenderers.Quantity!;
+  const ctx = { path: "Observation.valueQuantity", typeCode: "Quantity" };
+
+  it("renders comparator + value + unit as one string", () => {
+    const { container } = render(
+      <>{renderer({ comparator: "<", value: 0.01, unit: "ng/mL" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("<0.01 ng/mL");
+  });
+
+  it("decodes a UCUM code when no display unit is present", () => {
+    const { container } = render(
+      <>{renderer({ value: 4.5, code: "10*9/L", system: "http://unitsofmeasure.org" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("4.5 10⁹/L");
+  });
+
+  it("badges the canonical UCUM code when unit and code differ", () => {
+    const { container } = render(
+      <>{renderer({ value: 130, unit: "mmHg", code: "mm[Hg]" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("130 mmHg");
+    expect(container.textContent).toContain("UCUM: mm[Hg]");
+  });
+
+  it("shows no badge when unit and code agree", () => {
+    const { container } = render(
+      <>{renderer({ value: 93, unit: "mg/dL", code: "mg/dL" }, ctx)}</>,
+    );
+    expect(container.textContent).not.toContain("UCUM:");
+  });
+
+  it("leaves non-UCUM systems' codes untouched and unbadged", () => {
+    const { container } = render(
+      <>{renderer({ value: 37, code: "Cel", system: "http://example.org/units" }, ctx)}</>,
+    );
+    expect(container.textContent).toContain("37 Cel");
+    expect(container.textContent).not.toContain("°C");
+    expect(container.textContent).not.toContain("UCUM:");
+  });
+});
 
 describe("codeSystemLabel", () => {
   it("returns a short label for well-known code systems", () => {
@@ -165,6 +208,66 @@ describe("CodeableConcept renderer (CodedValue)", () => {
     expect(getByTestId("coded-value-popover-text").textContent).toBe(
       "Diastolic blood pressure",
     );
+  });
+
+  it("decodes display translation extensions in the popover (#367)", () => {
+    const cc: CodeableConcept = {
+      coding: [
+        {
+          system: "http://snomed.info/sct",
+          code: "38341003",
+          display: "Hypertensive disorder",
+          _display: {
+            extension: [
+              {
+                url: "http://hl7.org/fhir/StructureDefinition/translation",
+                extension: [
+                  { url: "lang", valueCode: "de" },
+                  { url: "content", valueString: "Hypertonie" },
+                ],
+              },
+            ],
+          },
+        } as Coding,
+      ],
+    };
+    const { container, getAllByTestId } = render(<>{renderer(cc, ctx)}</>);
+    openPopover(container);
+    const translations = getAllByTestId("coded-value-translation");
+    expect(translations).toHaveLength(1);
+    expect(translations[0]!.textContent).toContain("de");
+    expect(translations[0]!.textContent).toContain("Hypertonie");
+  });
+
+  it("lists both codings of a dual-coded concept in the popover (#367)", () => {
+    const cc: CodeableConcept = {
+      text: "Essential hypertension",
+      coding: [
+        {
+          system: "http://snomed.info/sct",
+          code: "59621000",
+          display: "Essential hypertension (disorder)",
+          userSelected: true,
+        },
+        {
+          system: "http://hl7.org/fhir/sid/icd-10-cm",
+          code: "I10",
+          display: "Essential (primary) hypertension",
+        },
+      ],
+    };
+    const { container, getByTestId, getAllByTestId } = render(
+      <>{renderer(cc, ctx)}</>,
+    );
+    // Chip shows the userSelected primary's code plus a +1 indicator.
+    expect(getByTestId("coded-value-code").textContent).toBe("59621000");
+    expect(getByTestId("coded-value-extra-count").textContent).toBe("+1");
+    openPopover(container);
+    const pills = getAllByTestId("coded-value-system-pill").map(
+      (n) => n.textContent,
+    );
+    expect(pills).toContain("SNOMED CT");
+    expect(pills).toContain("ICD-10-CM");
   });
 
   it("renders an em-dash when neither text nor coding is present", () => {
@@ -406,5 +509,134 @@ describe("DEFAULT_CODING_PRIORITY", () => {
     expect(paths).toContain("MedicationRequest.medicationCodeableConcept");
     expect(paths).toContain("AllergyIntolerance.code");
     expect(paths).toContain("Immunization.vaccineCode");
+  });
+});
+
+describe("Dosage renderer", () => {
+  const renderer = defaultTypeRenderers.Dosage!;
+  const ctx = { path: "MedicationStatement.dosage", typeCode: "Dosage" };
+
+  it("shows the authored text as the headline and a structured breakdown", () => {
+    const d: Dosage = {
+      text: "1 tab twice daily",
+      timing: { repeat: { frequency: 2, period: 1, periodUnit: "d" } },
+      doseAndRate: [
+        {
+          doseQuantity: {
+            value: 1,
+            unit: "tablet",
+            system: "http://snomed.info/sct",
+            code: "428673006",
+          },
+        },
+      ],
+    };
+    const { container } = render(<>{renderer(d, ctx)}</>);
+    expect(container.textContent).toContain("1 tab twice daily");
+    expect(container.textContent).toContain("Dose");
+    expect(container.textContent).toContain("1 tablet");
+    expect(container.textContent).toContain("Schedule");
+    expect(container.textContent).toContain("2 times per day");
+  });
+
+  it("synthesises a headline when no text is present", () => {
+    const d: Dosage = {
+      route: { text: "oral" },
+      doseAndRate: [{ doseQuantity: { value: 400, unit: "mg" } }],
+      asNeededBoolean: true,
+    };
+    const { container } = render(<>{renderer(d, ctx)}</>);
+    expect(container.textContent).toContain("400 mg oral, as needed");
+    expect(container.textContent).toContain("Route");
+  });
+
+  it("shows the dosage step number from Dosage.sequence", () => {
+    const { container } = render(
+      <>{renderer({ sequence: 2, text: "then..." } as Dosage, ctx)}</>,
+    );
+    expect(container.textContent).toContain("Step");
+    expect(container.textContent).toContain("2");
+  });
+
+  it("labels dose/rate rows with their doseAndRate.type", () => {
+    const d: Dosage = {
+      text: "infusion",
+      doseAndRate: [
+        { type: { text: "ordered" }, doseQuantity: { value: 500, unit: "mg" } },
+        { type: { text: "calculated" }, doseQuantity: { value: 480, unit: "mg" } },
+      ],
+    };
+    const { container } = render(<>{renderer(d, ctx)}</>);
+    expect(container.textContent).toContain("Dose (ordered)");
+    expect(container.textContent).toContain("Dose (calculated)");
+  });
+
+  it("surfaces bounds variants and the lifetime max dose", () => {
+    const duration: Dosage = {
+      text: "course",
+      timing: { repeat: { boundsDuration: { value: 10, unit: "days" } } },
+      maxDosePerLifetime: { value: 4, unit: "g" },
+    };
+    const a = render(<>{renderer(duration, ctx)}</>);
+    expect(a.container.textContent).toContain("Duration");
+    expect(a.container.textContent).toContain("10");
+    expect(a.container.textContent).toContain("Max / lifetime");
+    expect(a.container.textContent).toContain("4");
+
+    const range: Dosage = {
+      text: "course",
+      timing: { repeat: { boundsRange: { low: { value: 7, unit: "d" }, high: { value: 14, unit: "d" } } } },
+    };
+    const b = render(<>{renderer(range, ctx)}</>);
+    expect(b.container.textContent).toContain("Duration");
+    expect(b.container.textContent).toContain("7");
+    expect(b.container.textContent).toContain("14");
+  });
+
+  it("renders an em-dash for an empty dosage", () => {
+    const { container } = render(<>{renderer({} as Dosage, ctx)}</>);
+    expect(container.textContent).toBe("—");
+  });
+});
+
+describe("Timing renderer", () => {
+  const renderer = defaultTypeRenderers.Timing!;
+  const ctx = { path: "ServiceRequest.occurrenceTiming", typeCode: "Timing" };
+
+  it("renders a plain-English summary", () => {
+    const { container } = render(
+      <>{renderer({ repeat: { frequency: 1, period: 8, periodUnit: "h" } }, ctx)}</>,
+    );
+    expect(container.textContent).toBe("once every 8 hours");
+  });
+
+  it("renders an em-dash when empty", () => {
+    const { container } = render(<>{renderer({}, ctx)}</>);
+    expect(container.textContent).toBe("—");
+  });
+});
+
+describe("Period renderer", () => {
+  const renderer = defaultTypeRenderers.Period!;
+  const ctx = { path: "Procedure.performedPeriod", typeCode: "Period" };
+
+  it("humanises both bounds via UTC-pinned formatDateTime", () => {
+    // Same-day timestamps collapse: only the wall-clock time is repeated for
+    // the end bound. The `→` separator is spaced via CSS margin, so the
+    // concatenated textContent has no surrounding whitespace.
+    const start = "2026-03-09T06:20:00Z";
+    const end = "2026-03-09T06:35:00Z";
+    const { container } = render(<>{renderer({ start, end }, ctx)}</>);
+    expect(container.textContent).toBe("Mar 9, 2026, 6:20 AM→6:35 AM");
+    // The raw ISO value stays machine-readable on the <time> element.
+    const times = container.querySelectorAll("time");
+    expect(times[0]?.getAttribute("datetime")).toBe(start);
+    expect(times[1]?.getAttribute("datetime")).toBe(end);
+  });
+
+  it("keeps the ellipsis fallback for a missing bound", () => {
+    const start = "2026-03-09T06:20:00Z";
+    const { container } = render(<>{renderer({ start }, ctx)}</>);
+    expect(container.textContent).toBe("Mar 9, 2026, 6:20 AM→…");
   });
 });

@@ -286,7 +286,9 @@ fires:
 ```
 git checkout -B staging origin/main
 for each open APPROVED PR (ordered by PR number):
-  git merge --no-ff origin/<head>  # skip on conflict, warn
+  git merge --no-ff origin/<head>
+  if conflict:
+    dispatch staging-stack-agent.yml
 git push --force-with-lease origin staging
 ```
 
@@ -295,9 +297,12 @@ artifact (`/` from main + `/staging/` from staging), then deploys.
 `/staging/` refreshes within ~3 minutes with this PR's content
 stacked alongside any other approved-in-flight PRs.
 
-If two approved PRs conflict with each other on staging, the workflow
-emits a warning and skips the conflicting PR — manual rebase needed
-on that branch.
+If two approved PRs conflict with each other on staging, the clean-merge
+stacker stops and dispatches [`staging-stack-agent.yml`](../../.github/workflows/staging-stack-agent.yml).
+That resolver rebuilds the staging artifact with agent judgment, resolves
+hand-authored conflicts when it can preserve both sides' intent, and pushes
+`staging` for UAT. It escalates to `@danielsperoni` only when the conflict is
+binary, generated, semantically ambiguous, or needs a product decision.
 
 ### 8. UAT validation against the live staging build
 

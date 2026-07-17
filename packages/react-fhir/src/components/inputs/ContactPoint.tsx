@@ -5,7 +5,7 @@ export const ContactPointInput: FhirTypeInput<ContactPoint> = ({ value, onChange
   const v = value ?? {};
   const patch = (k: keyof ContactPoint, val: unknown) => onChange({ ...v, [k]: val });
   return (
-    <div className="rounded border border-slate-200 bg-slate-50 p-2">
+    <div className="rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[8rem_1fr_8rem]">
         <select
           className={baseField}

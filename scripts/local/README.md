@@ -9,8 +9,8 @@ just billed against the Claude Max subscription.
 ## Pieces
 
 - [`../run-prompt-locally.sh`](../run-prompt-locally.sh) — the shared
-  runner. Handles lock, log, pause file, dirty-tree refusal, iMessage
-  notification on failure, and `--add-dir` for the worktree parent.
+  runner. Handles lock, log, pause file, dirty-tree refusal, and `--add-dir`
+  for the worktree parent.
   Never sets `ANTHROPIC_API_KEY`, so `claude` falls back to OAuth.
 - `engineer-dispatch.sh` — picks up to 3 ready issues per run, hands
   each to the engineer subagent in a worktree. Runs **twice daily** at
@@ -144,8 +144,8 @@ subscription.
 | PR opened / ready_for_review → automated review | `poll-events.sh` (local, every 60s) **+** `pull_request` (GHA) | `scripts/local/event-pr-review.sh` (local) **+** `.github/workflows/pr-review.yml` (GHA, still on) **+** Codex auto-review (GitHub app) | Local Claude (subscription) + Hosted Codex (subscription) | Codex covers most of this for free; local Claude run is the same prompt, just on the Max OAuth session. |
 | PR labeled `uat: requested` → `/staging/` deploy | `push` to `staging` after stack workflow lands the PR | `.github/workflows/pages.yml` | No AI | Deterministic build + deploy. |
 | Staged PR → UAT walked, `uat: passed` / `uat: failed` | cron hourly | `scripts/local/hourly-uat-validation.sh` (local) — GHA schedule currently commented out | Local Claude (subscription) | GHA copy is manual-only, local is the primary. |
-| `/resolve-conflicts` comment on PR | `poll-events.sh` (local, every 60s) **+** `issue_comment: created` (GHA) | `scripts/local/event-resolve-conflicts.sh` (local) **+** `.github/workflows/pr-resolve-conflicts.yml` (GHA, still on) | Local Claude (subscription) | Collaborator-gated; eyes reaction marks dispatched. |
-| PR approved + `uat: passed` → stacked onto `staging` | `pull_request_review`, `pull_request`, `push` (GHA) | `.github/workflows/stack-approved-prs.yml` | No AI | Deterministic stacker (Model B). |
+| `/resolve-conflicts` comment on PR, or bot PR blocked by merge conflicts | `poll-events.sh` (local, every 60s) **+** `issue_comment: created` (GHA) **+** `pr-fixup-dispatch` workflow dispatch | `scripts/local/event-resolve-conflicts.sh` (local) **+** `.github/workflows/pr-resolve-conflicts.yml` (GHA, still on) | Local Claude for slash command; hosted Claude for fixup dispatch | Collaborator-gated on manual command. Bot merge conflicts can be picked up automatically; agent resolves hand-authored conflicts and escalates only when ambiguous. |
+| PR approved + `uat: passed` → stacked onto `staging` | `pull_request_review`, `pull_request`, `push` (GHA) | `.github/workflows/stack-approved-prs.yml`; conflict fallback: `.github/workflows/staging-stack-agent.yml` | Hosted Claude only on conflict | Clean merges stay deterministic. Conflicted staging integrations go to the agent; human escalation is reserved for binary/generated/ambiguous conflicts. |
 | `staging` green → PR mergeable to `main` | reviewer action | (manual) | No AI | Gate is human + CI checks. |
 | Merge to `main` → Pages deploy | `push: main` (GHA) | `.github/workflows/pages.yml` | No AI | Deterministic. |
 | Daily exploratory QA against real FHIR | cron daily | `scripts/local/daily-qa-pass.sh` (local) **+** `daily-qa-pass.yml` (GHA, still on) | Local Claude (subscription) | Heaviest single workload; boots its own dev server. |
@@ -296,8 +296,8 @@ hour at `:15`, so its overlaps are the only ones to watch.
    start when the working tree is dirty, and engineer-dispatch creates
    its own `wt-*` worktrees. Nothing mutates the primary checkout from
    inside a routine.
-6. **iMessage failure notifications (LOW).** If three routines fail in
-   the same window, you get three notifications. Annoying, not harmful.
+6. **Concurrent failures (LOW).** If three routines fail in the same window,
+   each logs independently to `logs/`. Check logs to diagnose.
 
 ### Current schedule (this PR)
 
