@@ -168,14 +168,23 @@ interface AgentContext {
                                     // ToolRegistry.execute to EVERY tool output
                                     // (Resource, CompactBundle, tx result,
                                     // skill summary). No-op on synthetic data.
-  // Optional human-in-the-loop hooks. Browser front door sets these;
-  // MCP path leaves them undefined (auto-run).
+  // Optional human-in-the-loop hooks. Both are enforced at the
+  // FetchFhirClient boundary (see §6). Browser front door sets these;
+  // MCP path leaves them undefined (auto-run in MCP with --allow-writes;
+  // outright-refused when a write is attempted without --allow-writes).
+  // Return { approved: true, editedInput?: T } — if editedInput is
+  // present, callers MUST revalidate against inputSchema, rebuild the
+  // RequestPlan, and re-invoke the hook. Bounded to N iterations (default
+  // 3) to prevent an unbounded edit-approve ping-pong.
   confirmRead?:  (tool: string, input: unknown, plan: RequestPlan)
-                    => Promise<{ approved: boolean; editedInput?: unknown }>;
+                    => Promise<ConfirmResult>;
   confirmWrite?: (tool: string, input: unknown, plan: RequestPlan)
-                    => Promise<{ approved: boolean; editedInput?: unknown }>;
+                    => Promise<ConfirmResult>;
   signal?: AbortSignal;
 }
+type ConfirmResult =
+  | { approved: true; editedInput?: unknown }
+  | { approved: false };
 
 interface AgentTool<I = unknown, O = unknown> {
   name: string;
@@ -200,7 +209,7 @@ class ToolRegistry {
 }
 ```
 
-**Three invariants ToolRegistry enforces at `execute` time:**
+**Four invariants ToolRegistry enforces at `execute` time:**
 
 1. **Input schema validation.** The raw `unknown` input is validated against
    `inputSchema` (JSONSchema7, e.g. via `ajv`) **before** the executor is
@@ -210,16 +219,18 @@ class ToolRegistry {
 2. **Envelope-level redaction.** Every tool result passes through `ctx.redact`
    at the boundary, so `CompactBundleResult`s, skill summaries, and terminology
    payloads are all covered by the same seam — not just FHIR `Resource`s.
-3. **Write confirmation, centrally.** For any tool with `access: "write"` (and
-   only reachable at all when `ctx.readOnly === false`), the registry itself
-   computes a `RequestPlan` (method / URL / body / headers-to-be-applied) and
-   calls `ctx.confirmWrite` **before** invoking the executor. Individual
-   handlers do not opt in. When `confirmWrite` is undefined (MCP without
-   `--allow-writes`, or a browser session without a wired UI), the registry
-   refuses the write outright. This mirrors the read-side pattern (where
-   `confirmRead` is enforced at the `FetchFhirClient` boundary): the promise
-   of human-in-the-loop confirmation cannot be defeated by a handler forgetting
-   to opt in.
+3. **Access-mode gating.** Tools with `access: "write"` are refused outright
+   when `ctx.readOnly === true`. Read-vs-write confirmation itself lives at
+   the `FetchFhirClient` boundary (§6), *not* at the registry — the registry
+   can't derive a `RequestPlan` from an opaque `execute()`, and skill-shaped
+   tools issue multiple HTTP requests whose plans aren't visible ahead of time.
+   Firing per-request at the client boundary handles all of that uniformly and
+   covers the Layer-3 `fhir_raw_write` escape hatch the same way.
+4. **Audit emission, centrally.** The registry emits `ctx.audit({event:
+   "start" | "success" | "refused" | "failed", tool, input, outcome?, error?,
+   ts})` around every call — regardless of whether the handler touches `audit`.
+   HIPAA §164.312(b) requires every access logged; leaving that to handlers
+   guarantees a miss. Handlers may still emit finer-grained events on top.
 
 **Model-neutral by design.** The registry deliberately does not expose a
 `toAnthropicTools()` method: that would drag `@anthropic-ai/sdk` into
@@ -374,19 +385,36 @@ flag `degraded: true` rather than exposing nothing.
 NL → plan (Anthropic) from plan → run (user-editable preview + explicit button).
 A naive multi-turn loop that dispatches straight through `registry.execute`
 would fetch before the user can review or edit, breaking the current contract.
-The fix is a `confirmRead?: (tool, input, plan) => Promise<{ approved: boolean;
-editedInput?: unknown }>` hook on `AgentContext` — parallel to the write path's
-`confirmWrite`. **The hook is enforced at a single choke point, not per-tool:**
-the `FetchFhirClient` (or a thin request middleware wrapping it) calls
-`confirmRead` before *any* authenticated read leaves the browser. That covers
-every path — Layer-2 primitives (`search_resource`, `read_resource`), Layer-1
-skills that go through `client.request('/Patient/{id}/$everything')`, and the
-Layer-3 `fhir_raw_request` escape hatch — so the model cannot pick a
-"summarize_chart" or "fhir_raw_request" call to bypass the preview. The browser
-front door wires `confirmRead` to the existing `/ask` request-preview UI so the
-plan → preview → run split survives verbatim. The MCP path leaves `confirmRead`
-undefined — auto-run, because there is no interactive UI at the other end of
-stdio.
+The fix is a pair of hooks on `AgentContext` — `confirmRead` and `confirmWrite`
+— **enforced at a single choke point, the `FetchFhirClient` boundary, not
+per-tool.** A thin middleware wrapping the client calls the appropriate hook
+before *any* authenticated FHIR request leaves the browser, selecting by HTTP
+method (`GET`/`HEAD` → `confirmRead`; `POST`/`PUT`/`PATCH`/`DELETE` →
+`confirmWrite`). That covers every path — Layer-2 primitives, Layer-1 skills
+that go through `client.request('/Patient/{id}/$everything')`, and both raw
+escape hatches — so the model cannot pick a skill or `fhir_raw_write` call to
+bypass the preview. The browser front door wires `confirmRead` to the existing
+`/ask` request-preview UI so the plan → preview → run split survives verbatim,
+and `confirmWrite` to a distinct write-confirmation dialog (per ADR 0003 agent
+safety). The MCP path leaves both undefined — `confirmRead` auto-runs;
+`confirmWrite` when undefined refuses the write outright (parallel to the
+`--allow-writes` MCP flag).
+
+**Edit → revalidate → re-confirm.** When a hook returns
+`{ approved: true, editedInput }`, the middleware:
+1. **Revalidates** the edited input against the tool's `inputSchema` — an
+   edited call must still pass JSONSchema7 validation, or it is refused.
+2. **Rebuilds** the `RequestPlan` from scratch (method / URL / body / headers)
+   so the plan shown next reflects the edit exactly.
+3. **Re-invokes** the same hook with the new plan. The loop is bounded (default
+   3 iterations) to prevent an unbounded edit-approve ping-pong; the fourth
+   pass is refused. Only when the hook returns `{ approved: true }` **without**
+   an `editedInput` does the request actually fire.
+
+This closes the two loopholes that would otherwise defeat the preview: (a)
+using the edit without revalidation could execute a request different from
+the one approved; (b) ignoring the edit would make the promised editable
+preview ineffective.
 
 The chat surfaces the resources behind each answer (via `drillRefs`) so the user
 can verify, which is both a trust feature and the honest answer to "where did

@@ -42,13 +42,23 @@ Operating constraints:
   `access: "read" | "write"` (required, not optional — an unclassified tool
   would default to read and silently bypass the read-only default).
   `ToolRegistry` refuses to register a tool without it, and refuses to execute
-  a `write` tool when `ctx.readOnly`. When writes are enabled, the registry
-  itself computes a `RequestPlan` and calls `ctx.confirmWrite` **before** the
-  executor runs, refusing outright if `confirmWrite` is undefined; individual
-  handlers do not opt in. This mirrors the read-side pattern (`confirmRead`
-  enforced at the `FetchFhirClient` boundary): the promise of
-  human-in-the-loop cannot be defeated by a handler forgetting to call the
-  hook.
+  a `write` tool when `ctx.readOnly`.
+- **Both `confirmRead` and `confirmWrite` are enforced at the
+  `FetchFhirClient` boundary, not per-tool.** A single middleware wrapping the
+  client selects by HTTP method (`GET`/`HEAD` → `confirmRead`;
+  `POST`/`PUT`/`PATCH`/`DELETE` → `confirmWrite`) before **any** authenticated
+  FHIR request leaves the browser. Layer-1 skills (`$everything`), Layer-3 raw
+  tools, and Layer-2 primitives are covered uniformly, and the registry does
+  not need to derive a `RequestPlan` from an opaque `execute()` — which it
+  can't, since skill-shaped tools issue multiple requests whose plans aren't
+  visible in advance. When a hook returns an `editedInput`, the middleware
+  revalidates it against the tool's `inputSchema`, rebuilds the plan, and
+  re-invokes the hook (bounded to a small iteration cap) so an edit cannot
+  cause execution of a request the user did not approve.
+- **`ToolRegistry.execute` emits audit events centrally** —
+  start/success/refused/failed with `{tool, input, outcome?, error?, ts}`
+  — regardless of whether the handler calls `ctx.audit`. HIPAA §164.312(b)
+  requires every access logged; leaving that to handlers guarantees a miss.
 - **`ToolRegistry.execute` validates every tool input against its
   `inputSchema` (JSONSchema7) before dispatch** and refuses on failure.
   Today's single-shot code only spot-checks that `resourceType` is a string and
