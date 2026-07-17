@@ -38,8 +38,12 @@ Adopt a **one core, two front doors** architecture:
 
 Operating constraints:
 
-- **Tools are read-only by default.** Writes require an explicit `--allow-writes`
-  flag (MCP) or a human-confirmation callback (browser).
+- **Tools are read-only by default.** Every `AgentTool` must declare
+  `access: "read" | "write"` (required, not optional — an unclassified tool
+  would default to read and silently bypass the read-only default).
+  `ToolRegistry` refuses to register a tool without it, and refuses to execute
+  a `write` tool when `ctx.readOnly`. Writes additionally require an explicit
+  `--allow-writes` flag (MCP) or a human-confirmation callback (browser).
 - **`ToolRegistry.execute` validates every tool input against its
   `inputSchema` (JSONSchema7) before dispatch** and refuses on failure.
   Today's single-shot code only spot-checks that `resourceType` is a string and
@@ -52,20 +56,24 @@ Operating constraints:
   `https://host.example/fhir`, a model-supplied
   `https://host.example/other-service` is same-origin but a different
   application, and the FHIR bearer must not flow to it. The primitive becomes
-  `sameBase(target, baseUrl)` (same origin **and** target path prefixed by the
-  base path), enforced at the request boundary in `FetchFhirClient` — hard
-  refuse or credential strip — and applied by both front doors to reference
-  resolution and the raw escape hatch alike.
+  `sameBase(target, baseUrl)`, enforced at the request boundary in
+  `FetchFhirClient` — hard refuse or credential strip — and applied by both
+  front doors to reference resolution and the raw escape hatch alike. The path
+  check must respect segment boundaries (accept only `targetPath === basePath`
+  or `targetPath.startsWith(basePath + "/")` on normalized paths); a naive
+  `startsWith` would let `/fhir-evil/collect` pass under a `/fhir` base.
 - **PHI-masking seam is envelope-level, not `Resource → Resource`.** Applied
   centrally by `ToolRegistry.execute` over every tool output — Bundles,
   compacted results, terminology payloads, skill summaries — so nothing that
   ships to the model bypasses the seam.
 - **The browser front door preserves `/ask`'s plan → user-editable preview →
-  run split.** `AgentContext` exposes an optional `confirmRead` hook that Layer-2
-  read primitives call with their built request plan before executing; the
-  browser wires it to the existing request-preview UI, and the MCP path leaves
-  it undefined (auto-run). Without this, a multi-turn loop would fetch before
-  the user could review or edit.
+  run split.** `AgentContext` exposes an optional `confirmRead` hook that
+  `FetchFhirClient` (or a thin middleware wrapping it) calls with the built
+  request plan before **any** authenticated read leaves the browser — not only
+  Layer-2 primitives but also Layer-1 skills (`$everything`) and the Layer-3
+  `fhir_raw_request` escape hatch. Enforcing at the single client boundary,
+  rather than per-tool, prevents the model from picking a skill or raw tool to
+  bypass the preview. The MCP path leaves `confirmRead` undefined (auto-run).
 - **`resolve_reference` routes version-specific references through `vread`.**
   Today `FetchFhirClient.readReference` silently drops the `/_history/<v>`
   suffix and returns the current version. Detecting the suffix and calling

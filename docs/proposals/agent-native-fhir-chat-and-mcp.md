@@ -182,7 +182,12 @@ interface AgentTool<I = unknown, O = unknown> {
   layer: "skill" | "primitive" | "raw";
   description: string;
   inputSchema: JSONSchema7;    // same shape already used by anthropicQuery.ts
-  mutating?: boolean;          // refused when ctx.readOnly
+  access: "read" | "write";    // REQUIRED. Not optional — an unclassified
+                               // tool would default to "read" and silently
+                               // bypass the read-only default. Registry
+                               // refuses to register a tool without it and
+                               // refuses to execute an "write" tool when
+                               // ctx.readOnly.
   execute(input: I, ctx: AgentContext): Promise<O>;
 }
 
@@ -268,16 +273,20 @@ be compacted into inline summaries, or a `MedicationRequest` with
 and no `drillRef` can recover it; (b) dedups `_include`/`_revinclude` resources
 by `Type/id` (using `entry.search.mode`);
 (c) aggregates Observation series **only when the values are comparable
-numeric quantities with a shared unit** — key
-**`(subjectId, code.coding.system|code, valueQuantity.unit)`**, computing
+numeric quantities with a shared unit AND the code carries a stable coding**
+— key **`(subjectId, code.coding[0].system|code, valueQuantity.unit)`**,
+computing
 `n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized to
 `subject.reference` when present, otherwise
 `subject.identifier.system + "|" + subject.identifier.value` (R4 permits either
 form; an identifier-only subject is valid). Everything else — coded
 (`valueCodeableConcept`), string, boolean, range, ratio, sampled-data,
 period, time/dateTime, component-only (e.g. BP), and `dataAbsentReason`
-Observations, plus quantity Observations whose siblings-by-code disagree on
-unit — is preserved as an **individual entry**, never coerced into a series.
+Observations, quantity Observations whose siblings-by-code disagree on unit,
+**and quantity Observations whose `code` is text-only** (no `coding[]` entry —
+valid R4; two different text-coded measurements would otherwise collapse under
+the same missing-code key) — is preserved as an **individual entry**, never
+coerced into a series.
 Observations with neither a subject reference nor a usable identifier are also
 held out of aggregation. Subject **must** be part of the key: `search_resource`
 is not necessarily patient-scoped (population queries return Observations across
@@ -339,12 +348,17 @@ A naive multi-turn loop that dispatches straight through `registry.execute`
 would fetch before the user can review or edit, breaking the current contract.
 The fix is a `confirmRead?: (tool, input, plan) => Promise<{ approved: boolean;
 editedInput?: unknown }>` hook on `AgentContext` — parallel to the write path's
-`confirmWrite`. When set, Layer-2 read primitives compute their plan (built URL,
-method, headers-to-be-applied), call the hook, and only proceed if approved
-(with any user-edited input substituted). The browser front door wires
-`confirmRead` to the existing `/ask` request-preview UI so the plan → preview →
-run split survives verbatim. The MCP path leaves `confirmRead` undefined —
-auto-run, because there is no interactive UI at the other end of stdio.
+`confirmWrite`. **The hook is enforced at a single choke point, not per-tool:**
+the `FetchFhirClient` (or a thin request middleware wrapping it) calls
+`confirmRead` before *any* authenticated read leaves the browser. That covers
+every path — Layer-2 primitives (`search_resource`, `read_resource`), Layer-1
+skills that go through `client.request('/Patient/{id}/$everything')`, and the
+Layer-3 `fhir_raw_request` escape hatch — so the model cannot pick a
+"summarize_chart" or "fhir_raw_request" call to bypass the preview. The browser
+front door wires `confirmRead` to the existing `/ask` request-preview UI so the
+plan → preview → run split survives verbatim. The MCP path leaves `confirmRead`
+undefined — auto-run, because there is no interactive UI at the other end of
+stdio.
 
 The chat surfaces the resources behind each answer (via `drillRefs`) so the user
 can verify, which is both a trust feature and the honest answer to "where did
@@ -408,7 +422,7 @@ deferrable:** anything touching the API key.
 | Audit-logging interface on every tool call | **interface + console sink** | HIPAA §164.312(b) needs every access logged; can't add to N handlers after the fact |
 | Error redaction (`FetchFhirClient` leaks URL + `OperationOutcome.diagnostics` into thrown text) | **implement (cheap)** | same path PHI would leak through later; make redaction habitual |
 | `sameOrigin` token-leak guard (`ask/url.ts`) | **keep, replace as the enforcement primitive** | correct as a UI-render sanity check; insufficient as a credential guard (see next row) |
-| **Base-path credential enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | `client.readReference` accepts absolute URLs and `fhir_raw_request` will let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. **Same-origin is not sufficient** — for a base such as `https://host.example/fhir`, a model-supplied `https://host.example/other-service` passes `sameOrigin` but is a different application; the FHIR bearer must not flow to it. Introduce a `sameBase(target, baseUrl)` primitive (same origin **and** target path is prefixed by the base path) and enforce it at the request boundary: hard-refuse or credential-strip anything outside the configured FHIR base. Applied by both front doors, to reference resolution and the raw escape hatch alike. |
+| **Base-path credential enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | `client.readReference` accepts absolute URLs and `fhir_raw_request` will let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. **Same-origin is not sufficient** — for a base such as `https://host.example/fhir`, a model-supplied `https://host.example/other-service` passes `sameOrigin` but is a different application; the FHIR bearer must not flow to it. Introduce a `sameBase(target, baseUrl)` primitive and enforce it at the request boundary: hard-refuse or credential-strip anything outside the configured FHIR base. **Path check must respect segment boundaries — not `startsWith`**: after normalizing both paths (strip trailing `/`, resolve `.`/`..`), accept only when `targetPath === basePath` or `targetPath.startsWith(basePath + "/")`. A naive `startsWith("/fhir")` would accept `/fhir-evil/collect`. Applied by both front doors, to reference resolution and the raw escape hatch alike. |
 | **Tool-input JSONSchema7 validation in `ToolRegistry.execute`** | **implement** | this is the real first line against prompt-injected steering; see §5.1 |
 
 **Already correct in the codebase, worth preserving:** the `sameOrigin` guard
