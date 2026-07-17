@@ -8,7 +8,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import {
+  datePrefixOptions,
   findSearchParamsForResource,
+  numericPrefixOptions,
   ResourceSearch,
   tokenPlaceholder,
 } from "./ResourceSearch.js";
@@ -511,6 +513,59 @@ describe("tokenPlaceholder", () => {
     expect(tokenPlaceholder(el("uri"))).toBe("https://…");
     expect(tokenPlaceholder(el("url"))).toBe("https://…");
     expect(tokenPlaceholder(el("canonical"))).toBe("https://…");
+  });
+});
+
+describe("datePrefixOptions", () => {
+  const values = (opts: ReturnType<typeof datePrefixOptions>) => opts.map((o) => o.value);
+
+  it("withholds sa/eb for a scalar date/dateTime target", () => {
+    // Codex review on #732: sa/eb are range boundaries, meaningless on a plain
+    // date element (e.g. Patient.birthdate).
+    expect(values(datePrefixOptions(false))).toEqual([
+      "",
+      "eq",
+      "ne",
+      "lt",
+      "le",
+      "gt",
+      "ge",
+      "ap",
+    ]);
+  });
+
+  it("offers sa/eb when the target covers a range (Period/Timing)", () => {
+    const v = values(datePrefixOptions(true));
+    expect(v).toContain("sa");
+    expect(v).toContain("eb");
+  });
+});
+
+describe("numericPrefixOptions", () => {
+  const values = (opts: ReturnType<typeof numericPrefixOptions>) => opts.map((o) => o.value);
+
+  it("keeps the full numeric set when no comparators are advertised", () => {
+    expect(values(numericPrefixOptions(undefined))).toEqual([
+      "",
+      "eq",
+      "ne",
+      "lt",
+      "le",
+      "gt",
+      "ge",
+      "ap",
+    ]);
+  });
+
+  it("intersects with an advertised comparator subset (always keeping =)", () => {
+    // Codex review on #732: a SearchParameter advertising only gt/lt must not
+    // offer ap/ne/ge/le — the server would reject them.
+    // Order follows the canonical prefix list, not the advertised order.
+    expect(values(numericPrefixOptions(["gt", "lt"]))).toEqual(["", "lt", "gt"]);
+  });
+
+  it("leaves only the = default when comparators are advertised as none", () => {
+    expect(values(numericPrefixOptions([]))).toEqual([""]);
   });
 });
 

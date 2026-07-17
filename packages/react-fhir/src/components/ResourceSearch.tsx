@@ -452,10 +452,10 @@ function SearchField({
     );
   }
   if (param.type === "date") {
-    return <DateSearchField base={base} param={param} value={value} onChange={onChange} modifier={modifier} onModifier={onModifier} />;
+    return <DateSearchField base={base} param={param} value={value} onChange={onChange} profile={profile} modifier={modifier} onModifier={onModifier} />;
   }
   if (param.type === "number" || param.type === "quantity") {
-    return <PrefixedValueField base={base} param={param} value={value} onChange={onChange} modifier={modifier} onModifier={onModifier} />;
+    return <PrefixedValueField base={base} param={param} value={value} onChange={onChange} profile={profile} modifier={modifier} onModifier={onModifier} />;
   }
   if (param.type === "reference") {
     return (
@@ -741,12 +741,40 @@ const DATE_PREFIXES: DatePrefixOption[] = [
 ];
 
 /**
- * Number/quantity prefixes: `sa`/`eb` describe range boundaries and are not
- * valid numeric comparators (matches `NumberPrefix` in client/searchBuilder).
+ * The comparator set without the range boundaries `sa`/`eb`. Used for numeric
+ * params (matches `NumberPrefix` in client/searchBuilder) and for scalar
+ * date/dateTime targets, which — unlike Period/Timing targets — can't use the
+ * boundary comparators either.
  */
 const NUMERIC_PREFIXES: DatePrefixOption[] = DATE_PREFIXES.filter(
   (p) => p.value !== "sa" && p.value !== "eb",
 );
+const SCALAR_DATE_PREFIXES = NUMERIC_PREFIXES;
+
+/** Date-search target element types that cover a range, so `sa`/`eb` apply. */
+const RANGE_DATE_TYPES = new Set(["Period", "Timing", "Range"]);
+
+/**
+ * Date prefix options for a param: the full set (with `sa`/`eb`) only when the
+ * target element covers a range (Period/Timing/Range); otherwise the scalar set.
+ */
+export function datePrefixOptions(targetsRange: boolean): DatePrefixOption[] {
+  return targetsRange ? DATE_PREFIXES : SCALAR_DATE_PREFIXES;
+}
+
+/**
+ * Numeric prefix options intersected with a server-advertised comparator list.
+ * `undefined` (the SearchParameter didn't advertise `comparator`) keeps the full
+ * numeric set; an advertised list narrows to it (an empty list leaves only the
+ * `=` default, i.e. no comparator support). The `=` default is always kept.
+ */
+export function numericPrefixOptions(
+  advertised: readonly string[] | undefined,
+): DatePrefixOption[] {
+  if (!Array.isArray(advertised)) return NUMERIC_PREFIXES;
+  const set = new Set(advertised);
+  return NUMERIC_PREFIXES.filter((p) => p.value === "" || set.has(p.value));
+}
 
 type DateSearchFieldProps = SearchFieldProps;
 
@@ -756,7 +784,7 @@ type DateSearchFieldProps = SearchFieldProps;
  * in sync with whatever the parent holds — e.g. `ge2024-01-01` splits into
  * prefix="ge" + date="2024-01-01".
  */
-function DateSearchField({ base, param, value, onChange, modifier, onModifier }: DateSearchFieldProps): ReactNode {
+function DateSearchField({ base, param, value, onChange, profile, modifier, onModifier }: DateSearchFieldProps): ReactNode {
   const match = value.match(/^(eq|ne|lt|le|gt|ge|ap|sa|eb)?(\d{4}-\d{2}-\d{2})?$/);
   const date = match?.[2] ?? "";
   // A prefix picked before any date exists can't live in `value` (a bare
@@ -764,6 +792,20 @@ function DateSearchField({ base, param, value, onChange, modifier, onModifier }:
   // ordering works, and let a parsed prefix from the value win once set.
   const [pendingPrefix, setPendingPrefix] = useState<DatePrefix | "">("");
   const prefix = ((match?.[1] as DatePrefix | undefined) ?? (date ? "" : pendingPrefix));
+
+  // `sa` (starts-after) / `eb` (ends-before) are boundary comparators — they
+  // only mean something when the target element covers a range (a Period or
+  // Timing), e.g. `Encounter.date` → `Encounter.period`. On a scalar
+  // date/dateTime target (`Patient.birthdate`, …) they submit a query the
+  // server can't satisfy, so offer them only when we can confirm range backing.
+  // Conservative when the element can't be resolved — mirrors the token gates
+  // (Codex review on #732).
+  const { data: spec } = useSearchParameter(base, param.name ?? "");
+  const elementPath = elementPathForSearchParam(param, base, spec ?? undefined);
+  const { data: sd } = useStructureDefinition({ type: base, profile }, { enabled: Boolean(elementPath) });
+  const element = elementPath && sd ? findElement(sd, elementPath) : undefined;
+  const targetsRange = element?.type?.some((t) => RANGE_DATE_TYPES.has(t.code)) ?? false;
+  const datePrefixes = datePrefixOptions(targetsRange);
 
   // External clears (form Clear, AI replacing criteria) empty `value`
   // without going through commit — drop the parked prefix with it so it
@@ -773,6 +815,14 @@ function DateSearchField({ base, param, value, onChange, modifier, onModifier }:
   useEffect(() => {
     if (value === "") setPendingPrefix("");
   }, [value]);
+
+  // A prefix hydrated from the URL (`birthdate=sa2000-01-01`) that this target
+  // doesn't offer would leave the select blank while the value still submits
+  // it — strip it back to a plain date so the query stays valid.
+  const prefixOffered = datePrefixes.some((p) => p.value === prefix);
+  useEffect(() => {
+    if (prefix && !prefixOffered && date) onChange(date);
+  }, [prefix, prefixOffered, date, onChange]);
 
   const commit = (nextPrefix: string, nextDate: string) => {
     setPendingPrefix(nextPrefix as DatePrefix | "");
@@ -789,7 +839,7 @@ function DateSearchField({ base, param, value, onChange, modifier, onModifier }:
         onChange={(e) => commit(e.target.value, date)}
         className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
       >
-        {DATE_PREFIXES.map((p) => (
+        {datePrefixes.map((p) => (
           <option key={`${p.value}-${p.label}`} value={p.value} title={p.title}>
             {p.label}
           </option>
@@ -833,10 +883,25 @@ function PrefixedValueField({
   const [pendingPrefix, setPendingPrefix] = useState<DatePrefix | "">("");
   const prefix = ((match?.[1] as DatePrefix | undefined) ?? (rest ? "" : pendingPrefix));
 
+  // A server's `SearchParameter.comparator` names the comparators it supports;
+  // an empty/absent list means clients shouldn't expect any. When it's
+  // advertised, intersect the menu with it so the form can't offer a comparator
+  // (e.g. `ap`) the server would reject. Absent → keep the full numeric set
+  // (Codex review on #732).
+  const { data: spec } = useSearchParameter(base, param.name ?? "");
+  const numericPrefixes = numericPrefixOptions(spec?.comparator);
+
   // See DateSearchField: external clears also drop the parked prefix.
   useEffect(() => {
     if (value === "") setPendingPrefix("");
   }, [value]);
+
+  // See DateSearchField: a hydrated prefix the server doesn't advertise is
+  // stripped back to a bare value so the query stays valid.
+  const prefixOffered = numericPrefixes.some((p) => p.value === prefix);
+  useEffect(() => {
+    if (prefix && !prefixOffered && rest) onChange(rest);
+  }, [prefix, prefixOffered, rest, onChange]);
 
   const commit = (nextPrefix: string, nextValue: string) => {
     setPendingPrefix(nextPrefix as DatePrefix | "");
@@ -853,7 +918,7 @@ function PrefixedValueField({
         onChange={(e) => commit(e.target.value, rest)}
         className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
       >
-        {NUMERIC_PREFIXES.map((p) => (
+        {numericPrefixes.map((p) => (
           <option key={`${p.value}-${p.label}`} value={p.value} title={p.title}>
             {p.label}
           </option>
