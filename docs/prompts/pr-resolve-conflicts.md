@@ -39,13 +39,26 @@ primary checkout:
 
 ```bash
 REPO_ROOT=$(pwd)
-HEAD_REF=$(gh pr view <pr_number> --json headRefName --jq '.headRefName')
-BASE_REF=$(gh pr view <pr_number> --json baseRefName --jq '.baseRefName')
-WORKTREE=../wt-pr-<pr_number>
-git fetch origin "$HEAD_REF" main
-# Create local tracking branch if it doesn't exist, then add worktree.
-git branch --track "$HEAD_REF" "origin/$HEAD_REF" 2>/dev/null || true
-git worktree add "$WORKTREE" "$HEAD_REF"
+REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
+PR_JSON=$(gh api "repos/$REPO/pulls/<pr_number>")
+HEAD_REF=$(echo "$PR_JSON" | jq -r '.head.ref')
+HEAD_REPO=$(echo "$PR_JSON" | jq -r '.head.repo.full_name')
+BASE_REF=$(echo "$PR_JSON" | jq -r '.base.ref')
+if [[ "$HEAD_REPO" != "$REPO" || "$BASE_REF" != "main" ]]; then
+  echo "Refusing to write fork PR or non-main base: head=$HEAD_REPO base=$BASE_REF" >&2
+  exit 2
+fi
+RUN_SLUG="${RESOLVE_RUN_SLUG:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+TEMP_BRANCH="${RESOLVE_TEMP_BRANCH:-codex/resolve-pr-<pr_number>-$RUN_SLUG}"
+if [[ -n "${RESOLVE_WORKTREE:-}" ]]; then
+  WORKTREE="$RESOLVE_WORKTREE"
+else
+  WORKTREE=$(mktemp -d "$(dirname "$REPO_ROOT")/wt-pr-<pr_number>.XXXXXX")
+fi
+git fetch origin "$HEAD_REF" "$BASE_REF"
+# Use a unique temporary local branch. The PR branch may already be checked
+# out in another worktree, so never try to claim its local branch name.
+git worktree add -b "$TEMP_BRANCH" "$WORKTREE" "origin/$HEAD_REF"
 cd "$WORKTREE"
 ```
 
@@ -55,7 +68,8 @@ All subsequent git commands run inside `$WORKTREE`. At every exit point
 parent of the main checkout, which is not a git repository:
 
 ```bash
-git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>
+git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"
+git -C "$REPO_ROOT" branch -D "$TEMP_BRANCH"
 ```
 
 ---
@@ -64,16 +78,31 @@ git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>
 
 ```
 git fetch origin
-git merge "origin/$BASE_REF"
+BEFORE_MERGE=$(git rev-parse HEAD)
+if git merge "origin/$BASE_REF"; then
+  AFTER_MERGE=$(git rev-parse HEAD)
+  if [[ "$AFTER_MERGE" == "$BEFORE_MERGE" ]]; then
+    NO_CHANGES=true
+  else
+    NO_CHANGES=false
+  fi
+  MERGE_WAS_CLEAN=true
+else
+  NO_CHANGES=false
+  MERGE_WAS_CLEAN=false
+fi
 ```
 
-If the merge exits cleanly (return code 0, no conflict markers), there is
-nothing to do. Post a comment:
+If `MERGE_WAS_CLEAN=true`, skip Steps 2 and 3, run the verification in Step
+4, then commit if Git created an uncommitted merge and push in Step 5. A clean
+merge or fast-forward still changed the PR branch and must be pushed.
+
+Only when `NO_CHANGES=true` is there nothing to do. Post a comment:
 
 > "No conflicts found — `<base_ref>` merges cleanly into `<head_ref>`. No
 > changes were made."
 
-Then exit.
+Then remove the worktree and temporary branch and exit.
 
 If the merge exits with conflicts, continue to Step 2.
 
@@ -154,16 +183,23 @@ If typecheck or tests fail:
 
 ## Step 5 — commit and push
 
-```
-git commit -m "resolve merge conflicts with <base_ref>
+```bash
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  git commit -m "resolve merge conflicts with <base_ref>
 
 Resolved files:
 - path/to/file1 — brief description of the resolution decision
 - path/to/file2 — brief description
 
 Pre-existing test failures unrelated to this merge (if any): <list or 'none'>"
+fi
 
-git push origin <head_ref>
+git push origin HEAD:<head_ref>
+
+# Mandatory success cleanup. The local driver also enforces this on exit.
+cd "$REPO_ROOT"
+git worktree remove --force "$WORKTREE"
+git branch -D "$TEMP_BRANCH"
 ```
 
 Do not include "Co-authored-by" lines or any attributions beyond the standard
@@ -236,7 +272,8 @@ To retry after resolving these manually, comment `/resolve-conflicts` again.
 ```
 
 3. Add the `status: needs-human` label to the PR.
-4. Remove the worktree: `git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>`
+4. Remove the worktree and temporary branch:
+   `git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" && git -C "$REPO_ROOT" branch -D "$TEMP_BRANCH"`
 5. Exit without pushing anything.
 
 ---

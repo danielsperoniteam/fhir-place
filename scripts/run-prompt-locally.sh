@@ -4,7 +4,8 @@
 # (Claude Max subscription) rather than ANTHROPIC_API_KEY.
 #
 # Usage:
-#   scripts/run-prompt-locally.sh <prompt-file> [--allowedTools T,U,V] [--max-turns N] [--extra-arg ...]
+#   scripts/run-prompt-locally.sh <prompt-file> [--allow-dirty-primary]
+#     [--allowedTools T,U,V] [--max-turns N] [--extra-arg ...]
 #
 # Required env:
 #   GITHUB_TOKEN — fine-grained PAT with the perms the prompt needs.
@@ -42,12 +43,17 @@ shift
 # Used by event-triggered drivers (issue-review, pr-review,
 # dispatch-engineer-on-issue, pr-resolve-conflicts) to scope the run.
 TARGET=""
+ALLOW_DIRTY_PRIMARY=false
 CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --for)
       TARGET="$2"
       shift 2
+      ;;
+    --allow-dirty-primary)
+      ALLOW_DIRTY_PRIMARY=true
+      shift
       ;;
     *)
       CLAUDE_ARGS+=("$1")
@@ -94,6 +100,11 @@ mkdir -p "$LOG_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "=== run $RUN_ID :: $PROMPT_FILE ==="
 
+# Retention must run before any early exit. Previously a dirty primary checkout
+# skipped this cleanup, so each rejected resolver attempt left another log and
+# none of the old ones were ever removed.
+find "$LOG_DIR" -name "${PROMPT_BASENAME}-*.log" -mtime +14 -delete 2>/dev/null || true
+
 # Single-run lock per prompt. Atomic on POSIX. Stale-lock recovery checks
 # whether the recorded PID is still alive.
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -112,11 +123,17 @@ trap 'rm -rf "$LOCK_DIR"' EXIT
 
 cd "$REPO_ROOT"
 
-# Refuse to run with a dirty primary checkout — likely the human is mid-edit.
-# Prompts that need to mutate the tree create worktrees of their own.
-if ! git diff --quiet || ! git diff --cached --quiet; then
+# Refuse to run with a dirty primary checkout unless the caller explicitly
+# guarantees that all mutations happen in an isolated worktree. This keeps
+# ordinary prompts conservative without blocking conflict resolution whenever
+# a human has unrelated edits in the primary checkout.
+if [[ "$ALLOW_DIRTY_PRIMARY" != true ]] &&
+   { ! git diff --quiet || ! git diff --cached --quiet; }; then
   echo "dirty working tree at $REPO_ROOT — skipping"
   exit 0
+fi
+if [[ "$ALLOW_DIRTY_PRIMARY" == true ]]; then
+  echo "dirty-primary guard bypassed; prompt must use an isolated worktree"
 fi
 
 git fetch origin --prune --tags --quiet
@@ -182,9 +199,6 @@ build_stdin | claude \
   "${CLAUDE_ARGS[@]}"
 RC=$?
 set -e
-
-# Trim old logs (~14 days).
-find "$LOG_DIR" -name "${PROMPT_BASENAME}-*.log" -mtime +14 -delete 2>/dev/null || true
 
 echo "=== run $RUN_ID complete (rc=$RC) ==="
 exit "$RC"
