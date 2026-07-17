@@ -157,7 +157,7 @@ export const AsyncCodeCombobox = ({
           <button
             type="button"
             aria-label={`Clear ${fieldName}`}
-            className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+            className="rounded border border-[var(--border-strong,#cbd5e1)] bg-[var(--surface,#ffffff)] px-2 py-1 text-xs text-[var(--text-muted,#475569)] hover:bg-[var(--chip,#f1f5f9)]"
             onClick={() => onChange(undefined)}
           >
             Clear
@@ -178,18 +178,18 @@ export const AsyncCodeCombobox = ({
           id={listboxId}
           role="listbox"
           aria-label={`${fieldName} suggestions`}
-          className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded border border-slate-200 bg-white text-sm shadow-md"
+          className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded border border-[var(--border,#e2e8f0)] bg-[var(--surface,#ffffff)] text-sm shadow-md"
         >
           {debouncedQuery.trim().length === 0 ? (
-            <li className="px-2 py-1 text-slate-400">Type to search…</li>
+            <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">Type to search…</li>
           ) : isFetching ? (
-            <li className="px-2 py-1 text-slate-400">Searching…</li>
+            <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">Searching…</li>
           ) : isError ? (
             <li className="px-2 py-1 text-amber-600" data-testid="terminology-error-option">
               Terminology unavailable
             </li>
           ) : options.length === 0 ? (
-            <li className="px-2 py-1 text-slate-400">No matches</li>
+            <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">No matches</li>
           ) : (
             options.map((o, i) => (
               <li
@@ -199,8 +199,8 @@ export const AsyncCodeCombobox = ({
                 aria-selected={i === activeIndex}
                 className={
                   i === activeIndex
-                    ? "cursor-pointer bg-blue-50 px-2 py-1"
-                    : "cursor-pointer px-2 py-1 hover:bg-slate-50"
+                    ? "cursor-pointer bg-[var(--accent-soft,#eff6ff)] px-2 py-1"
+                    : "cursor-pointer px-2 py-1 hover:bg-[var(--sunken,#f8fafc)]"
                 }
                 onMouseDown={(e) => {
                   // mousedown so we beat the input's blur handler
@@ -210,7 +210,7 @@ export const AsyncCodeCombobox = ({
                 onMouseEnter={() => setActiveIndex(i)}
               >
                 <span className="font-medium">{o.display ?? o.code}</span>
-                <span className="ml-2 text-xs text-slate-400">{o.code}</span>
+                <span className="ml-2 text-xs text-[var(--text-subtle,#94a3b8)]">{o.code}</span>
               </li>
             ))
           )}
