@@ -10,7 +10,7 @@ export const CodeableConceptInput: FhirTypeInput<CodeableConcept> = ({
   const v = value ?? {};
   const firstCoding = v.coding?.[0];
   return (
-    <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
+    <div className="space-y-2 rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2">
       <label>
         <span className={subLabel}>Text</span>
         <input

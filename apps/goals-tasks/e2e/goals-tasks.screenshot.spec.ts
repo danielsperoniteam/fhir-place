@@ -36,7 +36,7 @@ test.describe("Goals & Tasks example app", () => {
     // Description is a CodeableConcept — scope to the description's "Text" input
     // (there are other CodeableConcepts in the form with their own Text field).
     const descriptionText = page
-      .locator('dt:has-text("Code or text describing goal") + dd')
+      .locator('[title="Goal.description"] + div')
       .getByRole("textbox", { name: "Text" });
     await descriptionText.fill("Improve sleep hygiene");
     // lifecycleStatus is a required `code` with ValueSet binding → dropdown

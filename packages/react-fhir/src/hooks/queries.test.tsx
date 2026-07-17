@@ -14,6 +14,7 @@ import {
 import { searchBuilder } from "../client/searchBuilder.js";
 import { FhirClientProvider } from "./FhirClientProvider.js";
 import {
+  bundlePageLinks,
   fhirQueryKeys,
   nextPageUrl,
   parseBatchableRefs,
@@ -21,6 +22,7 @@ import {
   useCreateResource,
   useDeleteResource,
   useInfiniteSearch,
+  usePagedSearch,
   useReadReferences,
   useResource,
   useResourceCapabilities,
@@ -807,6 +809,43 @@ describe("query hooks", () => {
       expect(allIds).toEqual(["p1", "p2", "p3", "p4", "p5", "p6"]);
     });
 
+    it("bundlePageLinks normalises all four link rels and both spellings of previous", () => {
+      const links = bundlePageLinks({
+        resourceType: "Bundle",
+        type: "searchset",
+        link: [
+          { relation: "self", url: "https://x/self" },
+          { relation: "first", url: "https://x/first" },
+          { relation: "prev", url: "https://x/prev" },
+          { relation: "next", url: "https://x/next" },
+          { relation: "last", url: "https://x/last" },
+        ],
+      });
+      expect(links).toEqual({
+        first: "https://x/first",
+        previous: "https://x/prev",
+        next: "https://x/next",
+        last: "https://x/last",
+      });
+      // "previous" spelling also recognised.
+      expect(
+        bundlePageLinks({
+          resourceType: "Bundle",
+          type: "searchset",
+          link: [{ relation: "previous", url: "https://x/p" }],
+        }).previous,
+      ).toBe("https://x/p");
+      // Forward-only server → only `next` populated, no synthesised rels.
+      expect(
+        bundlePageLinks({
+          resourceType: "Bundle",
+          type: "searchset",
+          link: [{ relation: "next", url: "https://x/cursor=abc" }],
+        }),
+      ).toEqual({ next: "https://x/cursor=abc" });
+      expect(bundlePageLinks(undefined)).toEqual({});
+    });
+
     it("stops at a single page when no next link is present", async () => {
       server.use(
         http.get(`${BASE}/Patient`, () =>
@@ -825,6 +864,110 @@ describe("query hooks", () => {
       );
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.hasNextPage).toBe(false);
+    });
+  });
+
+  describe("usePagedSearch", () => {
+    const mkPage = (id: string, link: Array<{ relation: string; url: string }>) => ({
+      resourceType: "Bundle" as const,
+      type: "searchset" as const,
+      total: 6,
+      entry: [{ resource: { resourceType: "Patient" as const, id } }],
+      link,
+    });
+    it("surfaces emitted link rels, follows goTo, normalises both `prev` spellings", async () => {
+      const p1 = `${BASE}/Patient?p=1`;
+      const p2 = `${BASE}/Patient?p=2`;
+      const p3 = `${BASE}/Patient?p=3`;
+      server.use(
+        http.get(`${BASE}/Patient`, ({ request }) => {
+          const p = new URL(request.url).searchParams.get("p") ?? "1";
+          if (p === "2")
+            return HttpResponse.json(
+              mkPage("p3", [
+                { relation: "first", url: p1 },
+                { relation: "previous", url: p1 },
+                { relation: "next", url: p3 },
+                { relation: "last", url: p3 },
+              ]),
+            );
+          if (p === "3")
+            // Server uses the "prev" spelling on the last page — hook normalises.
+            return HttpResponse.json(
+              mkPage("p5", [
+                { relation: "first", url: p1 },
+                { relation: "prev", url: p2 },
+              ]),
+            );
+          return HttpResponse.json(
+            mkPage("p1", [
+              { relation: "next", url: p2 },
+              { relation: "last", url: p3 },
+            ]),
+          );
+        }),
+      );
+
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => usePagedSearch<Patient>("Patient"), { wrapper });
+      await waitFor(() => expect(result.current.bundle).toBeDefined());
+      // First page advertises only next/last — first/previous absent.
+      expect(result.current.links).toEqual({ next: p2, last: p3 });
+
+      await act(async () => result.current.goTo(result.current.links.next));
+      await waitFor(() => expect(result.current.bundle?.entry?.[0]?.resource?.id).toBe("p3"));
+      expect(result.current.links).toEqual({ first: p1, previous: p1, next: p3, last: p3 });
+
+      await act(async () => result.current.goTo(result.current.links.last));
+      await waitFor(() => expect(result.current.bundle?.entry?.[0]?.resource?.id).toBe("p5"));
+      // "prev" spelling on the last page still lands on .previous.
+      expect(result.current.links.previous).toBe(p2);
+      expect(result.current.links.next).toBeUndefined();
+    });
+
+    it("treats next URLs as opaque cursor tokens and passes them through verbatim", async () => {
+      const cursor = `${BASE}/Patient?_continuation=eyJhbGciOiJI.opaque`;
+      const seen: string[] = [];
+      server.use(
+        http.get(`${BASE}/Patient`, ({ request }) => {
+          const u = new URL(request.url);
+          seen.push(u.pathname + u.search);
+          if (u.searchParams.has("_continuation"))
+            return HttpResponse.json(mkPage("cursor-p", [{ relation: "self", url: cursor }]));
+          return HttpResponse.json(mkPage("p1", [{ relation: "next", url: cursor }]));
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => usePagedSearch<Patient>("Patient"), { wrapper });
+      await waitFor(() => expect(result.current.bundle).toBeDefined());
+      await act(async () => result.current.goTo(result.current.links.next));
+      await waitFor(() =>
+        expect(result.current.bundle?.entry?.[0]?.resource?.id).toBe("cursor-p"),
+      );
+      expect(seen.some((p) => p.includes("_continuation=eyJhbGciOiJI.opaque"))).toBe(true);
+    });
+
+    it("resets to the first page when search params change", async () => {
+      server.use(
+        http.get(`${BASE}/Patient`, ({ request }) => {
+          const fam = new URL(request.url).searchParams.get("family") ?? "all";
+          return HttpResponse.json(
+            mkPage(`${fam}-1`, [{ relation: "next", url: `${BASE}/Patient?family=${fam}&p=2` }]),
+          );
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result, rerender } = renderHook(
+        ({ family }: { family: string }) =>
+          usePagedSearch<Patient>("Patient", family ? { family } : undefined),
+        { wrapper, initialProps: { family: "" } },
+      );
+      await waitFor(() => expect(result.current.bundle?.entry?.[0]?.resource?.id).toBe("all-1"));
+      await act(async () => result.current.goTo(result.current.links.next));
+      rerender({ family: "Smith" });
+      await waitFor(() =>
+        expect(result.current.bundle?.entry?.[0]?.resource?.id).toBe("Smith-1"),
+      );
     });
   });
 
