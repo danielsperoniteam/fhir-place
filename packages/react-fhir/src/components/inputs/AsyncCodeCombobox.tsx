@@ -65,9 +65,11 @@ export const AsyncCodeCombobox = ({
     return () => clearTimeout(t);
   }, [query, debounceMs]);
 
-  const { data, isFetching } = useValueSetExpansion(valueSet, debouncedQuery, {
-    count,
-  });
+  const { data, isFetching, isError } = useValueSetExpansion(
+    valueSet,
+    debouncedQuery,
+    { count },
+  );
 
   const options = useMemo<ResolvedCode[]>(() => {
     const contains = data?.expansion?.contains ?? [];
@@ -164,6 +166,12 @@ export const AsyncCodeCombobox = ({
           </button>
         )}
       </div>
+      {isError && options.length === 0 && (
+        <p role="alert" className="mt-1 text-xs text-amber-700">
+          Terminology server unreachable. Code lookup is unavailable; enter a
+          code manually or check the terminology server in Settings.
+        </p>
+      )}
       {open && (
         <ul
           id={listboxId}
@@ -175,6 +183,10 @@ export const AsyncCodeCombobox = ({
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">Type to search…</li>
           ) : isFetching ? (
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">Searching…</li>
+          ) : isError && options.length === 0 ? (
+            <li className="px-2 py-1 text-amber-700">
+              Terminology server unreachable
+            </li>
           ) : options.length === 0 ? (
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">No matches</li>
           ) : (
