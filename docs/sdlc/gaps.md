@@ -78,13 +78,12 @@ accidentally remove the auto-assign rule when reading the existing one.
 
 ### Filing surfaces that need updating
 
-To make the label universal at filing time, these three places change:
+To make the label universal at filing time, these two places change:
 
 | File | Today | Change |
 | --- | --- | --- |
 | `.github/workflows/live-site-monitor.yml` line 154 | `labels: ['type: bug', 'area: fhir-explorer', 'priority: P0', 'origin: bot-filed']` | Add `'human-review-needed: low'` for normal Playwright failures; the existing `github-script` adds `'human-review-needed: high'` and `assignees: ['danielsperoniteam']` if the failed test's title matches the patient-safety regex (med/dose/allergy/problem). |
 | `docs/prompts/daily-qa-pass.md` Step 4 — Labels | `type: bug, area: fhir-explorer, origin: bot-filed, priority: …` | Append `human-review-needed: <level>`, applying the decision table above. For `high`, also pass `assignees: ['danielsperoniteam']` to `mcp__github__issue_write`. |
-| `docs/prompts/hourly-uat-validation.md` Step 4 (out-of-scope bugs) and Step 5 (PM improvement ideas) | same shape | same change as above. PM ideas default `low`. |
 
 PM triage gets the safety-net rule:
 
@@ -100,7 +99,7 @@ prompts or the label sync script). Suggested order:
 1. **PR A** — `scripts/sync-labels.mjs` + `CONTRIBUTING.md` add the
    three label values. No behaviour change yet; just makes the labels
    exist.
-2. **PR B** — update the three filing surfaces above so every new
+2. **PR B** — update the two filing surfaces above so every new
    bot-filed issue carries a level. Existing issues stay unlabelled.
 3. **PR C** — update `hourly-engineer-dispatch.md` Step 3 to exclude
    `human-review-needed: high` from the ready queue. This is the gate
@@ -183,19 +182,16 @@ job stays under an hour and isn't flaky on third-party outages.
 
 ---
 
-### Gap 4 — Hourly loops are still manual
+### Gap 4 — Engineer dispatch is still manual
 
 **`human-review-needed: low`**
 
-`hourly-engineer-dispatch.yml` and `hourly-uat-validation.yml` were
-merged with `cron:` commented out, on the rule that 5–10 successful
-manual runs should be observed first. The SDLC as documented isn't
-fully running.
+`hourly-engineer-dispatch.yml` was merged with `cron:` commented out, on
+the rule that 5–10 successful manual runs should be observed first. The
+old hourly staging UAT loop is retired by ADR 0009.
 
-Sketch of the fix: two trivial PRs, one per workflow, uncommenting the
-`schedule:` block. Land them only after their respective tracking
-issues (`Engineer dispatch — hourly report`, `UAT validation — hourly
-report`) show several clean manual runs.
+Sketch of the fix: uncomment the `schedule:` block after the `Engineer
+dispatch — hourly report` tracking issue shows several clean manual runs.
 
 Why `low`: purely a flag flip; the prompts are the source of truth.
 
