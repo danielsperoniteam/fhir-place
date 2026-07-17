@@ -46,14 +46,16 @@ Operating constraints:
   `params` is a non-null object — that is a shape sanity check, not schema
   validation, and it is not sufficient once the model drives multi-turn tool
   calls.
-- **Origin/credential enforcement moves inside the FHIR client.** The existing
-  `sameOrigin` guard runs only at UI-render time and concretely protects only
-  the `/ask` search preview. `FetchFhirClient.readReference` accepts absolute
-  URLs and `request()` unconditionally merges auth headers, so a cross-origin
-  reference (from the model or from a resource's own
-  `Reference.reference`) can leak credentials. The check moves to the request
-  boundary — hard refusal or credential strip on cross-origin — and applies to
-  both front doors.
+- **Base-path credential enforcement moves inside the FHIR client.** The
+  existing `sameOrigin` guard runs only at UI-render time and — more
+  importantly — is not strong enough as a credential guard: for a base such as
+  `https://host.example/fhir`, a model-supplied
+  `https://host.example/other-service` is same-origin but a different
+  application, and the FHIR bearer must not flow to it. The primitive becomes
+  `sameBase(target, baseUrl)` (same origin **and** target path prefixed by the
+  base path), enforced at the request boundary in `FetchFhirClient` — hard
+  refuse or credential strip — and applied by both front doors to reference
+  resolution and the raw escape hatch alike.
 - **PHI-masking seam is envelope-level, not `Resource → Resource`.** Applied
   centrally by `ToolRegistry.execute` over every tool output — Bundles,
   compacted results, terminology payloads, skill summaries — so nothing that

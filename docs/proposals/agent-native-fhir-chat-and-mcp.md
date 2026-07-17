@@ -254,7 +254,7 @@ interface CompactBundleResult {
   resourceType: "CompactBundle";
   total?: number;
   entries: { ref: string; type: string; label: string }[]; // 1-line each
-  observationSeries?: ObsSeries[];   // grouped by code+unit: n/last/min/max/dates
+  observationSeries?: ObsSeries[];   // ONLY valueQuantity Observations with compatible units
   truncated: boolean;
   drillRefs: string[];               // "Observation/123" handles
 }
@@ -267,17 +267,23 @@ be compacted into inline summaries, or a `MedicationRequest` with
 `medicationReference.reference = "#med"` loses its only copy of the Medication
 and no `drillRef` can recover it; (b) dedups `_include`/`_revinclude` resources
 by `Type/id` (using `entry.search.mode`);
-(c) aggregates Observation series by **`(subjectId, code.coding.system|code, unit)`**
-into `n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized to
+(c) aggregates Observation series **only when the values are comparable
+numeric quantities with a shared unit** — key
+**`(subjectId, code.coding.system|code, valueQuantity.unit)`**, computing
+`n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized to
 `subject.reference` when present, otherwise
 `subject.identifier.system + "|" + subject.identifier.value` (R4 permits either
-form; an identifier-only subject is valid). Observations with **neither** a
-reference nor a usable identifier are held out of aggregation and emitted as
-individual entries — never coerced into a shared `undefined` bucket. Subject
-**must** be part of the key: `search_resource` is not necessarily patient-scoped
-(population queries return Observations across many patients), and a key of only
-`(code, unit)` — or one that collapses identifier-only subjects — would silently
-merge values from different people and report bogus min/max/last;
+form; an identifier-only subject is valid). Everything else — coded
+(`valueCodeableConcept`), string, boolean, range, ratio, sampled-data,
+period, time/dateTime, component-only (e.g. BP), and `dataAbsentReason`
+Observations, plus quantity Observations whose siblings-by-code disagree on
+unit — is preserved as an **individual entry**, never coerced into a series.
+Observations with neither a subject reference nor a usable identifier are also
+held out of aggregation. Subject **must** be part of the key: `search_resource`
+is not necessarily patient-scoped (population queries return Observations across
+many patients), and a key of only `(code, unit)` — or one that collapses
+identifier-only subjects — would silently merge values from different people and
+report bogus min/max/last;
 (d) always emits stable `drillRefs` so the model can fetch full detail via
 `get_resource_detail`. Default `maxEntries: 20` matches today's `_count=20`
 default. This is a pure function — trivially unit-testable and the first thing
@@ -401,8 +407,8 @@ deferrable:** anything touching the API key.
 | PHI-masking hook at the tool-output boundary | **interface only (no-op)** | the cost later is *finding every egress point*; define the boundary now |
 | Audit-logging interface on every tool call | **interface + console sink** | HIPAA §164.312(b) needs every access logged; can't add to N handlers after the fact |
 | Error redaction (`FetchFhirClient` leaks URL + `OperationOutcome.diagnostics` into thrown text) | **implement (cheap)** | same path PHI would leak through later; make redaction habitual |
-| `sameOrigin` token-leak guard | **keep + extend** | already correct; extend to MCP outbound calls and to *all* custom headers, not just bearer |
-| **Origin/credential enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | today's `sameOrigin` only concretely protects `search_resource` at UI-rendering time. `client.readReference` accepts absolute URLs, and `fhir_raw_request` will let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. Without a client-side check, a cross-origin absolute reference — from the model or from a resource's own `Reference.reference` — leaks the active server's credentials. Extend the check into a hard refusal (or credential-strip) at the request boundary, applied by both front doors. |
+| `sameOrigin` token-leak guard (`ask/url.ts`) | **keep, replace as the enforcement primitive** | correct as a UI-render sanity check; insufficient as a credential guard (see next row) |
+| **Base-path credential enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | `client.readReference` accepts absolute URLs and `fhir_raw_request` will let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. **Same-origin is not sufficient** — for a base such as `https://host.example/fhir`, a model-supplied `https://host.example/other-service` passes `sameOrigin` but is a different application; the FHIR bearer must not flow to it. Introduce a `sameBase(target, baseUrl)` primitive (same origin **and** target path is prefixed by the base path) and enforce it at the request boundary: hard-refuse or credential-strip anything outside the configured FHIR base. Applied by both front doors, to reference resolution and the raw escape hatch alike. |
 | **Tool-input JSONSchema7 validation in `ToolRegistry.execute`** | **implement** | this is the real first line against prompt-injected steering; see §5.1 |
 
 **Already correct in the codebase, worth preserving:** the `sameOrigin` guard
@@ -461,9 +467,9 @@ Dependency-ordered; each phase is independently shippable.
 
 | Phase | Deliverable | Notes |
 |---|---|---|
-| 0 | `packages/agent-core` skeleton: `AgentContext`, `AgentTool`, `ToolRegistry`, Anthropic adapter | unit-tested with a fake `FhirClient` (existing test pattern) |
+| 0 | `packages/agent-core` skeleton: `AgentContext`, `AgentTool`, `ToolRegistry` (model-neutral `describe()`, no LLM SDK) | unit-tested with a fake `FhirClient` (existing test pattern) |
 | 1 | `BundleCompactor` (pure fn) + tests | highest leverage; unblocks token budget for every tool |
-| 2 | Layer-2 `search_resource` + wire **browser chat loop** (`chatLoop.ts`) | first visible win: multi-turn `/ask`. Ship with an e2e spec per CLAUDE.md |
+| 2 | Layer-2 `search_resource` + **browser chat loop** (`apps/demo/src/ask/chatLoop.ts`) — this is where the Anthropic-adapter code lives, not in `agent-core` | first visible win: multi-turn `/ask`. Ship with an e2e spec per CLAUDE.md |
 | 3 | Terminology tools + grounding | reuses existing `TERMINOLOGY_BASE_URL` |
 | 4 | `CapabilitySnapshot` gating | dynamic tool surface per server |
 | 5 | Layer-1 skills (`find_patient`, `latest_observation_by_code`, `lab_trend`, `summarize_chart`) | built on phases 1–4 |
