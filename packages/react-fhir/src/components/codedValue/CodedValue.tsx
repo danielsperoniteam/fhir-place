@@ -371,6 +371,36 @@ function PopoverSection(props: { title: string; children: React.ReactNode }) {
   );
 }
 
+const TRANSLATION_EXT = "http://hl7.org/fhir/StructureDefinition/translation";
+
+interface DisplayTranslation {
+  lang?: string;
+  content?: string;
+}
+
+/**
+ * Decode `translation` extensions on a Coding's display (#367). Per the
+ * spec these live on the primitive's extension carrier (`_display`), but
+ * some servers attach them to the Coding itself — accept both.
+ */
+export function displayTranslations(coding: Coding): DisplayTranslation[] {
+  const carriers = [
+    ...((coding as { _display?: { extension?: unknown[] } })._display?.extension ??
+      []),
+    ...(coding.extension ?? []),
+  ] as Array<{
+    url?: string;
+    extension?: Array<{ url?: string; valueCode?: string; valueString?: string }>;
+  }>;
+  return carriers
+    .filter((ext) => ext.url === TRANSLATION_EXT)
+    .map((ext) => ({
+      lang: ext.extension?.find((n) => n.url === "lang")?.valueCode,
+      content: ext.extension?.find((n) => n.url === "content")?.valueString,
+    }))
+    .filter((t) => t.content);
+}
+
 function KnownCodingRow(props: {
   coding: Coding;
   isPrimary: boolean;
@@ -380,6 +410,7 @@ function KnownCodingRow(props: {
   const label = labelForSystem(coding.system) ?? "Code";
   const display =
     coding.display ?? lookupCoreDisplay(coding.system, coding.code);
+  const translations = displayTranslations(coding);
   return (
     <li style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -425,6 +456,23 @@ function KnownCodingRow(props: {
           {primaryDefinition}
         </p>
       ) : null}
+      {translations.map((t, i) => (
+        <p
+          key={`${t.lang ?? ""}#${i}`}
+          style={{
+            margin: 0,
+            color: "var(--text-muted, #71717a)",
+            fontSize: 11.5,
+            lineHeight: 1.4,
+          }}
+          data-testid="coded-value-translation"
+        >
+          <span style={{ fontFamily: MONO_STACK, fontSize: 9.5 }}>
+            {t.lang ? `${t.lang} ` : ""}
+          </span>
+          {t.content}
+        </p>
+      ))}
     </li>
   );
 }

@@ -12,6 +12,7 @@ export interface FhirInputProps<T = unknown> {
   value: T | undefined;
   onChange: (value: T | undefined) => void;
   context: InputContext;
+  error?: string;
 }
 
 export type FhirTypeInput<T = unknown> = (props: FhirInputProps<T>) => ReactNode;
