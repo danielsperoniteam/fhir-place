@@ -58,6 +58,23 @@ Operating constraints:
   centrally by `ToolRegistry.execute` over every tool output — Bundles,
   compacted results, terminology payloads, skill summaries — so nothing that
   ships to the model bypasses the seam.
+- **The browser front door preserves `/ask`'s plan → user-editable preview →
+  run split.** `AgentContext` exposes an optional `confirmRead` hook that Layer-2
+  read primitives call with their built request plan before executing; the
+  browser wires it to the existing request-preview UI, and the MCP path leaves
+  it undefined (auto-run). Without this, a multi-turn loop would fetch before
+  the user could review or edit.
+- **`resolve_reference` routes version-specific references through `vread`.**
+  Today `FetchFhirClient.readReference` silently drops the `/_history/<v>`
+  suffix and returns the current version. Detecting the suffix and calling
+  `client.vread` is a small, required fix so agent answers do not ground in
+  the wrong historical resource.
+- **`@fhir-place/react-fhir` marks its React / React-DOM / TanStack Query
+  peers as optional** (`peerDependenciesMeta.*.optional`) before the MCP package
+  ships. Subpath imports alone do not exempt Node-only consumers from
+  package-wide peers; escalation path if optional peers prove insufficient is
+  to split the framework-free `client` + `structure` code into a lower-level
+  package — which would be its own ADR.
 - **Synthetic/sandbox data only for now**, but bake in the seams that make real
   PHI a bounded delta. All of these are new code to add, except the `sameOrigin`
   guard which already exists and is extended: a PHI-masking hook at the

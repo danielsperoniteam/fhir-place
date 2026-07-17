@@ -119,14 +119,36 @@ These are the questions that motivated the proposal.
 
 **Why a new `packages/agent-core` rather than folding into `react-fhir`:**
 `react-fhir`'s public entry re-exports React hooks/components and carries
-`react` + `@tanstack/react-query` peer deps; the MCP server runs in Node with no
-React. A clean sibling package keeps the published `@fhir-place/react-fhir`
-surface stable, keeps React out of the MCP server, and matches ADR 0004's intent
-("first-class consumer of the same spec-driven type system"). `agent-core`
-imports only `react-fhir`'s framework-free `./client` and `./structure`
-subpaths. **`agent-core` must never depend on `@anthropic-ai/sdk`** — that is the
-invariant that lets both front doors share tool definitions while letting each
-choose its own model binding.
+`react` + `react-dom` + `@tanstack/react-query` peer deps; the MCP server runs in
+Node with no React. A clean sibling package keeps the published
+`@fhir-place/react-fhir` surface stable, keeps React out of the MCP server, and
+matches ADR 0004's intent ("first-class consumer of the same spec-driven type
+system"). `agent-core` imports only `react-fhir`'s framework-free `./client` and
+`./structure` subpaths. **`agent-core` must never depend on
+`@anthropic-ai/sdk`** — that is the invariant that lets both front doors share
+tool definitions while letting each choose its own model binding.
+
+**Peer-dependency leak — required fix.** Subpath imports keep React out of the
+runtime, but `packages/react-fhir/package.json` declares React, React-DOM, and
+TanStack Query as **package-wide** peer deps, so a naive `agent-core → react-fhir`
+edge would still ask MCP-server consumers to satisfy them (npm 7+ auto-installs
+peers, and pnpm at minimum warns). Two viable fixes; pick before the MCP package
+ships:
+
+- **Lightweight (preferred):** mark those peers as optional via
+  `peerDependenciesMeta.{react,react-dom,@tanstack/react-query}.optional = true`
+  in `react-fhir/package.json`. Consumers that only import the `./client` and
+  `./structure` subpaths install nothing extra and get no warnings; existing
+  React consumers are unaffected.
+- **Structural (escalation):** if the optional-peers approach turns out to be
+  insufficient in practice — e.g., a transitive tool tries to load React — split
+  the framework-free `client` + `structure` code into a lower-level package
+  (`@fhir-place/fhir-core`) that both `react-fhir` (React shell) and
+  `agent-core` depend on. That is its own ADR because it changes the published
+  surface of `react-fhir`.
+
+This item is a **prerequisite** for phase 6 (shipping `@fhir-place/mcp`), not a
+follow-up.
 
 ## 5. The agent core (`@fhir-place/agent-core`)
 
@@ -146,6 +168,12 @@ interface AgentContext {
                                     // ToolRegistry.execute to EVERY tool output
                                     // (Resource, CompactBundle, tx result,
                                     // skill summary). No-op on synthetic data.
+  // Optional human-in-the-loop hooks. Browser front door sets these;
+  // MCP path leaves them undefined (auto-run).
+  confirmRead?:  (tool: string, input: unknown, plan: RequestPlan)
+                    => Promise<{ approved: boolean; editedInput?: unknown }>;
+  confirmWrite?: (tool: string, input: unknown, plan: RequestPlan)
+                    => Promise<{ approved: boolean; editedInput?: unknown }>;
   signal?: AbortSignal;
 }
 
@@ -190,7 +218,7 @@ the MCP tool schema. `agent-core` stays model-agnostic.
 | Layer | Purpose | Example tools | Backed by |
 |---|---|---|---|
 | **1 — skills** | One-shot answers to natural questions | `find_patient`, `latest_observation_by_code`, `lab_trend`, `summarize_chart` | compose primitives + `client.request('/Patient/{id}/$everything')` |
-| **2 — primitives** | Typed per-resource search/read | `search_resource`, `read_resource`, `resolve_reference` | `client.search` / `client.read` / `client.readReference` (already handles absolute/relative refs) |
+| **2 — primitives** | Typed per-resource search/read | `search_resource`, `read_resource`, `resolve_reference` | `client.search` / `client.read` / `client.readReference` (handles absolute/relative refs — but see version-specific fix below) |
 | **3 — raw** | Escape hatch | `fhir_raw_request` | `client.request(init)` — GET-only unless `readOnly` is false |
 
 **Minimal v1 tool set** (do not generate all 148 SDs up front): `find_patient`,
@@ -199,6 +227,14 @@ the MCP tool schema. `agent-core` stays model-agnostic.
 `get_resource_detail` / `resolve_reference`, the three `tx_*` tools, and
 `fhir_raw_request`. Every one of these maps onto a method that already exists on
 `FetchFhirClient`.
+
+**Version-specific references — required fix.** `resolve_reference` must
+recognize the `Type/id/_history/<version>` form and route it through
+`client.vread(type, id, versionId)`, not `client.read(type, id)`. Today
+`FetchFhirClient.readReference` splits on `/` and calls `read()`, silently
+returning the **current** version — which would ground an answer in the wrong
+historical resource. The fix is a small change to `readReference` itself (detect
+the `_history/<v>` suffix) so both front doors get it for free.
 
 The existing typed `SearchBuilder` (`react-fhir/src/client/searchBuilder.ts`)
 already supports chained search (`whereChained` → `subject:Patient.name=…`),
@@ -231,11 +267,17 @@ be compacted into inline summaries, or a `MedicationRequest` with
 `medicationReference.reference = "#med"` loses its only copy of the Medication
 and no `drillRef` can recover it; (b) dedups `_include`/`_revinclude` resources
 by `Type/id` (using `entry.search.mode`);
-(c) aggregates Observation series by **`(subject.reference, code.coding.system|code, unit)`**
-into `n/last/min/max/firstDate/lastDate`. Subject **must** be part of the key:
-`search_resource` is not necessarily patient-scoped (population queries return
-Observations across many patients), and a key of only `(code, unit)` would
-silently merge values from different people and report bogus min/max/last;
+(c) aggregates Observation series by **`(subjectId, code.coding.system|code, unit)`**
+into `n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized to
+`subject.reference` when present, otherwise
+`subject.identifier.system + "|" + subject.identifier.value` (R4 permits either
+form; an identifier-only subject is valid). Observations with **neither** a
+reference nor a usable identifier are held out of aggregation and emitted as
+individual entries — never coerced into a shared `undefined` bucket. Subject
+**must** be part of the key: `search_resource` is not necessarily patient-scoped
+(population queries return Observations across many patients), and a key of only
+`(code, unit)` — or one that collapses identifier-only subjects — would silently
+merge values from different people and report bogus min/max/last;
 (d) always emits stable `drillRefs` so the model can fetch full detail via
 `get_resource_detail`. Default `maxEntries: 20` matches today's `_count=20`
 default. This is a pure function — trivially unit-testable and the first thing
@@ -276,13 +318,27 @@ flag `degraded: true` rather than exposing nothing.
 
 - owns the `Anthropic({ dangerouslyAllowBrowser: true })` client (the SDK stays
   in the app, never in `agent-core`);
-- builds tools via `registry.toAnthropicTools()` and dispatches each call through
-  `registry.execute(name, input, ctx)` with `ctx.client` = the active
-  `FetchFhirClient` and `ctx.readOnly = true`;
+- calls `registry.describe()` and adapts the model-neutral descriptors into
+  `Anthropic.Messages.Tool[]` in the app layer (see §5.1). On each `tool_use`
+  block, dispatches via `registry.execute(name, input, ctx)` with `ctx.client` =
+  the active `FetchFhirClient` and `ctx.readOnly = true`;
 - keeps today's `FhirQueryPlan` / `buildSearchUrl` / request-preview /
   `sameOrigin` guard as the rendering layer for the `search_resource` primitive,
   so the existing `/ask` UX (and its token-leak protection) keeps working — the
   loop just calls it iteratively.
+
+**Preserve the review-and-run UX.** Today's `AskPage` deliberately splits
+NL → plan (Anthropic) from plan → run (user-editable preview + explicit button).
+A naive multi-turn loop that dispatches straight through `registry.execute`
+would fetch before the user can review or edit, breaking the current contract.
+The fix is a `confirmRead?: (tool, input, plan) => Promise<{ approved: boolean;
+editedInput?: unknown }>` hook on `AgentContext` — parallel to the write path's
+`confirmWrite`. When set, Layer-2 read primitives compute their plan (built URL,
+method, headers-to-be-applied), call the hook, and only proceed if approved
+(with any user-edited input substituted). The browser front door wires
+`confirmRead` to the existing `/ask` request-preview UI so the plan → preview →
+run split survives verbatim. The MCP path leaves `confirmRead` undefined —
+auto-run, because there is no interactive UI at the other end of stdio.
 
 The chat surfaces the resources behind each answer (via `drillRefs`) so the user
 can verify, which is both a trust feature and the honest answer to "where did
