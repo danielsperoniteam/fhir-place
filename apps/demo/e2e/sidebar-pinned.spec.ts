@@ -72,6 +72,16 @@ test.describe("Sidebar Pinned section", () => {
     );
   });
 
+  test("topbar theme toggle is identifiable and has a non-empty aria-label", async ({
+    page,
+  }) => {
+    const themeToggle = page.getByTestId("topbar-theme");
+    await expect(themeToggle).toBeVisible();
+    const label = await themeToggle.getAttribute("aria-label");
+    expect(label).toBeTruthy();
+    expect((label ?? "").trim().length).toBeGreaterThan(0);
+  });
+
   test("clicking a pinned row navigates to its route", async ({ page }) => {
     await page.goto("/fhir-ui/Observation");
     await page.getByTestId("topbar-pin").click();

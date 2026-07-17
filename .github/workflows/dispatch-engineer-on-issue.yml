@@ -56,22 +56,7 @@ concurrency:
 
 jobs:
   dispatch:
-    # Two acceptance paths:
-    #   - workflow_dispatch (always allowed; GitHub gates on repo write access)
-    #   - issue_comment from a trusted author with the slash command on a
-    #     real issue (not a PR comment)
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request == null &&
-        contains(github.event.comment.body, '/dispatch-engineer') &&
-        (
-          github.event.comment.author_association == 'OWNER' ||
-          github.event.comment.author_association == 'MEMBER' ||
-          github.event.comment.author_association == 'COLLABORATOR'
-        )
-      )
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 45    # 1 ticket × ~25 min budget + overhead
 

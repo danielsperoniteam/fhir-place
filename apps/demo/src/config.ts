@@ -21,12 +21,20 @@ export interface ServerConfig {
   builtin?: boolean;
 }
 
+export const DEFAULT_FHIR_SERVER: ServerConfig = {
+  id: "builtin-local-hapi",
+  label: "Local HAPI (Docker)",
+  baseUrl: "http://localhost:8080/fhir",
+  authMode: "none",
+  builtin: true,
+};
+
 /**
- * Built-in public FHIR R4 servers. Both support open access and CORS so the
- * browser can reach them directly. Users can layer auth/custom headers on top
- * via the Settings page (e.g. a personal access token for HAPI).
+ * Built-in FHIR R4 servers. Users can layer auth/custom headers on top via the
+ * Settings page (e.g. a personal access token for HAPI).
  */
 export const BUILTIN_SERVERS: ReadonlyArray<ServerConfig> = [
+  DEFAULT_FHIR_SERVER,
   {
     id: "builtin-smart",
     label: "SMART Health IT (R4)",
@@ -125,7 +133,14 @@ const readStoredServers = (): ServerConfig[] | null => {
 /**
  * Merge built-ins with stored config so:
  * - Built-ins always exist (even if storage is empty/corrupt).
- * - Stored edits to built-ins (auth, headers, label) survive.
+ * - Stored edits to built-ins survive ONLY for auth/headers (`authMode`,
+ *   `bearerToken`, `headers`). The `label` and `baseUrl` are part of the
+ *   built-in's trust identity — the BUILT-IN badge claims "this is the
+ *   canonical entry shipped with the app" — so they are always taken from
+ *   `BUILTIN_SERVERS` regardless of what storage holds. This stops anything
+ *   that can write `fhir-place:servers` (extensions, dev tooling, a shared
+ *   profile, a previous version that allowed editing) from silently
+ *   retargeting a badged row at a hostile URL.
  * - Custom user-added servers come through unchanged.
  */
 const mergeWithBuiltins = (stored: ServerConfig[] | null): ServerConfig[] => {
@@ -134,7 +149,18 @@ const mergeWithBuiltins = (stored: ServerConfig[] | null): ServerConfig[] => {
   const merged: ServerConfig[] = [];
   for (const builtin of BUILTIN_SERVERS) {
     const override = byId.get(builtin.id);
-    merged.push(override ? { ...override, builtin: true } : { ...builtin });
+    if (override) {
+      merged.push({
+        ...builtin,
+        authMode: override.authMode,
+        ...(override.bearerToken ? { bearerToken: override.bearerToken } : {}),
+        ...(override.headers && override.headers.length > 0
+          ? { headers: override.headers }
+          : {}),
+      });
+    } else {
+      merged.push({ ...builtin });
+    }
     byId.delete(builtin.id);
   }
   for (const remaining of byId.values()) {
@@ -203,7 +229,7 @@ export const resolveActiveServer = (): ServerConfig => {
   const activeId = loadActiveServerId();
   if (activeId) {
     const match = servers.find((s) => s.id === activeId);
-    if (match) return match;
+    if (match?.baseUrl.trim()) return match;
   }
   const preferred = servers.find((s) => s.id === DEFAULT_ACTIVE_SERVER_ID);
   if (preferred) return preferred;
@@ -246,7 +272,7 @@ export const resolveEnvOverrideServer = (
 };
 
 const ACTIVE_SERVER: ServerConfig = (() => {
-  if (USE_MOCK) {
+  if (USE_MOCK && !loadActiveServerId()) {
     return {
       id: "mock",
       label: "Mock (MSW)",
@@ -276,6 +302,9 @@ export const buildRequestHeaders = (server: ServerConfig): Record<string, string
   }
   return headers;
 };
+
+export const loadActiveRequestHeaders = (): Record<string, string> =>
+  buildRequestHeaders(resolveActiveServer());
 
 /**
  * Separate terminology server for ValueSet/$expand. Most data servers (HAPI

@@ -64,7 +64,9 @@ describe("AsyncCodeCombobox", () => {
         ],
       },
     };
-    const client = fakeClient(() => Promise.resolve(expansion as unknown));
+    const request: FhirClient["request"] = async <T = unknown>() =>
+      expansion as T;
+    const client = fakeClient(request);
     const user = userEvent.setup();
     renderWith(client);
     await user.type(screen.getByRole("combobox", { name: "code" }), "body");
