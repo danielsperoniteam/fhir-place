@@ -84,10 +84,17 @@ interface PinnedCtx {
   togglePin: (path: string) => void;
   removePin: (id: string) => void;
   renamePin: (id: string, label: string) => void;
+  /**
+   * Save a query under a user-chosen label (#254 saved queries). Unlike
+   * togglePin this never removes: pinning an already-pinned path renames
+   * it to the new label instead.
+   */
+  pinSearch: (path: string, label: string) => void;
 }
 
 const PinnedContext = createContext<PinnedCtx>({
-  pins: [], isPinned: () => false, togglePin: () => {}, removePin: () => {}, renamePin: () => {},
+  pins: [], isPinned: () => false, togglePin: () => {}, removePin: () => {},
+  renamePin: () => {}, pinSearch: () => {},
 });
 
 export function PinnedProvider({ children }: { children: ReactNode }) {
@@ -120,6 +127,24 @@ export function PinnedProvider({ children }: { children: ReactNode }) {
       const trimmed = label.trim();
       if (!trimmed) return;
       update((prev) => prev.map((p) => (p.id === id ? { ...p, label: trimmed } : p)));
+    },
+    pinSearch: (path, label) => {
+      const trimmed = label.trim();
+      const existing = pins.find((p) => p.path === path);
+      if (existing) {
+        if (trimmed && trimmed !== existing.label) {
+          update((prev) =>
+            prev.map((p) => (p.id === existing.id ? { ...p, label: trimmed } : p)),
+          );
+        }
+        return;
+      }
+      const [pathname, ...rest] = path.split("?");
+      const search = rest.length > 0 ? `?${rest.join("?")}` : "";
+      const item = pathToPin(pathname ?? path, search);
+      if (item) {
+        update((prev) => [...prev, trimmed ? { ...item, label: trimmed } : item]);
+      }
     },
   }), [pins, update]);
 

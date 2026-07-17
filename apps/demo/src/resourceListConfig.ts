@@ -120,7 +120,7 @@ const formatHumanName = (names?: HumanName[]): string => {
   return [n.given?.join(" "), n.family].filter(Boolean).join(" ") || "(no name)";
 };
 
-const formatPatientName = (p: Patient): string => formatHumanName(p.name);
+export const formatPatientName = (p: Patient): string => formatHumanName(p.name);
 
 const codeText = (c?: { text?: string; coding?: Array<{ display?: string; code?: string }> }): string | undefined => {
   if (!c) return undefined;
