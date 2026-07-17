@@ -1,6 +1,7 @@
 import type { Bundle, Resource } from "fhir/r4";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { naturalLanguageToFhirQuery } from "../../../ask/anthropicQuery.js";
 import { buildSearchUrl, sameOrigin, type FhirQueryPlan } from "../../../ask/url.js";
 import {
@@ -106,19 +107,26 @@ export function AskPage() {
   return (
     <div className="space-y-5" data-testid="ask-page">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="text-xl font-semibold" style={{ color: "var(--text)" }}>
           Ask in plain English
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
           Type a clinical question; Claude turns it into a FHIR R4 search URL
           you can review and run against{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
+          <code
+            className="rounded px-1 py-0.5 text-xs"
+            style={{
+              background: "var(--chip)",
+              color: "var(--chip-text)",
+              fontFamily: CC_MONO,
+            }}
+          >
             {FHIR_BASE_URL}
           </code>
           .
         </p>
         {!hasKey && (
-          <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          <p className="rounded border p-2 text-xs" style={warnBannerStyle}>
             No Anthropic API key set —{" "}
             <Link to="/fhir-ui/settings" className="underline">
               add one in Settings
@@ -130,7 +138,10 @@ export function AskPage() {
 
       <section className="space-y-2">
         <label className="block space-y-1">
-          <span className="block text-xs font-medium text-slate-700">
+          <span
+            className="block text-xs font-medium"
+            style={{ color: "var(--text-muted)" }}
+          >
             Question
           </span>
           <textarea
@@ -138,7 +149,8 @@ export function AskPage() {
             onChange={(e) => setQuestion(e.target.value)}
             rows={3}
             placeholder="e.g. patients with diabetes over 65"
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 focus:border-slate-500 focus:outline-none"
+            className="w-full rounded border px-2 py-1 text-sm focus:outline-none"
+            style={inputStyle}
             data-testid="ask-question"
           />
         </label>
@@ -147,18 +159,29 @@ export function AskPage() {
             type="button"
             onClick={generate}
             disabled={generating || !question.trim()}
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+            style={{
+              ...ccBtn("primary"),
+              opacity: generating || !question.trim() ? 0.6 : 1,
+            }}
             data-testid="ask-generate"
           >
             {generating ? "Generating…" : "Generate query"}
           </button>
-          <span className="text-xs text-slate-500">Try:</span>
+          <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+            Try:
+          </span>
           {EXAMPLES.map((ex) => (
             <button
               key={ex}
               type="button"
               onClick={() => setQuestion(ex)}
-              className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+              className="rounded border px-2 py-0.5 text-xs"
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--surface)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+              }}
             >
               {ex}
             </button>
@@ -167,10 +190,15 @@ export function AskPage() {
       </section>
 
       {plan && (
-        <section className="space-y-2 rounded border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs italic text-slate-600">{plan.explanation}</p>
+        <section className="space-y-2 rounded border p-4" style={cardStyle}>
+          <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>
+            {plan.explanation}
+          </p>
           <label className="block space-y-1">
-            <span className="block text-xs font-medium text-slate-700">
+            <span
+              className="block text-xs font-medium"
+              style={{ color: "var(--text-muted)" }}
+            >
               Request URL (editable)
             </span>
             <textarea
@@ -178,13 +206,15 @@ export function AskPage() {
               onChange={(e) => setUrl(e.target.value)}
               rows={3}
               spellCheck={false}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-800 focus:border-slate-500 focus:outline-none"
+              className="w-full rounded border px-2 py-1 text-xs focus:outline-none"
+              style={{ ...inputStyle, fontFamily: CC_MONO }}
               data-testid="ask-url"
             />
           </label>
           {urlOffOrigin && (
             <p
-              className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800"
+              className="rounded border p-2 text-xs"
+              style={warnBannerStyle}
               data-testid="ask-off-origin"
             >
               URL targets a different origin than the configured FHIR server —
@@ -196,7 +226,7 @@ export function AskPage() {
               type="button"
               onClick={run}
               disabled={running || !url}
-              className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700 disabled:opacity-60"
+              style={{ ...ccBtn("primary"), opacity: running || !url ? 0.6 : 1 }}
               data-testid="ask-run"
             >
               {running ? "Running…" : "Run"}
@@ -205,7 +235,8 @@ export function AskPage() {
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-slate-500 underline"
+              className="text-xs underline"
+              style={{ color: "var(--text-subtle)" }}
             >
               Open in new tab
             </a>
@@ -215,7 +246,12 @@ export function AskPage() {
 
       {error && (
         <p
-          className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          className="rounded border p-3 text-sm"
+          style={{
+            borderColor: "var(--danger)",
+            background: "var(--danger-soft)",
+            color: "var(--danger)",
+          }}
           data-testid="ask-error"
         >
           {error}
@@ -224,28 +260,39 @@ export function AskPage() {
 
       {bundle && (
         <section className="space-y-2" data-testid="ask-results">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             {bundle.total !== undefined
               ? `${resources.length} of ${bundle.total} returned`
               : `${resources.length} returned`}
           </p>
           {resources.length === 0 ? (
-            <p className="rounded border border-slate-200 bg-white p-3 text-sm text-slate-500">
+            <p
+              className="rounded border p-3 text-sm"
+              style={{ ...cardStyle, color: "var(--text-muted)" }}
+            >
               No matching resources.
             </p>
           ) : (
-            <ul className="divide-y divide-slate-200 rounded border border-slate-200 bg-white">
+            <ul className="rounded border" style={cardStyle}>
               {resources.map((r, i) => {
-                const href = r.id ? `/${r.resourceType}/${r.id}` : null;
+                // Detail pages live under /fhir-ui/ (#365 — the bare
+                // /Type/id form relied on a legacy redirect).
+                const href = r.id ? `/fhir-ui/${r.resourceType}/${r.id}` : null;
                 const body = (
-                  <span className="block px-4 py-2 text-sm text-slate-800">
+                  <span
+                    className="block px-4 py-2 text-sm"
+                    style={{ color: "var(--text)" }}
+                  >
                     {summarizeResource(r)}
                   </span>
                 );
                 return (
-                  <li key={`${r.resourceType}-${r.id ?? i}`}>
+                  <li
+                    key={`${r.resourceType}-${r.id ?? i}`}
+                    style={i > 0 ? { borderTop: "1px solid var(--border)" } : undefined}
+                  >
                     {href ? (
-                      <Link to={href} className="block hover:bg-slate-50">
+                      <Link to={href} className="block">
                         {body}
                       </Link>
                     ) : (
@@ -256,9 +303,17 @@ export function AskPage() {
               })}
             </ul>
           )}
-          <details className="text-xs text-slate-500">
+          <details className="text-xs" style={{ color: "var(--text-subtle)" }}>
             <summary className="cursor-pointer">Raw bundle</summary>
-            <pre className="mt-2 max-h-96 overflow-auto rounded border border-slate-200 bg-slate-50 p-2 font-mono">
+            <pre
+              className="mt-2 max-h-96 overflow-auto rounded border p-2"
+              style={{
+                fontFamily: CC_MONO,
+                borderColor: "var(--border)",
+                background: "var(--sunken)",
+                color: "var(--text-muted)",
+              }}
+            >
               {JSON.stringify(bundle, null, 2)}
             </pre>
           </details>
@@ -267,3 +322,20 @@ export function AskPage() {
     </div>
   );
 }
+
+const cardStyle: React.CSSProperties = {
+  borderColor: "var(--border)",
+  background: "var(--surface)",
+};
+
+const inputStyle: React.CSSProperties = {
+  borderColor: "var(--border-strong)",
+  background: "var(--surface)",
+  color: "var(--text)",
+};
+
+const warnBannerStyle: React.CSSProperties = {
+  borderColor: "var(--warn)",
+  background: "var(--warn-soft)",
+  color: "var(--warn)",
+};

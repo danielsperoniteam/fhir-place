@@ -5,7 +5,7 @@ export const IdentifierInput: FhirTypeInput<Identifier> = ({ value, onChange }) 
   const v = value ?? {};
   const patch = (k: keyof Identifier, val: unknown) => onChange({ ...v, [k]: val });
   return (
-    <div className="grid grid-cols-1 gap-2 rounded border border-slate-200 bg-slate-50 p-2 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-2 rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2 sm:grid-cols-2">
       <label>
         <span className={subLabel}>System</span>
         <input
