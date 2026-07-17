@@ -259,9 +259,12 @@ export const paramsFromUrl = (
 ): SearchParams => {
   const out: SearchParams = { _count: pageSize };
   for (const [k, v] of urlParams.entries()) {
-    // The compartment `patient` filter (and its variants) is re-injected below
-    // from the route, so it is always stripped from the incoming query first.
-    if (isCompartmentOwnedKey(k)) continue;
+    // In a compartment view the route owns the `patient` filter (and every
+    // modifier/chain variant), so it is stripped here and re-injected below.
+    // Outside a compartment (`patientId` undefined) `patient`/`patient:…` is an
+    // ordinary user filter and must survive — dropping it would run an
+    // unfiltered query while the criterion still shows in the URL.
+    if (patientId && isCompartmentOwnedKey(k)) continue;
     // A _count in the URL overrides the seeded page-size default — arraying
     // it with the seed would emit repeated _count keys on the wire.
     if (k === "_count") {
@@ -280,10 +283,15 @@ export const paramsFromUrl = (
   return out;
 };
 
-const formInitialFromUrl = (urlParams: URLSearchParams): Record<string, string> => {
+const formInitialFromUrl = (
+  urlParams: URLSearchParams,
+  patientId?: string,
+): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const [k, v] of urlParams.entries()) {
-    if (isCompartmentOwnedKey(k)) continue;
+    // Hide the compartment-owned `patient` filter from the editable form only
+    // inside a compartment view; elsewhere it's a normal, editable criterion.
+    if (patientId && isCompartmentOwnedKey(k)) continue;
     out[k] = v;
   }
   return out;
@@ -354,7 +362,10 @@ export function ResourceListPage() {
   );
   const [draftParams, setDraftParams] = useState<SearchParams>(params);
   useEffect(() => setDraftParams(params), [params]);
-  const formInitial = useMemo(() => formInitialFromUrl(searchParams), [searchParams]);
+  const formInitial = useMemo(
+    () => formInitialFromUrl(searchParams, patientId),
+    [searchParams, patientId],
+  );
   const formKey = searchParams.toString();
   // A query is savable once the URL carries any search params (#254 PR A).
   const hasActiveQuery = formKey.length > 0;

@@ -46,6 +46,22 @@ describe("paramsFromUrl", () => {
       patient: "ada",
     });
   });
+
+  it("keeps patient filter variants outside a compartment view", () => {
+    // Regression for the #732 P1 follow-up: with no compartment (`patientId`
+    // undefined), `patient` and its modifier/chain variants are ordinary user
+    // filters and must survive — stripping them would run an unfiltered query
+    // while the criterion still shows in the URL.
+    const url = new URLSearchParams(
+      "patient:identifier=http://sys|123&patient=Patient/9&gender=male",
+    );
+    expect(paramsFromUrl(url, 20)).toEqual({
+      _count: 20,
+      "patient:identifier": "http://sys|123",
+      patient: "Patient/9",
+      gender: "male",
+    });
+  });
 });
 
 // Regression for the #732 review finding: in a Patient compartment, the search
