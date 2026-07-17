@@ -93,7 +93,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
             type="button"
             aria-label="Clear reference"
             onClick={() => onChange(undefined)}
-            className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-xs text-[var(--text-muted)] hover:border-red-400 hover:text-red-600"
+            className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-xs text-[var(--text-muted)] hover:border-[var(--danger,#f87171)] hover:text-[var(--danger,#dc2626)]"
           >
             ×
           </button>
@@ -131,7 +131,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
             autoCapitalize="off"
             spellCheck={false}
             name="reference-picker-search"
-            className="min-w-[12rem] flex-1 rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-blue-500 focus:outline-none"
+            className="min-w-[12rem] flex-1 rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
           />
         </div>
       )}
