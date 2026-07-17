@@ -29,14 +29,7 @@ concurrency:
 
 jobs:
   address:
-    if: >-
-      github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '/address-comments') &&
-      (
-        github.event.comment.author_association == 'OWNER' ||
-        github.event.comment.author_association == 'MEMBER' ||
-        github.event.comment.author_association == 'COLLABORATOR'
-      )
+    if: false  # disabled: runs locally via poll-events daemon using Claude Max subscription
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

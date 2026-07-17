@@ -151,6 +151,149 @@ describe("ColumnPicker", () => {
     expect(onChange).toHaveBeenCalledWith(["birthDate"]);
   });
 
+  it("renders a search input once the picker has more than 10 options", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      path: `field${i}`,
+      label: i === 0 ? "Marital Status" : i === 1 ? "General Practitioner" : `Field ${i}`,
+    }));
+    const user = userEvent.setup();
+    render(<ColumnPicker options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+
+    const search = screen.getByRole("searchbox");
+    expect(search).toBeInTheDocument();
+    // Auto-focused on open.
+    expect(document.activeElement).toBe(search);
+  });
+
+  it("filters the option list by case-insensitive substring on label or path", async () => {
+    const many = [
+      { path: "name", label: "Name" },
+      { path: "gender", label: "Gender" },
+      { path: "maritalStatus", label: "Marital Status" },
+      { path: "generalPractitioner", label: "General Practitioner" },
+      { path: "deceasedBoolean", label: "Deceased" },
+      { path: "address.city", label: "City" },
+      { path: "address.state", label: "State" },
+      { path: "address.postalCode", label: "Postal Code" },
+      { path: "telecom", label: "Telecom" },
+      { path: "identifier", label: "Identifier" },
+      { path: "birthDate", label: "Birth Date" },
+      { path: "active", label: "Active" },
+    ];
+    const user = userEvent.setup();
+    render(<ColumnPicker options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+
+    const search = screen.getByRole("searchbox");
+    await user.type(search, "marit");
+
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Marital Status")).toBeInTheDocument();
+    // Path-substring match: typing the JSON-key prefix should also hit.
+    await user.clear(search);
+    await user.type(search, "address");
+    expect(screen.getByLabelText("City")).toBeInTheDocument();
+    expect(screen.getByLabelText("State")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Telecom")).not.toBeInTheDocument();
+  });
+
+  it("shows a 'no matches' hint when the filter has zero hits", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      path: `field${i}`,
+      label: `Field ${i}`,
+    }));
+    const user = userEvent.setup();
+    render(<ColumnPicker options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    await user.type(screen.getByRole("searchbox"), "xyzzy");
+    expect(screen.getByTestId("column-picker-empty")).toBeInTheDocument();
+  });
+
+  it("resets the filter when the panel closes", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      path: `field${i}`,
+      label: `Field ${i}`,
+    }));
+    const user = userEvent.setup();
+    render(<ColumnPicker options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    await user.type(screen.getByRole("searchbox"), "Field 1");
+    expect(screen.queryByLabelText("Field 2")).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    // Reopen — the filter should be cleared.
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("");
+    expect(screen.getByLabelText("Field 2")).toBeInTheDocument();
+  });
+
+  it("ArrowDown from the search input jumps focus to the first filtered checkbox", async () => {
+    const many = [
+      { path: "name", label: "Name" },
+      { path: "gender", label: "Gender" },
+      { path: "maritalStatus", label: "Marital Status" },
+      { path: "generalPractitioner", label: "General Practitioner" },
+      { path: "deceasedBoolean", label: "Deceased" },
+      { path: "address.city", label: "City" },
+      { path: "address.state", label: "State" },
+      { path: "telecom", label: "Telecom" },
+      { path: "identifier", label: "Identifier" },
+      { path: "birthDate", label: "Birth Date" },
+      { path: "active", label: "Active" },
+      { path: "language", label: "Language" },
+    ];
+    const user = userEvent.setup();
+    render(<ColumnPicker options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    await user.type(screen.getByRole("searchbox"), "marit");
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByLabelText("Marital Status"));
+  });
+
+  it("toggling a checkbox while the filter is active does not re-include filtered-out paths", async () => {
+    const onChange = vi.fn();
+    const many = [
+      { path: "name", label: "Name" },
+      { path: "gender", label: "Gender" },
+      { path: "maritalStatus", label: "Marital Status" },
+      { path: "generalPractitioner", label: "General Practitioner" },
+      { path: "deceasedBoolean", label: "Deceased" },
+      { path: "address.city", label: "City" },
+      { path: "address.state", label: "State" },
+      { path: "telecom", label: "Telecom" },
+      { path: "identifier", label: "Identifier" },
+      { path: "birthDate", label: "Birth Date" },
+      { path: "active", label: "Active" },
+      { path: "language", label: "Language" },
+    ];
+    const user = userEvent.setup();
+    render(
+      <ColumnPicker
+        options={many}
+        defaultSelected={["name"]}
+        onChange={onChange}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    await user.type(screen.getByRole("searchbox"), "marit");
+    await user.click(screen.getByLabelText("Marital Status"));
+    // "Marital Status" is added; the prior single selection ("name") is preserved
+    // even though it's currently filtered out of the visible list.
+    expect(onChange).toHaveBeenLastCalledWith(["name", "maritalStatus"]);
+  });
+
+  it("respects `searchable: false` even when there are many options", async () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      path: `field${i}`,
+      label: `Field ${i}`,
+    }));
+    const user = userEvent.setup();
+    render(<ColumnPicker options={many} onChange={() => {}} searchable={false} />);
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  });
+
   it("respects the controlled `selected` prop", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

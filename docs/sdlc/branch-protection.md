@@ -67,22 +67,13 @@ Fast-track is appropriate when:
 - The change doesn't need UAT validation on the staging URL
 - You're confident the change won't conflict with in-flight staging work
 
-If the reverse-sync encounters conflicts, it escalates to
-`@danielsperoni` via a comment on the open promotion PR (or a new issue
-if none exists).
-
-## Interaction with the promote-staging workflow
-
-The `promote-staging.yml` workflow creates/updates a PR targeting main.
-When the merge queue is active on main, approving and merging that PR
-enters it into the queue — CI runs one final time against main's head
-before the actual merge lands.
-
-If the promotion PR has conflicts:
-1. The workflow attempts automatic resolution via Claude
-2. If resolution fails, it labels the PR `status: needs-human`, posts
-   an escalation comment, and requests review from `@danielsperoni`
-3. The `/resolve-conflicts` command remains available for manual retries
+If a PR targeting `main` has merge conflicts, the `/resolve-conflicts`
+workflow can resolve the PR head against `main` without pushing directly to
+`main`. Bot-authored PRs blocked by conflicts are also eligible for
+`pr-fixup-dispatch`, which dispatches the same resolver automatically. The
+resolver makes judgment calls for hand-authored conflicts and escalates to
+`@danielsperoni` only for binary, generated, semantically ambiguous, or
+product-decision conflicts.
 
 ## How to modify these rules
 

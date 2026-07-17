@@ -81,10 +81,37 @@ not blocking.
    changed file or pull the unified diff. The reviewer needs to see
    what actually changed, not just the description.
 
-3. **Dispatch the engineer reviewer** — `senior-fhir-engineer`
+3. **Body-framing check (advisory).** Before dispatching the engineer
+   reviewer, grep the PR body for the framing schema from the PR
+   template. Determine whether the PR is a bug fix or not — read the
+   linked issue (`Closes #N` / `Fixes #N`) and check for a
+   `kind: bug` label, falling back to keyword heuristics on the issue
+   title/body (`bug`, `broken`, `regression`, `crash`, `error`).
+
+   - If the PR is a bug fix, the body must include all of:
+     `### Bug being fixed`, `` ### Reproduce on `main` ``,
+     `### Expected behavior`, `### Root cause`. The repro section
+     must contain at least two numbered list items (`1.` and `2.`)
+     as a proxy for "actually concrete."
+   - If the PR is not a bug fix, the body must include both:
+     `### Customer / user problem this solves` and
+     `### Why now / why this approach`. The problem section may be
+     `N/A — internal hygiene, no user-facing problem.` for pure
+     CI / dep / docs / internal-refactor PRs.
+
+   Record any missing headings (and a "repro looks placeholder" note
+   if the repro section exists but has zero numbered items). Pass
+   that list to the engineer reviewer in step 4 so it can be
+   surfaced inline in the review body — but **do not** flip the
+   verdict to `blocker` for a missing block. Body framing is
+   advisory today; humans approve the PR, and we don't want a
+   newly-introduced template gate to red-X every in-flight bot PR.
+
+4. **Dispatch the engineer reviewer** — `senior-fhir-engineer`
    subagent. Pass it the PR title, body, list of changed files, the
-   diff, and any linked-issue numbers from the body
-   (`Closes #N`, `Fixes #N`). The subagent should not re-fetch.
+   diff, any linked-issue numbers from the body
+   (`Closes #N`, `Fixes #N`), and the body-framing findings from
+   step 3. The subagent should not re-fetch.
 
    Brief: code-review PR `#<N>`. Cover, with bullets:
    - **Diff scope** — files / packages touched, anything outside
@@ -98,6 +125,11 @@ not blocking.
      `apps/demo/src/**` or `packages/*/src/**`, is there a matching
      `*.test.ts(x)` or `apps/demo/e2e/**` change?
      `packages/react-fhir/**` changes require a `.changeset/*.md`.
+   - **PR body framing** (advisory) — list any missing schema
+     headings from step 3 verbatim, and call out a placeholder-
+     looking repro section if step 3 flagged it. Skip the bullet
+     entirely if the body is well-formed. Never block merge for
+     this; the bullet is informational.
    - **Specific edits to suggest** — file path + line, only when
      concrete.
    - **Verdict**: `blocker` or `non-blocking`. One short sentence
@@ -110,12 +142,12 @@ not blocking.
    pass — the branch / PR flow in its agent definition does not
    apply here.
 
-4. **Parse the verdict.** Read the last `verdict: ...` line from
+5. **Parse the verdict.** Read the last `verdict: ...` line from
    the subagent's output. If the subagent fails or returns no
    parseable verdict, treat it as `non-blocking` (do not invent
    reasons to block).
 
-5. **Build the review body.** Include the marker first so the
+6. **Build the review body.** Include the marker first so the
    duplicate-review check in step 1 works on re-runs:
 
    ```
@@ -132,7 +164,7 @@ not blocking.
    dismisses stale reviews per branch protection)._
    ```
 
-6. **Post the review** via `gh pr review`. Pick the state based on
+7. **Post the review** via `gh pr review`. Pick the state based on
    the parsed verdict:
    - If `blocker`:
      `gh pr review <N> --request-changes --body-file <path>`
@@ -145,7 +177,7 @@ not blocking.
    to write the body file, fall back to `--body` with the value
    carefully escaped. Do **not** attempt other shell commands.
 
-7. Stop. No follow-up comments. No labels. No re-runs.
+8. Stop. No follow-up comments. No labels. No re-runs.
 
 ---
 

@@ -11,3 +11,5 @@ export * from "./ResourceTable.js";
 export * from "./ColumnPicker.js";
 export * from "./SortPicker.js";
 export * from "./HintedDetail.js";
+export * from "./ReverseReferences.js";
+export * from "../registries/revIncludes.js";

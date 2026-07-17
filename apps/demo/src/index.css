@@ -100,6 +100,35 @@ body, .cc-shell * {
   font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 }
 
+/* ─── Resource detail responsive split ──────────────────────────────────── */
+.cc-detail-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cc-detail-pane {
+  overflow: auto;
+  min-height: 0;
+}
+
+@media (max-width: 800px) {
+  /* Below 800px the 50/50 split leaves both panes too narrow to read.
+     Stack them: structured view on top, JSON viewer below. Letting the
+     grid grow past the viewport makes the page scroll so both are reachable. */
+  .cc-detail-grid {
+    grid-template-columns: 1fr;
+    flex: none;
+    overflow: visible;
+  }
+
+  .cc-detail-pane {
+    overflow: visible;
+  }
+}
+
 /* ─── Responsive sidebar ────────────────────────────────────────────────── */
 .mobile-nav-trigger {
   display: none !important;
@@ -126,6 +155,13 @@ body, .cc-shell * {
   width: 100% !important;
 }
 
+/* Mobile-only server pill in the topbar. Hidden on desktop because the
+   sidebar already shows the active server card; shown on phones so the
+   user always knows which server they're talking to. */
+.topbar-server-pill {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .mobile-nav-trigger {
     display: inline-flex !important;
@@ -138,4 +174,46 @@ body, .cc-shell * {
   .cc-sidebar {
     display: none !important;
   }
+
+  .topbar-server-pill {
+    display: inline-flex !important;
+  }
+
+  /* The breadcrumb collapses to ellipsized stubs ("FHIR ... / P...") at
+     375px and stops being legible. Drop it on phones — the server pill
+     and tab strip already convey location. */
+  .topbar-breadcrumb {
+    display: none !important;
+  }
+
+  /* Keyboard-shortcut hints in the status bar are pointer-only. Hide
+     them on touch viewports to reclaim vertical real-estate. */
+  .status-bar-hints {
+    display: none !important;
+  }
+
+  /* Settings is reachable through the drawer footer on mobile; the
+     duplicate topbar link just steals room from the server pill. */
+  .topbar-settings-link {
+    display: none !important;
+  }
+
+  /* The search-params panel can stack 6+ single-column fields on mobile and
+     fill the entire viewport, pushing resource rows below the fold with no
+     scroll affordance. Cap it so the page remains reachable by scrolling. */
+  .search-params-panel {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+}
+
+/* ─── Token-aware card (#361) ───────────────────────────────────────────── */
+/* Card surface that follows the Clean Clinical tokens in both themes.
+   The spec-driven editor itself is theme-aware since @fhir-place/react-fhir
+   adopted `var(--token, lightFallback)` styling — the scoped .dark re-map
+   that used to live here is gone. */
+.cc-card {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
 }
