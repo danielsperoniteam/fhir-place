@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Sidebar resource counts", () => {
-  test("each resource link shows a count and an All resources total", async ({
+  test("each resource link shows a count and a Top types total", async ({
     page,
   }) => {
     await page.goto("/Patient");
@@ -17,8 +17,10 @@ test.describe("Sidebar resource counts", () => {
     await expect(page.getByTestId("sidebar-count-Patient")).toHaveText(numeric);
     await expect(page.getByTestId("sidebar-count-Observation")).toHaveText(numeric);
 
-    // "All resources" sums every per-type count. With at least one type
-    // resolving > 0, the total is non-zero and numeric.
+    // "Top types" sums the per-type counts of the curated sidebar list
+    // (#363 — deliberately not labeled as a server-wide total). With at
+    // least one type resolving > 0, the total is non-zero and numeric.
+    await expect(page.getByTestId("sidebar-link-all")).toContainText("Top types");
     await expect(page.getByTestId("sidebar-count-all")).toHaveText(numeric);
   });
 
