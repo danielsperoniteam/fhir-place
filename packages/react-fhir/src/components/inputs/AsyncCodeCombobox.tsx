@@ -65,9 +65,11 @@ export const AsyncCodeCombobox = ({
     return () => clearTimeout(t);
   }, [query, debounceMs]);
 
-  const { data, isFetching, isError } = useValueSetExpansion(valueSet, debouncedQuery, {
-    count,
-  });
+  const { data, isFetching, isError } = useValueSetExpansion(
+    valueSet,
+    debouncedQuery,
+    { count },
+  );
 
   const options = useMemo<ResolvedCode[]>(() => {
     const contains = data?.expansion?.contains ?? [];
@@ -164,13 +166,15 @@ export const AsyncCodeCombobox = ({
           </button>
         )}
       </div>
-      {isError && (
+      {isError && options.length === 0 && (
         <p
-          className="mt-1 text-xs text-amber-600"
           role="alert"
+          className="mt-1 text-xs text-amber-700"
           data-testid="terminology-error"
         >
-          Terminology unavailable — the server could not expand this value set.
+          Terminology unavailable: terminology server unreachable. Code lookup
+          is unavailable; enter a code manually or check the terminology server
+          in Settings.
         </p>
       )}
       {open && (
@@ -184,9 +188,12 @@ export const AsyncCodeCombobox = ({
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">Type to search…</li>
           ) : isFetching ? (
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">Searching…</li>
-          ) : isError ? (
-            <li className="px-2 py-1 text-amber-600" data-testid="terminology-error-option">
-              Terminology unavailable
+          ) : isError && options.length === 0 ? (
+            <li
+              className="px-2 py-1 text-amber-700"
+              data-testid="terminology-error-option"
+            >
+              Terminology unavailable: terminology server unreachable
             </li>
           ) : options.length === 0 ? (
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">No matches</li>
