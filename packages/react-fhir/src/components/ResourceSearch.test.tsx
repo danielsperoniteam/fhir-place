@@ -309,6 +309,116 @@ describe("ResourceSearch", () => {
     ).toBe("system|value");
   });
 
+  it("merges a form edit that collides with a passthrough variant as AND values", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialParams={{ name: "Smith", "name:exact": "John" }}
+        initialVisible={8}
+      />,
+    );
+    // Switching the editable variant onto the preserved variant's key must
+    // not overwrite it — both criteria survive as repeated values.
+    await user.selectOptions(screen.getByLabelText("name modifier"), "exact");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      "name:exact": ["John", "Smith"],
+    });
+  });
+
+  it("number fields offer numeric prefixes only (no sa/eb)", () => {
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={{
+          ...cap,
+          rest: [
+            {
+              mode: "server",
+              resource: [
+                {
+                  type: "Patient",
+                  searchParam: [{ name: "length", type: "number" }],
+                },
+              ],
+            },
+          ],
+        }}
+        initialVisible={4}
+      />,
+    );
+    const prefixes = Array.from(
+      (screen.getByLabelText("length prefix") as HTMLSelectElement).options,
+    ).map((o) => o.value);
+    expect(prefixes).toEqual(["", "eq", "ne", "lt", "le", "gt", "ge", "ap"]);
+  });
+
+  it("does not offer :of-type on non-Identifier token params", () => {
+    // With no SD resolvable in the test harness the element type is unknown,
+    // so `:of-type` (Identifier-only per FHIR R4) is withheld conservatively.
+    wrap(
+      <ResourceSearch resourceType="Patient" capabilityStatement={cap} initialVisible={8} />,
+    );
+    const genderOptions = Array.from(
+      (screen.getByLabelText("gender modifier") as HTMLSelectElement).options,
+    ).map((o) => o.value);
+    expect(genderOptions).toContain("not");
+    expect(genderOptions).not.toContain("of-type");
+  });
+
+  it("wipes a stale value when the modifier grammar changes", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialParams={{ gender: "female" }}
+        initialVisible={8}
+      />,
+    );
+    // female (default code grammar) → :missing (boolean grammar) must not
+    // carry the old value along.
+    await user.selectOptions(screen.getByLabelText("gender modifier"), "missing");
+    expect((screen.getByLabelText("gender") as HTMLSelectElement).value).toBe("");
+    // Leaving :missing back to the default grammar also clears.
+    await user.selectOptions(screen.getByLabelText("gender"), "true");
+    await user.selectOptions(screen.getByLabelText("gender modifier"), "");
+    expect((screen.getByLabelText("gender") as HTMLInputElement).value).toBe("");
+  });
+
+  it("keeps the value when switching between :in and :not-in (same grammar)", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialVisible={8}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText("gender modifier"), "in");
+    await user.type(
+      screen.getByLabelText("gender"),
+      "http://example.org/ValueSet/g",
+    );
+    // Switching to the sibling modifier must not wipe the URL.
+    await user.selectOptions(screen.getByLabelText("gender modifier"), "not-in");
+    expect((screen.getByLabelText("gender") as HTMLInputElement).value).toBe(
+      "http://example.org/ValueSet/g",
+    );
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      "gender:not-in": "http://example.org/ValueSet/g",
+    });
+  });
+
   it("shows a friendly message when no params are advertised", () => {
     wrap(<ResourceSearch resourceType="UnknownType" capabilityStatement={cap} />);
     expect(screen.getByText(/no searchable parameters/i)).toBeInTheDocument();

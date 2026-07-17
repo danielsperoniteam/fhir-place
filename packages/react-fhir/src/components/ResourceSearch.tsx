@@ -3,7 +3,7 @@ import type {
   CapabilityStatement,
   ElementDefinition,
 } from "fhir/r4";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   useCapabilities,
   useSearchParameter,
@@ -48,14 +48,29 @@ export interface ResourceSearchProps {
 
 type SpecType = CapabilityStatementRestResourceSearchParam["type"];
 
-/** Modifiers whose value shape differs from the param's normal grammar. */
-const GRAMMAR_CHANGING_MODIFIERS = new Set([
-  "missing",
-  "in",
-  "not-in",
-  "of-type",
-  "identifier",
-]);
+/**
+ * Value-shape "class" of a modifier. Switching between modifiers of the same
+ * class keeps the entered value (`:in` ↔ `:not-in` both take a ValueSet
+ * canonical URL); switching classes wipes it so a stale value never rides
+ * along with the wrong semantics.
+ */
+const modifierGrammar = (modifier: string | undefined): string => {
+  switch (modifier) {
+    case "missing":
+      return "boolean";
+    case "in":
+    case "not-in":
+      return "valueset-url";
+    case "of-type":
+      return "system-code-value";
+    case "identifier":
+      return "system-value";
+    default:
+      // bare param plus code-preserving modifiers (:exact, :contains, :not,
+      // :text, :above, :below) all use the param's normal value grammar.
+      return "default";
+  }
+};
 
 const inputPlaceholder = (type: SpecType): string => {
   switch (type) {
@@ -143,6 +158,10 @@ export function ResourceSearch(props: ResourceSearchProps) {
   const [modifiers, setModifiers] = useState<Record<string, string>>(
     () => splitIncomingParams(initialParams ?? {}).modifiers,
   );
+  // Synchronous mirror of `modifiers` for authoritative reads in event
+  // handlers (see setModifier).
+  const modifiersRef = useRef(modifiers);
+  modifiersRef.current = modifiers;
   // Extra variants of an already-claimed base name (`name=Smith` +
   // `name:exact=John`) — not editable in the form but preserved verbatim on
   // every submit so hydration never drops valid AND criteria.
@@ -200,20 +219,21 @@ export function ResourceSearch(props: ResourceSearchProps) {
   };
 
   const setModifier = (name: string, modifier: string) => {
+    // Read the previous modifier from a ref mirror rather than the render
+    // closure — always current, so rapid changes act on the authoritative
+    // state, and without nesting setValues inside the setModifiers updater
+    // (review on #732). Wipe the value only when the grammar class actually
+    // changes; switching `:in` ↔ `:not-in` (same ValueSet-URL grammar) keeps
+    // the URL the user typed.
+    const grammarChanged =
+      modifierGrammar(modifiersRef.current[name]) !== modifierGrammar(modifier);
     setModifiers((prev) => {
       const next = { ...prev };
       if (modifier === "") delete next[name];
       else next[name] = modifier;
       return next;
     });
-    // Some modifiers change the VALUE grammar (`:missing` → true/false,
-    // `:in`/`:not-in` → ValueSet URL, `:of-type` → system|code|value,
-    // `:identifier` → system|value). Wipe the value when entering or
-    // leaving one so a stale value never rides along with the wrong
-    // semantics.
-    const wasGrammar = GRAMMAR_CHANGING_MODIFIERS.has(modifiers[name] ?? "");
-    const isGrammar = GRAMMAR_CHANGING_MODIFIERS.has(modifier);
-    if (wasGrammar || isGrammar) setParam(name, "");
+    if (grammarChanged) setParam(name, "");
   };
 
   if (!cap && capQuery.isLoading) {
@@ -350,9 +370,12 @@ const fieldWrapper = (
   base: string,
   modifier?: string,
   onModifier?: (m: string) => void,
+  /** Overrides the per-type modifier list (token fields narrow it by the
+   *  resolved element type — e.g. `:of-type` only on Identifier-backed). */
+  availableModifiers?: readonly string[],
 ): ReactNode => {
   const doc = clipSearchParamDoc(param.documentation, base);
-  const available = onModifier ? modifiersForType(param.type) : [];
+  const available = onModifier ? availableModifiers ?? modifiersForType(param.type) : [];
   return (
     <label className="block">
       <span className="mb-1 flex items-baseline justify-between gap-2">
@@ -476,11 +499,22 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   const { data: vs, isLoading } = useValueSet(valueSetUrl);
   const codes = codesFromValueSet(vs);
 
+  // FHIR R4 limits `:of-type` to token params backed by an Identifier — drop
+  // it for code/CodeableConcept tokens (gender, status, _id, …). When the
+  // element can't be resolved we can't confirm Identifier backing, so we
+  // stay conservative and hide it (Codex review on #732).
+  const isIdentifierBacked = element?.type?.some((t) => t.code === "Identifier") ?? false;
+  const tokenModifiers = isIdentifierBacked
+    ? modifiersForType("token")
+    : modifiersForType("token").filter((m) => m !== "of-type");
+  const wrap = (children: ReactNode): ReactNode =>
+    fieldWrapper(children, param, base, modifier, onModifier, tokenModifiers);
+
   // `:in`/`:not-in`/`:of-type` change the value grammar entirely — the
   // bounded code select would submit a bare code where a canonical URL or
   // triple is required (Codex review on #732).
   if (modifier && TOKEN_FREE_GRAMMAR_MODIFIERS.has(modifier)) {
-    return fieldWrapper(
+    return wrap(
       <input
         type="text"
         aria-label={param.name}
@@ -489,10 +523,6 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
       />,
-      param,
-      base,
-      modifier,
-      onModifier,
     );
   }
 
@@ -508,7 +538,7 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   );
 
   if (valueSetUrl && isLoading) {
-    return fieldWrapper(
+    return wrap(
       <input
         type="text"
         aria-label={param.name}
@@ -517,18 +547,14 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
         placeholder="Loading value set…"
         className="w-full rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm"
       />,
-      param,
-      base,
-      modifier,
-      onModifier,
     );
   }
 
   if (codes.length === 0 || codes.length > 100) {
-    return fieldWrapper(fallbackInput, param, base, modifier, onModifier);
+    return wrap(fallbackInput);
   }
 
-  return fieldWrapper(
+  return wrap(
     <select
       aria-label={param.name}
       value={value}
@@ -542,10 +568,6 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
         </option>
       ))}
     </select>,
-    param,
-    base,
-    modifier,
-    onModifier,
   );
 }
 
@@ -663,6 +685,14 @@ const DATE_PREFIXES: DatePrefixOption[] = [
   { value: "eb", label: "eb", title: "ends before (period param)" },
 ];
 
+/**
+ * Number/quantity prefixes: `sa`/`eb` describe range boundaries and are not
+ * valid numeric comparators (matches `NumberPrefix` in client/searchBuilder).
+ */
+const NUMERIC_PREFIXES: DatePrefixOption[] = DATE_PREFIXES.filter(
+  (p) => p.value !== "sa" && p.value !== "eb",
+);
+
 type DateSearchFieldProps = SearchFieldProps;
 
 /**
@@ -679,6 +709,15 @@ function DateSearchField({ base, param, value, onChange, modifier, onModifier }:
   // ordering works, and let a parsed prefix from the value win once set.
   const [pendingPrefix, setPendingPrefix] = useState<DatePrefix | "">("");
   const prefix = ((match?.[1] as DatePrefix | undefined) ?? (date ? "" : pendingPrefix));
+
+  // External clears (form Clear, AI replacing criteria) empty `value`
+  // without going through commit — drop the parked prefix with it so it
+  // doesn't silently reattach to the next date. The park case (prefix
+  // picked while value was already "") never transitions the prop, so this
+  // effect doesn't fire for it.
+  useEffect(() => {
+    if (value === "") setPendingPrefix("");
+  }, [value]);
 
   const commit = (nextPrefix: string, nextDate: string) => {
     setPendingPrefix(nextPrefix as DatePrefix | "");
@@ -718,10 +757,10 @@ function DateSearchField({ base, param, value, onChange, modifier, onModifier }:
 /* ---------- number / quantity ---------- */
 
 /**
- * Number and quantity search field (#254 PR B): the same prefix vocabulary
- * as dates (FHIR applies eq/ne/lt/le/gt/ge/ap/sa/eb to all ordered types)
- * in front of a free-value input — `gt` + `5.4|http://unitsofmeasure.org|mg`
- * round-trips as `gt5.4|…|mg`.
+ * Number and quantity search field (#254 PR B): the numeric prefix
+ * vocabulary (`eq/ne/lt/le/gt/ge/ap` — `sa`/`eb` are range comparators and
+ * date-only) in front of a free-value input — `gt` +
+ * `5.4|http://unitsofmeasure.org|mg` round-trips as `gt5.4|…|mg`.
  */
 function PrefixedValueField({
   base,
@@ -731,11 +770,16 @@ function PrefixedValueField({
   modifier,
   onModifier,
 }: SearchFieldProps): ReactNode {
-  const match = value.match(/^(eq|ne|lt|le|gt|ge|ap|sa|eb)?(.*)$/);
+  const match = value.match(/^(eq|ne|lt|le|gt|ge|ap)?(.*)$/);
   const rest = match?.[2] ?? "";
   // See DateSearchField: park a prefix picked before any value exists.
   const [pendingPrefix, setPendingPrefix] = useState<DatePrefix | "">("");
   const prefix = ((match?.[1] as DatePrefix | undefined) ?? (rest ? "" : pendingPrefix));
+
+  // See DateSearchField: external clears also drop the parked prefix.
+  useEffect(() => {
+    if (value === "") setPendingPrefix("");
+  }, [value]);
 
   const commit = (nextPrefix: string, nextValue: string) => {
     setPendingPrefix(nextPrefix as DatePrefix | "");
@@ -751,7 +795,7 @@ function PrefixedValueField({
         onChange={(e) => commit(e.target.value, rest)}
         className="rounded border border-[var(--border)] bg-[var(--sunken)] px-2 py-1 text-sm text-[var(--text)] shadow-sm focus:border-[var(--accent,#3b82f6)] focus:outline-none"
       >
-        {DATE_PREFIXES.map((p) => (
+        {NUMERIC_PREFIXES.map((p) => (
           <option key={`${p.value}-${p.label}`} value={p.value} title={p.title}>
             {p.label}
           </option>
@@ -832,7 +876,16 @@ const buildSearchParams = (
 ): SearchParams => {
   const out: SearchParams = { ...passthrough };
   for (const [k, v] of Object.entries(values)) {
-    if (v !== "" && v !== undefined) out[joinModifierKey(k, modifiers[k])] = v;
+    if (v === "" || v === undefined) continue;
+    const key = joinModifierKey(k, modifiers[k]);
+    const existing = out[key];
+    // A form edit that lands on a passthrough variant's key (user switched
+    // the editable `name` to `:exact` while `name:exact=John` is preserved)
+    // is an additional AND criterion — merge as repeated values instead of
+    // overwriting.
+    if (existing === undefined) out[key] = v;
+    else if (Array.isArray(existing)) out[key] = [...existing.map(String), v];
+    else out[key] = [String(existing), v];
   }
   return out;
 };

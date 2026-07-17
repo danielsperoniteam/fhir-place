@@ -6,6 +6,9 @@ test.describe("Search modifiers and prefixes", () => {
   test("builds a modifier'd + date-prefixed query and round-trips it via the URL", async ({
     page,
   }) => {
+    // Does a full page reload to prove URL→form rehydration; give it extra
+    // budget since the reload re-runs the app's font/module loading.
+    test.slow();
     await page.goto("/fhir-ui/Patient");
     const search = page.getByTestId("resource-search");
 

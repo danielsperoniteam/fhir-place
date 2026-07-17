@@ -10,6 +10,9 @@
 export const SEARCH_MODIFIERS_BY_TYPE: Record<string, readonly string[]> = {
   string: ["exact", "contains", "missing"],
   token: ["text", "not", "above", "below", "in", "not-in", "of-type", "missing"],
+  // R4 also allows `:above`/`:below` on reference params (hierarchical
+  // canonical chains) — omitted as a conservative product call since they're
+  // rare and easy to mis-apply; add them here if a use case appears.
   reference: ["identifier", "missing"],
   uri: ["above", "below", "missing"],
   date: ["missing"],
