@@ -2,6 +2,7 @@ import type {
   ElementDefinition,
   ElementDefinitionType,
   Observation,
+  Patient,
   Resource,
   StructureDefinition,
 } from "fhir/r4";
@@ -10,6 +11,7 @@ import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react"
 import { useStructureDefinition } from "../hooks/queries.js";
 import {
   directChildren,
+  isUcumQuantity,
   pathGet,
   pathRemove,
   pathSet,
@@ -100,6 +102,10 @@ const observationValueQuantityUcumCodeGuardrail: ResourceEditorClinicalSafetyGua
 ) => {
   if (draft.resourceType !== "Observation") return [];
   const quantity = (draft as Observation).valueQuantity;
+  // A code is only a UCUM code when the system says so (or is absent —
+  // FHIR's implicit default). Site-specific systems scope their own codes
+  // and must not be rejected by the UCUM validator.
+  if (quantity && !isUcumQuantity(quantity)) return [];
   const code = quantity?.code?.trim();
   if (!code || isValidUcumCode(code)) return [];
   return [
@@ -110,8 +116,34 @@ const observationValueQuantityUcumCodeGuardrail: ResourceEditorClinicalSafetyGua
   ];
 };
 
+// A new Patient with no name and no identifier is unfindable once created
+// (#588). Only applies to creates (no id yet): servers can legitimately hold
+// anonymized patients, and editing those must stay possible. Path [] marks
+// this as a form-level error rendered in the footer banner rather than next
+// to a specific input (an empty form has no inputs to anchor to).
+const patientIdentityGuardrail: ResourceEditorClinicalSafetyGuardrail = (draft) => {
+  if (draft.resourceType !== "Patient" || draft.id) return [];
+  const patient = draft as Patient;
+  // Whitespace-only strings and identifiers with only a `system` don't make
+  // the Patient findable — require a real identifier value or name component.
+  const hasText = (s: string | undefined): boolean => Boolean(s?.trim());
+  const hasIdentifier = (patient.identifier ?? []).some((i) => hasText(i.value));
+  const hasName = (patient.name ?? []).some(
+    (n) => hasText(n.text) || hasText(n.family) || (n.given ?? []).some(hasText),
+  );
+  if (hasIdentifier || hasName) return [];
+  return [
+    {
+      path: [],
+      message:
+        "This Patient has no identifying information — add at least a name or an identifier before saving.",
+    },
+  ];
+};
+
 export const RESOURCE_EDITOR_CLINICAL_SAFETY_GUARDRAILS: readonly ResourceEditorClinicalSafetyGuardrail[] = [
   observationValueQuantityUcumCodeGuardrail,
+  patientIdentityGuardrail,
 ];
 
 export function ResourceEditor(props: ResourceEditorProps) {
@@ -119,6 +151,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
   const detectedProfile = profile === undefined ? resource.meta?.profile?.[0] : profile;
   const [draft, setDraft] = useState<Resource>(resource);
   const [fieldErrors, setFieldErrors] = useState<Map<string, string>>(() => new Map());
+  const [formErrors, setFormErrors] = useState<string[]>([]);
 
   const sdQuery = useStructureDefinition({ type: resource.resourceType, profile: detectedProfile }, {
     enabled: !structureDefinition,
@@ -149,6 +182,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
           nextErrors.delete(pathKey(path));
           return nextErrors;
         });
+        setFormErrors((prev) => (prev.length === 0 ? prev : []));
         onChange?.(asResource);
         return asResource;
       });
@@ -164,22 +198,25 @@ export function ResourceEditor(props: ResourceEditorProps) {
       guardrail(pruned),
     );
     if (errors.length > 0) {
-      setFieldErrors(new Map(errors.map((error) => [pathKey(error.path), error.message])));
+      const atField = errors.filter((error) => error.path.length > 0);
+      setFieldErrors(new Map(atField.map((error) => [pathKey(error.path), error.message])));
+      setFormErrors(errors.filter((error) => error.path.length === 0).map((e) => e.message));
       return;
     }
     setFieldErrors(new Map());
+    setFormErrors([]);
     await onSave(pruned);
   };
 
   if (!sd) {
     if (sdQuery.isError) {
       return (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-[var(--danger,#dc2626)]">
           Failed to load StructureDefinition: {sdQuery.error?.message}
         </p>
       );
     }
-    return <p className="text-sm text-slate-500">Loading {resource.resourceType} structure…</p>;
+    return <p className="text-sm text-[var(--text-muted,#64748b)]">Loading {resource.resourceType} structure…</p>;
   }
 
   return (
@@ -188,12 +225,12 @@ export function ResourceEditor(props: ResourceEditorProps) {
       onSubmit={onSubmit}
       data-testid="resource-editor"
     >
-      <header className="flex items-baseline gap-2 border-b border-slate-200 pb-2">
+      <header className="flex items-baseline gap-2 border-b border-[var(--border,#e2e8f0)] pb-2">
         <h2 className="text-lg font-semibold">
           {draft.id ? `Edit ${draft.resourceType}` : `New ${draft.resourceType}`}
         </h2>
         {draft.id && (
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{draft.id}</code>
+          <code className="rounded bg-[var(--chip,#f1f5f9)] px-1 py-0.5 text-xs">{draft.id}</code>
         )}
       </header>
 
@@ -208,12 +245,24 @@ export function ResourceEditor(props: ResourceEditorProps) {
         setAt={setAt}
       />
 
-      <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
+      {formErrors.length > 0 && (
+        <div
+          role="alert"
+          data-testid="resource-editor-form-error"
+          className="rounded border border-[var(--warn,#fcd34d)] bg-[var(--warn-soft,#fffbeb)] p-3 text-sm text-[var(--warn,#92400e)]"
+        >
+          {formErrors.map((message) => (
+            <p key={message}>{message}</p>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 border-t border-[var(--border,#e2e8f0)] pt-3">
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+            className="rounded border border-[var(--border-strong,#cbd5e1)] bg-[var(--surface,#ffffff)] px-3 py-1.5 text-sm hover:bg-[var(--sunken,#f8fafc)]"
           >
             Cancel
           </button>
@@ -221,7 +270,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
         <button
           type="submit"
           disabled={props.saving}
-          className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+          className="rounded bg-[var(--accent,#2563eb)] px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-50"
         >
           {props.saving ? "Saving…" : (props.saveLabel ?? "Save")}
         </button>
@@ -324,8 +373,8 @@ function Field({
     const items = Array.isArray(currentValue) ? currentValue : [];
     return (
       <Fragment>
-        <Dt label={label} path={path} />
-        <dd className="space-y-2">
+        <FieldLabel label={label} path={path} />
+        <div className="space-y-2">
           {items.map((_, i) => (
             <ArrayRow
               key={i}
@@ -349,19 +398,19 @@ function Field({
           <button
             type="button"
             onClick={() => setAt(fullPath, [...items, emptyOf(typeCode)])}
-            className="rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-slate-400"
+            className="rounded border border-dashed border-[var(--border-strong,#cbd5e1)] px-2 py-1 text-xs text-[var(--text-muted,#475569)] hover:border-[var(--border-strong,#94a3b8)]"
           >
             + Add {relative}
           </button>
-        </dd>
+        </div>
       </Fragment>
     );
   }
 
   return (
     <Fragment>
-      <Dt label={label} path={path} />
-      <dd>
+      <FieldLabel label={label} path={path} />
+      <div>
         <SingleValueInput
           sd={sd}
           element={element}
@@ -373,7 +422,7 @@ function Field({
           fieldErrors={fieldErrors}
           setAt={setAt}
         />
-      </dd>
+      </div>
     </Fragment>
   );
 }
@@ -429,11 +478,11 @@ function ChoiceField({
 
   return (
     <Fragment>
-      <Dt label={label} path={element.path!} />
-      <dd className="space-y-2">
+      <FieldLabel label={label} path={element.path!} />
+      <div className="space-y-2">
         <select
           data-testid={`choice-${base}`}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+          className="rounded border border-[var(--border-strong,#cbd5e1)] bg-[var(--surface,#ffffff)] px-2 py-1 text-xs"
           value={activeType ?? ""}
           onChange={(e) => switchTo(e.target.value || undefined)}
         >
@@ -458,7 +507,7 @@ function ChoiceField({
             override={activeValue}
           />
         )}
-      </dd>
+      </div>
     </Fragment>
   );
 }
@@ -493,7 +542,7 @@ function SingleValueInput({
 
   if (typeCode === "BackboneElement" || typeCode === "Element") {
     return (
-      <div className="rounded border border-slate-200 bg-slate-50 p-2">
+      <div className="rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2">
         <FieldGroup
           sd={sd}
           parentPath={element.path!}
@@ -524,11 +573,14 @@ function SingleValueInput({
   );
 }
 
-function Dt({ label, path }: { label: string; path: string }) {
+// Label cell of the editor grid. Deliberately a <div>, not <dt>: the grid
+// container is a <div> and fields nest inside other fields' value cells, so
+// <dt>/<dd> here is invalid HTML (issue #587 — validateDOMNesting warnings).
+function FieldLabel({ label, path }: { label: string; path: string }) {
   return (
-    <dt className="font-medium text-slate-600" title={path}>
+    <div className="font-medium text-[var(--text-muted,#475569)]" title={path}>
       {label}
-    </dt>
+    </div>
   );
 }
 
@@ -545,14 +597,14 @@ function ArrayRow({
 }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="pt-1 text-xs text-slate-400">#{index + 1}</span>
+      <span className="pt-1 text-xs text-[var(--text-subtle,#94a3b8)]">#{index + 1}</span>
       <div className="flex-1">{children}</div>
       {length > 0 && (
         <button
           type="button"
           onClick={onRemove}
           aria-label={`Remove item ${index + 1}`}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:border-red-400 hover:text-red-600"
+          className="rounded border border-[var(--border-strong,#cbd5e1)] bg-[var(--surface,#ffffff)] px-2 py-1 text-xs text-[var(--text-muted,#475569)] hover:border-[var(--danger,#f87171)] hover:text-[var(--danger,#dc2626)]"
         >
           ×
         </button>

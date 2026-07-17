@@ -212,23 +212,6 @@ export function CCTabs() {
       </div>
 
       <div style={{ flex: 1 }} />
-
-      {/* Split hint */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "0 12px",
-          color: "var(--text-subtle)",
-          fontSize: 11,
-          fontFamily: CC_MONO,
-          flexShrink: 0,
-        }}
-      >
-        <span>⌘\</span>
-        <span>split</span>
-      </div>
     </div>
   );
 }

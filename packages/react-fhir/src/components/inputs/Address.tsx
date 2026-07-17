@@ -5,7 +5,7 @@ export const AddressInput: FhirTypeInput<Address> = ({ value, onChange }) => {
   const v = value ?? {};
   const patch = (k: keyof Address, val: unknown) => onChange({ ...v, [k]: val });
   return (
-    <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
+    <div className="space-y-2 rounded border border-[var(--border,#e2e8f0)] bg-[var(--sunken,#f8fafc)] p-2">
       <label>
         <span className={subLabel}>Line (comma-separated)</span>
         <input

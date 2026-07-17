@@ -109,7 +109,10 @@ describe("ResourceEditor", () => {
     wrap(
       <ResourceEditor
         resource={
-          { resourceType: "Patient", name: [{ given: [""], family: "" }] } as Patient
+          {
+            resourceType: "Patient",
+            name: [{ given: [""], family: "Lovelace" }, { given: [""], family: "" }],
+          } as Patient
         }
         structureDefinition={PatientStructureDefinition}
         onSave={onSave}
@@ -119,8 +122,9 @@ describe("ResourceEditor", () => {
     await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
     const saved = onSave.mock.calls[0]?.[0] as Patient;
     expect(saved.resourceType).toBe("Patient");
-    // empty given and empty family mean no name array at all
-    expect(saved.name).toBeUndefined();
+    // the empty given entry and the fully-empty second name are pruned;
+    // the populated family survives
+    expect(saved.name).toEqual([{ family: "Lovelace" }]);
   });
 
   it("fires onCancel when Cancel clicked", async () => {
@@ -220,6 +224,32 @@ describe("ResourceEditor", () => {
     expect(screen.queryByTestId("resource-editor-valuequantity-code-error")).toBeNull();
   });
 
+  it("does not UCUM-validate a valueQuantity whose system is not UCUM", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const obs: Observation = {
+      resourceType: "Observation",
+      status: "final",
+      code: { text: "Widget count" },
+      valueQuantity: {
+        value: 3,
+        unit: "widgets",
+        system: "http://example.org/units",
+        code: "widgets",
+      },
+    };
+    wrap(
+      <ResourceEditor
+        resource={obs}
+        structureDefinition={ObservationStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(screen.queryByTestId("resource-editor-valuequantity-code-error")).toBeNull();
+  });
+
   it("blocks save when Observation valueQuantity.code is not UCUM", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -279,6 +309,127 @@ describe("ResourceEditor", () => {
     });
     expect(saved.valueQuantity?.code).toBeUndefined();
     expect(screen.queryByTestId("resource-editor-valuequantity-code-error")).toBeNull();
+  });
+
+  // Regression for #587: labels/values previously rendered as <dt>/<dd>
+  // inside a <div> grid, and nested complex types put <dt> inside <dd> —
+  // React logs validateDOMNesting warnings for both.
+  it("renders nested complex fields without validateDOMNesting warnings", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      wrap(
+        <ResourceEditor
+          resource={loaded}
+          structureDefinition={PatientStructureDefinition}
+        />,
+      );
+      const nestingWarnings = errorSpy.mock.calls.filter((call) =>
+        String(call[0]).includes("validateDOMNesting"),
+      );
+      expect(nestingWarnings).toEqual([]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  // Regression for #588: an all-empty Patient/new form must not silently
+  // POST `{ resourceType: "Patient" }`.
+  it("blocks creating a Patient with no name and no identifier", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    wrap(
+      <ResourceEditor
+        resource={emptyPatient}
+        structureDefinition={PatientStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    expect(onSave).not.toHaveBeenCalled();
+    const banner = screen.getByTestId("resource-editor-form-error");
+    expect(banner).toHaveTextContent(/no identifying information/i);
+  });
+
+  it("allows creating a Patient once a name is entered", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    wrap(
+      <ResourceEditor
+        resource={emptyPatient}
+        structureDefinition={PatientStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    // trip the guardrail first, then fix the form and re-save
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    expect(screen.getByTestId("resource-editor-form-error")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /add name/i }));
+    const givenInputs = screen.getAllByRole("textbox");
+    await user.type(givenInputs[0]!, "Grace");
+    // editing clears the banner
+    expect(screen.queryByTestId("resource-editor-form-error")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    const saved = onSave.mock.calls[0]?.[0] as Patient;
+    expect(saved.name?.[0]?.given).toEqual(["Grace"]);
+  });
+
+  it("blocks creating a Patient whose only 'identity' is whitespace or a bare identifier system", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    wrap(
+      <ResourceEditor
+        resource={
+          {
+            resourceType: "Patient",
+            identifier: [{ system: "http://example.org/mrn" }],
+            name: [{ text: "   ", given: [" "] }],
+          } as Patient
+        }
+        structureDefinition={PatientStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByTestId("resource-editor-form-error")).toHaveTextContent(
+      /no identifying information/i,
+    );
+  });
+
+  it("allows creating a Patient with an identifier value and no name", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    wrap(
+      <ResourceEditor
+        resource={
+          {
+            resourceType: "Patient",
+            identifier: [{ system: "http://example.org/mrn", value: "MRN-123" }],
+          } as Patient
+        }
+        structureDefinition={PatientStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+  });
+
+  it("does not block saving an existing anonymized Patient", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    wrap(
+      <ResourceEditor
+        resource={{ resourceType: "Patient", id: "anon-1", gender: "female" } as Patient}
+        structureDefinition={PatientStructureDefinition}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
   });
 
   it("falls back to JSON textarea for datatypes without a built-in input", () => {
