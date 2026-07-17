@@ -539,6 +539,15 @@ describe("datePrefixOptions", () => {
     expect(v).toContain("sa");
     expect(v).toContain("eb");
   });
+
+  it("intersects a range target's boundaries with advertised comparators", () => {
+    // Codex review on #732: a Period-backed param advertising a subset that
+    // excludes sa/eb must not still offer them.
+    const v = values(datePrefixOptions(true, ["eq", "ge", "le"]));
+    expect(v).toEqual(["", "eq", "le", "ge"]);
+    expect(v).not.toContain("sa");
+    expect(v).not.toContain("eb");
+  });
 });
 
 describe("numericPrefixOptions", () => {

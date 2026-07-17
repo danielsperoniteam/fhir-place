@@ -755,25 +755,40 @@ const SCALAR_DATE_PREFIXES = NUMERIC_PREFIXES;
 const RANGE_DATE_TYPES = new Set(["Period", "Timing", "Range"]);
 
 /**
- * Date prefix options for a param: the full set (with `sa`/`eb`) only when the
- * target element covers a range (Period/Timing/Range); otherwise the scalar set.
+ * Intersect a prefix list with a server-advertised comparator list.
+ * `undefined` (the SearchParameter didn't advertise `comparator`) keeps the
+ * whole list; an advertised list narrows to it (an empty list leaves only the
+ * `=` default, i.e. no comparator support). The `=` default is always kept.
  */
-export function datePrefixOptions(targetsRange: boolean): DatePrefixOption[] {
-  return targetsRange ? DATE_PREFIXES : SCALAR_DATE_PREFIXES;
+function intersectComparators(
+  options: DatePrefixOption[],
+  advertised: readonly string[] | undefined,
+): DatePrefixOption[] {
+  if (!Array.isArray(advertised)) return options;
+  const set = new Set(advertised);
+  return options.filter((p) => p.value === "" || set.has(p.value));
 }
 
 /**
- * Numeric prefix options intersected with a server-advertised comparator list.
- * `undefined` (the SearchParameter didn't advertise `comparator`) keeps the full
- * numeric set; an advertised list narrows to it (an empty list leaves only the
- * `=` default, i.e. no comparator support). The `=` default is always kept.
+ * Date prefix options for a param: the full set (with `sa`/`eb`) only when the
+ * target element covers a range (Period/Timing/Range); otherwise the scalar
+ * set. Then intersected with the server's advertised comparators, if any.
  */
+export function datePrefixOptions(
+  targetsRange: boolean,
+  advertised?: readonly string[],
+): DatePrefixOption[] {
+  return intersectComparators(
+    targetsRange ? DATE_PREFIXES : SCALAR_DATE_PREFIXES,
+    advertised,
+  );
+}
+
+/** Numeric prefix options intersected with a server-advertised comparator list. */
 export function numericPrefixOptions(
   advertised: readonly string[] | undefined,
 ): DatePrefixOption[] {
-  if (!Array.isArray(advertised)) return NUMERIC_PREFIXES;
-  const set = new Set(advertised);
-  return NUMERIC_PREFIXES.filter((p) => p.value === "" || set.has(p.value));
+  return intersectComparators(NUMERIC_PREFIXES, advertised);
 }
 
 type DateSearchFieldProps = SearchFieldProps;
@@ -805,7 +820,7 @@ function DateSearchField({ base, param, value, onChange, profile, modifier, onMo
   const { data: sd } = useStructureDefinition({ type: base, profile }, { enabled: Boolean(elementPath) });
   const element = elementPath && sd ? findElement(sd, elementPath) : undefined;
   const targetsRange = element?.type?.some((t) => RANGE_DATE_TYPES.has(t.code)) ?? false;
-  const datePrefixes = datePrefixOptions(targetsRange);
+  const datePrefixes = datePrefixOptions(targetsRange, spec?.comparator);
 
   // External clears (form Clear, AI replacing criteria) empty `value`
   // without going through commit — drop the parked prefix with it so it
