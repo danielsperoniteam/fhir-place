@@ -80,4 +80,42 @@ test.describe("Generic ResourceCreatePage", () => {
       page.getByTestId("resource-editor").getByRole("button", { name: /create condition/i }),
     ).toBeVisible();
   });
+
+  test("Patient/new: Save is disabled when all identity fields are empty", async ({ page }) => {
+    await page.goto("/fhir-ui/Patient/new");
+
+    const editor = page.getByTestId("resource-editor");
+    await expect(editor).toBeVisible();
+
+    // With no name or identifier filled in, the Save button must be disabled.
+    const saveButton = page.getByTestId("resource-editor-save");
+    await expect(saveButton).toBeDisabled();
+
+    await page.screenshot({
+      path: "../../screenshots/pr-issue-588-patient-new-with-all-fields-empty-silently-creates/patient-new-save-disabled.png",
+      fullPage: true,
+    });
+  });
+
+  test("Patient/new: Save is enabled once a name field is filled", async ({ page }) => {
+    await page.goto("/fhir-ui/Patient/new");
+
+    const editor = page.getByTestId("resource-editor");
+    await expect(editor).toBeVisible();
+
+    // Add a name row, then type a given name — matches how the unit test
+    // exercises this path in ResourceEditor.test.tsx. The HumanName inputs
+    // are plain <input> elements without an explicit type attribute.
+    await editor.getByRole("button", { name: /add name/i }).click();
+    // The first textbox in the name block is "Given (comma-separated)".
+    await editor.getByRole("textbox").first().fill("Jane");
+
+    const saveButton = page.getByTestId("resource-editor-save");
+    await expect(saveButton).not.toBeDisabled();
+
+    await page.screenshot({
+      path: "../../screenshots/pr-issue-588-patient-new-with-all-fields-empty-silently-creates/patient-new-save-enabled.png",
+      fullPage: true,
+    });
+  });
 });
