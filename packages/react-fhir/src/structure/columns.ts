@@ -68,6 +68,13 @@ export function summaryColumnsFromStructureDefinition(
  * This prevents the Patient column picker from showing both "Deceased" (from
  * `deceasedBoolean`) and a second "Deceased" entry (from SD-derived
  * `deceased[x]`).
+ *
+ * A second pass deduplicates by human label. When a parent path (e.g.
+ * `basedOn`) and a child path (e.g. `basedOn.reference`) carry the same label
+ * after label resolution, the parent is suppressed — the child path is more
+ * specific and the SD top-level entry is redundant. This prevents unconfigured
+ * resources like Communication from showing duplicate "Based On", "Part Of",
+ * and "Recipient" checkboxes in the column picker.
  */
 export function mergeFhirPathColumns(
   preferred: FhirPathColumnInput[],
@@ -76,7 +83,7 @@ export function mergeFhirPathColumns(
   const preferredPaths = new Set(preferred.map((c) => c.path));
 
   const seen = new Set<string>();
-  const out: FhirPathColumn[] = [];
+  const raw: FhirPathColumn[] = [];
 
   for (const column of [...preferred, ...fallback]) {
     if (seen.has(column.path)) continue;
@@ -99,10 +106,23 @@ export function mergeFhirPathColumns(
     }
 
     seen.add(column.path);
-    out.push({
+    raw.push({
       path: column.path,
       label: column.label ?? labelFromFhirPath(column.path),
     });
   }
-  return out;
+
+  // Suppress parent paths whose label is already covered by a child path in
+  // the same list. Group by label; when a label maps to both a short path and
+  // a longer child path (e.g. `basedOn` and `basedOn.reference`), keep only
+  // the longest (most specific) path and discard the parent.
+  const labelToLongest = new Map<string, string>();
+  for (const { path, label } of raw) {
+    const current = labelToLongest.get(label);
+    if (current === undefined || path.length > current.length) {
+      labelToLongest.set(label, path);
+    }
+  }
+
+  return raw.filter(({ path, label }) => labelToLongest.get(label) === path);
 }
