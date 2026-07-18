@@ -151,11 +151,12 @@ subscription.
 | Label vocab changes on main | `push: main` (paths) | `.github/workflows/sync-labels.yml` | No AI | Pure script. |
 | Workflow failure | `workflow_run: failure` (GHA) | `.github/workflows/on-failure-issue.yml` | No AI | Files an issue on red runs. |
 
-**Cost-shifting summary.** Every "Local Claude" row above runs on the Max
-subscription through launchd or `poll-events.sh`. Check each workflow before
-assuming a hosted twin is live; conflict resolution and PR fixup jobs are
-explicitly disabled in Actions. Deterministic GitHub workflows do not spend
-model tokens.
+**Cost-shifting summary.** Local agent rows run through launchd or
+`poll-events.sh`. `AGENT_PROVIDER=claude` uses the Claude Max subscription,
+`AGENT_PROVIDER=codex` uses the local Codex CLI, and `AGENT_PROVIDER=random`
+selects between installed providers. Check each workflow before assuming a
+hosted twin is live; conflict resolution and PR fixup jobs are explicitly
+disabled in Actions. Deterministic GitHub workflows do not spend model tokens.
 
 ## SDLC feedback-loop closes (this PR)
 
