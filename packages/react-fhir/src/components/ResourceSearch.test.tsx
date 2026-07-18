@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { CapabilityStatement } from "fhir/r4";
 import { http, HttpResponse } from "msw";
@@ -413,6 +413,86 @@ describe("ResourceSearch", () => {
     // no `_id` criterion at all.
     await user.click(screen.getByRole("button", { name: /^search$/i }));
     expect(onSubmit).toHaveBeenLastCalledWith({});
+  });
+
+  it("preserves a hydrated Identifier-only modifier until metadata confirms it", async () => {
+    // Race regression (#732 follow-up): on the first render `element` is
+    // undefined while the StructureDefinition resolves, so the menu transiently
+    // omits `:of-type`. Clearing then would erase a valid hydrated
+    // `identifier:of-type=…` before the SD can confirm Patient.identifier is
+    // Identifier-backed. The criterion must survive the load window.
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialParams={{ "identifier:of-type": "http://sys|code|value" }}
+        initialVisible={8}
+      />,
+    );
+    // Once the bundled Patient SD resolves, :of-type is offered (not stripped).
+    await waitFor(() => {
+      const opts = Array.from(
+        (screen.getByLabelText("identifier modifier") as HTMLSelectElement).options,
+      ).map((o) => o.value);
+      expect(opts).toContain("of-type");
+    });
+    // …and the modifier + value were never cleared mid-load, so they submit.
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      "identifier:of-type": "http://sys|code|value",
+    });
+  });
+
+  it("keeps a hydrated sa/eb date prefix when target metadata never resolves", async () => {
+    // Marco #771 blocker: an errored SearchParameter/StructureDefinition must
+    // not be read as proof the date target is scalar — stripping sa/eb then
+    // would drop a valid boundary comparator. `Foo` has no bundled SD and the
+    // metadata endpoints error, so resolution never succeeds and the prefix
+    // must survive to submit (under the old `!isLoading` gate the errored
+    // query counted as settled and the prefix was wrongly stripped).
+    server.use(
+      http.get(`${BASE}/StructureDefinition/:id`, () => HttpResponse.error()),
+      http.get(`${BASE}/StructureDefinition`, () => HttpResponse.error()),
+      http.get(`${BASE}/SearchParameter`, () => HttpResponse.error()),
+    );
+    const fooCap: CapabilityStatement = {
+      resourceType: "CapabilityStatement",
+      status: "active",
+      date: "2024-01-01",
+      kind: "instance",
+      fhirVersion: "4.0.1",
+      format: ["json"],
+      rest: [
+        {
+          mode: "server",
+          resource: [{ type: "Foo", searchParam: [{ name: "date", type: "date" }] }],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Foo"
+        capabilityStatement={fooCap}
+        onSubmit={onSubmit}
+        initialParams={{ date: "sa2026-01-01" }}
+        initialVisible={8}
+      />,
+    );
+    // The date part paints immediately; give the metadata queries time to
+    // settle (to error) so a mis-gated strip would have a chance to fire.
+    await waitFor(() =>
+      expect(screen.getByLabelText("date")).toHaveValue("2026-01-01"),
+    );
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({ date: "sa2026-01-01" });
   });
 
   it("wipes a stale value when the modifier grammar changes", async () => {

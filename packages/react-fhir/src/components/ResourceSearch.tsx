@@ -512,13 +512,23 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   // Try the canonical SearchParameter first (covers custom IG params and the
   // few core params whose `expression` doesn't match the kebab→camel rule).
   // Falls through silently when the server doesn't expose SearchParameter.
-  const { data: spec } = useSearchParameter(base, param.name ?? "");
+  const specQuery = useSearchParameter(base, param.name ?? "");
+  const spec = specQuery.data;
   const elementPath = elementPathForSearchParam(param, base, spec ?? undefined);
-  const { data: sd } = useStructureDefinition({ type: base, profile }, { enabled: Boolean(elementPath) });
+  const sdQuery = useStructureDefinition({ type: base, profile }, { enabled: Boolean(elementPath) });
+  const sd = sdQuery.data;
   const element = elementPath && sd ? findElement(sd, elementPath) : undefined;
   const { valueSet: valueSetUrl } = bindingFor(element);
   const { data: vs, isLoading } = useValueSet(valueSetUrl);
   const codes = codesFromValueSet(vs);
+  // The element-based narrowing (`:of-type` needs Identifier backing, the
+  // coded-only modifiers need a coded target) is only trustworthy once the
+  // SearchParameter *and* StructureDefinition have **successfully** resolved.
+  // An errored or still-loading query must not be read as proof of invalidity —
+  // that would wipe a valid hydrated modifier on a transient failure. A param
+  // with no element path (`_id`, …) has no SD to wait on (Codex + Marco #771).
+  const elementMetadataResolved =
+    specQuery.isSuccess && (!elementPath || sdQuery.isSuccess);
 
   // FHIR R4 limits `:of-type` to token params backed by an Identifier — drop
   // it for code/CodeableConcept tokens (gender, status, _id, …). When the
@@ -551,11 +561,26 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   // criterion — the exact invalid query the narrowing exists to prevent. Clear
   // it; `onModifier("")` → `setModifier` also drops the incompatible value on
   // the grammar change (Codex review on #732).
+  //
+  // Two tiers of "invalid" (Codex + Marco review on #771):
+  //  - name-known: `_id` can never take a subsumption / ValueSet / of-type
+  //    modifier, no metadata required → clear immediately (don't defer past the
+  //    load window and let an unnormalized `_id:in` submit).
+  //  - element-based: `:of-type` / coded-only exclusions depend on the resolved
+  //    element, so only clear once that metadata has *successfully* resolved —
+  //    otherwise a valid hydrated `identifier:of-type=…` is wiped mid-load or on
+  //    a transient fetch error.
+  const activeModifier = modifier ?? "";
+  const nameConfirmedInvalid =
+    param.name === "_id" &&
+    (activeModifier === "of-type" || CODED_ONLY_TOKEN_MODIFIERS.has(activeModifier));
   const modifierUnavailable =
-    Boolean(modifier) && !tokenModifiers.includes(modifier as string);
+    Boolean(modifier) && !tokenModifiers.includes(activeModifier);
   useEffect(() => {
-    if (modifierUnavailable) onModifier?.("");
-  }, [modifierUnavailable, onModifier]);
+    if (nameConfirmedInvalid || (modifierUnavailable && elementMetadataResolved)) {
+      onModifier?.("");
+    }
+  }, [nameConfirmedInvalid, modifierUnavailable, elementMetadataResolved, onModifier]);
 
   const wrap = (children: ReactNode): ReactNode =>
     fieldWrapper(children, param, base, modifier, onModifier, tokenModifiers);
@@ -815,12 +840,20 @@ function DateSearchField({ base, param, value, onChange, profile, modifier, onMo
   // server can't satisfy, so offer them only when we can confirm range backing.
   // Conservative when the element can't be resolved — mirrors the token gates
   // (Codex review on #732).
-  const { data: spec } = useSearchParameter(base, param.name ?? "");
+  const specQuery = useSearchParameter(base, param.name ?? "");
+  const spec = specQuery.data;
   const elementPath = elementPathForSearchParam(param, base, spec ?? undefined);
-  const { data: sd } = useStructureDefinition({ type: base, profile }, { enabled: Boolean(elementPath) });
+  const sdQuery = useStructureDefinition({ type: base, profile }, { enabled: Boolean(elementPath) });
+  const sd = sdQuery.data;
   const element = elementPath && sd ? findElement(sd, elementPath) : undefined;
   const targetsRange = element?.type?.some((t) => RANGE_DATE_TYPES.has(t.code)) ?? false;
   const datePrefixes = datePrefixOptions(targetsRange, spec?.comparator);
+  // Range/comparator backing is only *proven* once these queries succeed. An
+  // errored or still-loading query must not be read as "scalar" — that would
+  // strip a valid `sa`/`eb` boundary. A param with no element path has no SD to
+  // wait on (Marco #771).
+  const metadataSettled =
+    specQuery.isSuccess && (!elementPath || sdQuery.isSuccess);
 
   // External clears (form Clear, AI replacing criteria) empty `value`
   // without going through commit — drop the parked prefix with it so it
@@ -833,11 +866,14 @@ function DateSearchField({ base, param, value, onChange, profile, modifier, onMo
 
   // A prefix hydrated from the URL (`birthdate=sa2000-01-01`) that this target
   // doesn't offer would leave the select blank while the value still submits
-  // it — strip it back to a plain date so the query stays valid.
+  // it — strip it back to a plain date so the query stays valid. Wait for
+  // `metadataSettled`: a Period-backed param (`Encounter?date=sa…`) shows the
+  // scalar list until its SD resolves, and stripping early would drop a valid
+  // boundary prefix before we can confirm the target is a range (Codex #732).
   const prefixOffered = datePrefixes.some((p) => p.value === prefix);
   useEffect(() => {
-    if (prefix && !prefixOffered && date) onChange(date);
-  }, [prefix, prefixOffered, date, onChange]);
+    if (metadataSettled && prefix && !prefixOffered && date) onChange(date);
+  }, [metadataSettled, prefix, prefixOffered, date, onChange]);
 
   const commit = (nextPrefix: string, nextDate: string) => {
     setPendingPrefix(nextPrefix as DatePrefix | "");
@@ -903,8 +939,11 @@ function PrefixedValueField({
   // advertised, intersect the menu with it so the form can't offer a comparator
   // (e.g. `ap`) the server would reject. Absent → keep the full numeric set
   // (Codex review on #732).
-  const { data: spec } = useSearchParameter(base, param.name ?? "");
-  const numericPrefixes = numericPrefixOptions(spec?.comparator);
+  const specQuery = useSearchParameter(base, param.name ?? "");
+  const numericPrefixes = numericPrefixOptions(specQuery.data?.comparator);
+  // Advertised comparators aren't proven until the SearchParameter query
+  // succeeds; don't strip a hydrated prefix while it's loading or on error.
+  const metadataSettled = specQuery.isSuccess;
 
   // See DateSearchField: external clears also drop the parked prefix.
   useEffect(() => {
@@ -912,11 +951,12 @@ function PrefixedValueField({
   }, [value]);
 
   // See DateSearchField: a hydrated prefix the server doesn't advertise is
-  // stripped back to a bare value so the query stays valid.
+  // stripped back to a bare value so the query stays valid — but only once the
+  // comparator metadata has settled, so a valid prefix isn't dropped mid-load.
   const prefixOffered = numericPrefixes.some((p) => p.value === prefix);
   useEffect(() => {
-    if (prefix && !prefixOffered && rest) onChange(rest);
-  }, [prefix, prefixOffered, rest, onChange]);
+    if (metadataSettled && prefix && !prefixOffered && rest) onChange(rest);
+  }, [metadataSettled, prefix, prefixOffered, rest, onChange]);
 
   const commit = (nextPrefix: string, nextValue: string) => {
     setPendingPrefix(nextPrefix as DatePrefix | "");
