@@ -254,4 +254,35 @@ test.describe("patient field-picker options", () => {
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
   });
+
+  // Regression for #615: SD-derived choice[x] paths must not produce a second
+  // entry in the column picker when the curated list already covers the concrete
+  // variants (deceasedBoolean/deceasedDateTime and
+  // multipleBirthBoolean/multipleBirthInteger).
+  test("Column picker shows no duplicate Deceased or Multiple Birth labels", async ({
+    page,
+  }) => {
+    await resetPrefs(page);
+    await page.goto("/Patient");
+    await page.getByTestId("layout-table").click();
+    await expect(page.getByTestId("resource-table")).toBeVisible();
+
+    await page.getByRole("button", { name: /columns/i }).click();
+    const panel = page.getByRole("group", { name: /choose visible columns/i });
+    const search = panel.getByRole("searchbox");
+
+    // Filter down to "deceased" entries. Only "Deceased" (deceasedBoolean)
+    // and "Deceased on" (deceasedDateTime) should be present — not a second
+    // "Deceased" from the abstract deceased[x] path.
+    await search.fill("deceased");
+    const deceasedCheckboxes = panel.getByRole("checkbox", { name: /deceased/i });
+    await expect(deceasedCheckboxes).toHaveCount(2);
+    // The abstract path must not appear as a label.
+    await expect(panel.getByRole("checkbox", { name: /^deceased$/i })).toHaveCount(1);
+
+    // Filter for "multiple birth". Only the two concrete variants should appear.
+    await search.fill("multiple birth");
+    const multipleBirthCheckboxes = panel.getByRole("checkbox", { name: /multiple birth/i });
+    await expect(multipleBirthCheckboxes).toHaveCount(1);
+  });
 });
