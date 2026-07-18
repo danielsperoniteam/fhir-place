@@ -7,7 +7,7 @@ Operational tooling for the fhir-place repo. Most things you touch from here run
 | Path | What's there |
 |---|---|
 | [`local/README.md`](local/README.md) | **The canonical doc.** Every local driver, one-time setup, launchd install, smoke test, pause switch, schedule calendar, collision analysis, GHA-vs-local tradeoffs, SDLC transition table. Start here. |
-| `local/*.sh` | The drivers themselves. Cron-fired (`engineer-dispatch`, `daily-pm-triage`, `daily-qa-pass`, `daily-doc-sync`, `hourly-uat-validation`, `pr-fixup-dispatch`) and event-fired (`event-issue-review`, `event-pr-review`, `event-dispatch-engineer`, `event-resolve-conflicts`, `event-address-comments`). |
+| `local/*.sh` | The drivers themselves. Cron-fired (`engineer-dispatch`, `daily-pm-triage`, `daily-qa-pass`, `daily-doc-sync`, `pr-fixup-dispatch`) and event-fired (`event-issue-review`, `event-pr-review`, `event-dispatch-engineer`, `event-resolve-conflicts`, `event-address-comments`). |
 | `launchd/com.fhir-place.*.plist` | macOS launchd plists for each cron driver plus the always-on `poll-events` daemon. Install pattern is in `local/README.md` § One-time setup. |
 | `run-prompt-locally.sh` | Shared wrapper used by every driver. Handles lock, log, pause file, dirty-tree refusal, and `--add-dir` for worktree parent. Never sets `ANTHROPIC_API_KEY` so `claude` falls back to OAuth. |
 | `poll-events.sh` | Long-lived daemon (60s loop) that watches GitHub for new issues, non-draft PRs, and slash commands (`/dispatch-engineer`, `/resolve-conflicts`, `/address-comments`), then fires the matching `event-*.sh` driver. State lives at `~/.fhir-place-state/poll-events.json`. |

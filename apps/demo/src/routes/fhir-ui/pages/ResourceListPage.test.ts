@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { labelFromPath, labelsForPaths, paramsFromUrl } from "./ResourceListPage.js";
+import {
+  labelFromPath,
+  labelsForPaths,
+  paramsFromUrl,
+  submitFilterEntries,
+} from "./ResourceListPage.js";
 
 // Regression for the #145 review finding: repeated FHIR params
 // (identifier=a&identifier=b — AND semantics) must survive URL→search
@@ -26,6 +31,67 @@ describe("paramsFromUrl", () => {
   it("lets a URL _count override the seeded page size instead of arraying it", () => {
     const url = new URLSearchParams("_count=50&gender=female");
     expect(paramsFromUrl(url, 20)).toEqual({ _count: "50", gender: "female" });
+  });
+
+  it("strips modifier/chain variants of the compartment patient key too", () => {
+    // Regression for the #732 review finding: a modifier'd `patient` key must
+    // be treated as compartment-owned, not passed through to AND against the
+    // re-injected `patient=<id>`.
+    const url = new URLSearchParams(
+      "patient:missing=true&patient.name=smith&gender=female",
+    );
+    expect(paramsFromUrl(url, 10, "ada")).toEqual({
+      _count: 10,
+      gender: "female",
+      patient: "ada",
+    });
+  });
+
+  it("keeps patient filter variants outside a compartment view", () => {
+    // Regression for the #732 P1 follow-up: with no compartment (`patientId`
+    // undefined), `patient` and its modifier/chain variants are ordinary user
+    // filters and must survive — stripping them would run an unfiltered query
+    // while the criterion still shows in the URL.
+    const url = new URLSearchParams(
+      "patient:identifier=http://sys|123&patient=Patient/9&gender=male",
+    );
+    expect(paramsFromUrl(url, 20)).toEqual({
+      _count: 20,
+      "patient:identifier": "http://sys|123",
+      patient: "Patient/9",
+      gender: "male",
+    });
+  });
+});
+
+// Regression for the #732 review finding: in a Patient compartment, the search
+// form must not be able to submit a modifier'd `patient` key — it would slip
+// past the exact-key guard and AND against the re-injected compartment id,
+// producing a self-contradicting (empty) query.
+describe("submitFilterEntries", () => {
+  it("drops a modifier'd patient key and keeps the compartment id single", () => {
+    const entries = submitFilterEntries(
+      { "patient:missing": "true", name: "smith" },
+      "ada",
+    );
+    expect(entries).toContainEqual(["patient", "ada"]);
+    expect(entries).toContainEqual(["name", "smith"]);
+    expect(entries.filter(([k]) => k.startsWith("patient")).length).toBe(1);
+    expect(entries.some(([k]) => k === "patient:missing")).toBe(false);
+  });
+
+  it("emits repeated AND criteria as one entry per array value", () => {
+    const entries = submitFilterEntries({ identifier: ["a", "b"] });
+    expect(entries).toEqual([
+      ["identifier", "a"],
+      ["identifier", "b"],
+    ]);
+  });
+
+  it("keeps a form-supplied patient value outside a compartment view", () => {
+    // No patientId (non-compartment list) — `patient` is an ordinary filter.
+    const entries = submitFilterEntries({ patient: "Patient/123" });
+    expect(entries).toEqual([["patient", "Patient/123"]]);
   });
 });
 
