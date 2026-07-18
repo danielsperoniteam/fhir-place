@@ -415,6 +415,37 @@ describe("ResourceSearch", () => {
     expect(onSubmit).toHaveBeenLastCalledWith({});
   });
 
+  it("preserves a hydrated Identifier-only modifier until metadata confirms it", async () => {
+    // Race regression (#732 follow-up): on the first render `element` is
+    // undefined while the StructureDefinition resolves, so the menu transiently
+    // omits `:of-type`. Clearing then would erase a valid hydrated
+    // `identifier:of-type=…` before the SD can confirm Patient.identifier is
+    // Identifier-backed. The criterion must survive the load window.
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <ResourceSearch
+        resourceType="Patient"
+        capabilityStatement={cap}
+        onSubmit={onSubmit}
+        initialParams={{ "identifier:of-type": "http://sys|code|value" }}
+        initialVisible={8}
+      />,
+    );
+    // Once the bundled Patient SD resolves, :of-type is offered (not stripped).
+    await waitFor(() => {
+      const opts = Array.from(
+        (screen.getByLabelText("identifier modifier") as HTMLSelectElement).options,
+      ).map((o) => o.value);
+      expect(opts).toContain("of-type");
+    });
+    // …and the modifier + value were never cleared mid-load, so they submit.
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      "identifier:of-type": "http://sys|code|value",
+    });
+  });
+
   it("wipes a stale value when the modifier grammar changes", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
