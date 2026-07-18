@@ -235,11 +235,10 @@ test.describe("patient field-picker options", () => {
     await search.fill("deceased");
     const deceasedCheckboxes = panel.getByRole("checkbox", { name: /deceased/i });
     await expect(deceasedCheckboxes).toHaveCount(2);
-    // The abstract path must not appear as a bare "Deceased" label.
+    // The abstract path must not appear as a label.
     await expect(panel.getByRole("checkbox", { name: /^deceased$/i })).toHaveCount(1);
 
-    // Filter for "multiple birth". Only the single concrete "Multiple birth"
-    // entry should appear — not a second one from the abstract multipleBirth[x].
+    // Filter for "multiple birth". Only the two concrete variants should appear.
     await search.fill("multiple birth");
     const multipleBirthCheckboxes = panel.getByRole("checkbox", { name: /multiple birth/i });
     await expect(multipleBirthCheckboxes).toHaveCount(1);

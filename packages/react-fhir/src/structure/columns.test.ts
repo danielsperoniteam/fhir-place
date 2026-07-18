@@ -123,6 +123,7 @@ describe("FHIR StructureDefinition column helpers", () => {
     });
 
     it("still surfaces choice[x] paths when no concrete variant is in preferred", () => {
+      // For unconfigured resources, the abstract path should still appear.
       const preferred: Array<{ path: string; label?: string }> = [];
       const fallback = [
         { path: "onset[x]", label: "Onset" },
@@ -134,6 +135,8 @@ describe("FHIR StructureDefinition column helpers", () => {
     });
 
     it("does not suppress choice[x] when only a different-stem concrete variant exists", () => {
+      // "value[x]" should not be suppressed just because "valueQuantity" is
+      // somewhere unrelated — only the stem must match.
       const preferred = [
         { path: "status", label: "Status" },
         { path: "code", label: "Code" },
@@ -144,6 +147,74 @@ describe("FHIR StructureDefinition column helpers", () => {
       const result = mergeFhirPathColumns(preferred, fallback);
       const paths = result.map((c) => c.path);
       expect(paths).toContain("value[x]");
+    });
+  });
+
+  describe("mergeFhirPathColumns — parent/child label deduplication", () => {
+    it("suppresses parent path when a child path carries the same label (Communication fixture)", () => {
+      // For unconfigured resources, topLevelColumnsFromStructureDefinition
+      // contributes `basedOn`, `partOf`, `recipient` while collectPaths
+      // (row walker) contributes `basedOn.reference`, `partOf.reference`,
+      // `recipient.reference`. The caller applies labelFromPath, which walks
+      // back past structural leaves so both produce the same label, e.g.
+      // "Based On". The parent entry is the redundant one.
+      const sdColumns = [
+        { path: "basedOn", label: "Based On" },
+        { path: "partOf", label: "Part Of" },
+        { path: "recipient", label: "Recipient" },
+        { path: "status", label: "Status" },
+      ];
+      const rowColumns = [
+        { path: "basedOn.reference", label: "Based On" },
+        { path: "partOf.reference", label: "Part Of" },
+        { path: "recipient.reference", label: "Recipient" },
+        { path: "status", label: "Status" },
+      ];
+      const result = mergeFhirPathColumns(sdColumns, rowColumns);
+      const paths = result.map((c) => c.path);
+
+      // Child paths survive
+      expect(paths).toContain("basedOn.reference");
+      expect(paths).toContain("partOf.reference");
+      expect(paths).toContain("recipient.reference");
+
+      // Parent paths are suppressed (their label is covered by the child)
+      expect(paths).not.toContain("basedOn");
+      expect(paths).not.toContain("partOf");
+      expect(paths).not.toContain("recipient");
+
+      // Each label appears exactly once
+      const labels = result.map((c) => c.label);
+      expect(labels.filter((l) => l === "Based On")).toHaveLength(1);
+      expect(labels.filter((l) => l === "Part Of")).toHaveLength(1);
+      expect(labels.filter((l) => l === "Recipient")).toHaveLength(1);
+
+      // Unambiguous paths are preserved
+      expect(paths).toContain("status");
+    });
+
+    it("keeps a lone parent path when no child with the same label exists", () => {
+      const preferred = [
+        { path: "subject", label: "Subject" },
+        { path: "encounter", label: "Encounter" },
+      ];
+      const fallback: Array<{ path: string; label?: string }> = [];
+      const result = mergeFhirPathColumns(preferred, fallback);
+      const paths = result.map((c) => c.path);
+      expect(paths).toContain("subject");
+      expect(paths).toContain("encounter");
+    });
+
+    it("keeps child when two children share the same parent label but differ in specificity", () => {
+      // Only the longest path survives when multiple children share a label.
+      const preferred = [
+        { path: "code", label: "Code" },
+        { path: "code.coding.code", label: "Code" },
+      ];
+      const result = mergeFhirPathColumns(preferred, []);
+      const paths = result.map((c) => c.path);
+      expect(paths).not.toContain("code");
+      expect(paths).toContain("code.coding.code");
     });
   });
 });
