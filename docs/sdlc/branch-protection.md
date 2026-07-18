@@ -1,84 +1,54 @@
 # Branch protection
 
-Both `main` and `staging` are protected by GitHub repository rulesets.
-The settings mirror each other — the same quality gate applies to both
-branches so that code hitting staging has already passed CI.
+## Main
 
-## Why a merge queue on staging
+`main` is the only integration branch and production source of truth.
 
-Without a merge queue, approving two PRs in quick succession leads to
-the second one going stale (its CI ran against the old base). A human
-would have to come back, click "Update branch", wait for CI again, then
-merge. The merge queue eliminates this: approve multiple PRs, they queue
-up, GitHub rebases each against the latest staging head, runs CI, and
-merges sequentially — no human round-trips.
+| Rule | Setting |
+| --- | --- |
+| Deletion | blocked |
+| Force push | blocked |
+| Pull request | required |
+| Approval | one CODEOWNER approval; stale approvals are not dismissed on push |
+| Status checks | `test` and `e2e`; strict up-to-date checking is currently off |
+| Merge queue | enabled, squash, all green, up to five entries |
 
-## Ruleset: Protect staging
+Only Daniel is a bypass actor. Automation and agents must not use a bypass to
+merge or push code to main.
 
-| Rule | Setting | Rationale |
-|------|---------|-----------|
-| Deletion | blocked | Prevent accidental branch deletion |
-| Force push | blocked | Preserve history for audit trail |
-| Require PR | 1 approval, dismiss stale reviews on push | Human code review gate |
-| Required status checks | `test`, `e2e` (strict) | CI must pass against latest base |
-| Merge queue | squash, all-green, 5 max entries, 5 min wait | Batch without conflicts |
+## Staging
 
-**Merge method:** squash — keeps staging history clean and one commit per
-feature for easy UAT tracing.
+Staging is a disposable deployment artifact, not a review base, integration
+branch, promotion source, or audit log.
 
-**Strict status checks:** PRs must be up-to-date with staging before
-merge. The merge queue handles this automatically.
+The designated preview workflow is its only writer. It reconstructs staging
+from main plus zero or one selected PR and pushes with
+`--force-with-lease`. Humans and general-purpose agents do not push to it.
 
-## Ruleset: Protect main
+As of 2026-07-16, GitHub reports no repository ruleset targeting staging.
+Workflow ownership is therefore enforced by repository instructions and the
+single-writer scan, not by GitHub branch protection. If a staging ruleset is
+added, it must permit the GitHub Actions identity used by
+`preview-pr-on-staging.yml` to force-with-lease while blocking normal direct
+pushes and deletion. Staging history is intentionally not preserved.
 
-| Rule | Setting | Rationale |
-|------|---------|-----------|
-| Deletion | blocked | Never delete main |
-| Force push | blocked | History is sacred |
-| Require PR | 1 approval, code owner review, dismiss stale | Only a code owner can approve |
-| Required status checks | `test`, `e2e` (strict) | Same CI gate as staging |
-| Merge queue | squash, all-green, 5 max entries, 5 min wait | Batch promotions cleanly |
+## PR rules
 
-**Enforcement:** active (enabled 2026-05-09).
+- Every PR targets main.
+- Every branch starts from current main.
+- Conflict resolution updates the PR branch against main.
+- Staging is never merged into main.
+- A hosted preview is evidence attached to the PR, not a separate approval or
+  merge path.
 
-## Bypass actors
+## Verifying the live rulesets
 
-**Staging:** The admin repository role (which includes GitHub Actions
-workflows running with `contents: write`) is configured as a bypass
-actor. This allows the `promote-staging.yml` and `sync-staging.yml`
-workflows to push directly to `staging` without opening a separate PR.
-Human contributors still go through the PR + merge queue flow.
+The settings in GitHub are authoritative. Before changing this document or
+the preview workflow, inspect the live rulesets:
 
-**Main:** Only `@danielsperoni` (user ID `7095019`) is a bypass actor.
-This means only Daniel can merge PRs to main — whether that's a
-promotion PR from staging or a fast-track direct-to-main PR. Code owner
-review (via CODEOWNERS) is also required, ensuring Daniel must approve
-before merging.
+```bash
+gh api repos/danielsperoniteam/fhir-place/rulesets/15901122
+gh api repos/danielsperoniteam/fhir-place/rulesets --paginate
+```
 
-## Skipping staging (fast-track to main)
-
-For non-user-visible changes (docs, CI workflows, markdown-only) you
-can merge directly to `main` by opening a PR with `base: main`. When
-this happens, `sync-staging.yml` fires on the push to `main` and
-automatically merges main back into staging so it stays current.
-
-Fast-track is appropriate when:
-- All changes are `*.md`, `.github/workflows/`, or other non-deployed files
-- The change doesn't need UAT validation on the staging URL
-- You're confident the change won't conflict with in-flight staging work
-
-If a PR targeting `main` has merge conflicts, the `/resolve-conflicts`
-workflow can resolve the PR head against `main` without pushing directly to
-`main`. Bot-authored PRs blocked by conflicts are also eligible for
-`pr-fixup-dispatch`, which dispatches the same resolver automatically. The
-resolver makes judgment calls for hand-authored conflicts and escalates to
-`@danielsperoni` only for binary, generated, semantically ambiguous, or
-product-decision conflicts.
-
-## How to modify these rules
-
-Rulesets are managed via the GitHub API or the repo Settings > Rules UI:
-- Staging: `gh api repos/danielsperoniteam/fhir-place/rulesets/16171731`
-- Main: `gh api repos/danielsperoniteam/fhir-place/rulesets/15901122`
-
-Changes to branch protection are SDLC changes and require human review.
+Branch-protection changes are SDLC changes and require human review.

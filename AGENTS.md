@@ -82,31 +82,26 @@ When asked to do a QA pass on the demo app:
    URL/route where the defect occurs.
 5. Do not fix bugs during the same QA pass — file first, fix in a separate PR.
 
-## Staging-first deploys
+## Branching and validation
 
-- Branch off `origin/main` (so the PR diff against main is clean —
-  no in-flight work from other tickets).
-- Open every PR with `base: main`. Then **promote your branch to
-  `staging` yourself** so UAT can run *before* the human merges to main:
-  ```bash
-  git fetch origin staging
-  git checkout -B staging-promote origin/staging
-  git merge --no-ff --no-edit bot/issue-<N>-<slug>
-  git push origin staging-promote:staging
-  ```
-  The push to `staging` must be fast-forward or a no-ff merge commit —
-  never `--force`. If the merge conflicts, abort, leave staging alone,
-  and note on the PR that staging promotion needs a human.
-- Every PR body must include a **UAT on live staging** section with
-  concrete steps a human or downstream agent can run against
-  `https://danielsperoniteam.github.io/fhir-place/staging/` once your
-  staging push lands and Pages redeploys. If you cannot articulate
-  those steps, the change is not ready.
-- The Pages workflow rebuilds both branches on every push; staging's
-  build going green is part of "done."
+- Start every work branch from the latest `origin/main`.
+- Push only to the assigned work branch. Open every PR with `base: main`.
+- Use `origin/main...HEAD` for secret scans, scope checks, and PR diff review.
+- CI green plus CODEOWNER approval is the normal merge gate.
+- Every user-visible change must add or update Playwright coverage and
+  include screenshots.
+- Do not manually promote a branch to staging. Staging is an ephemeral
+  preview artifact owned by automation and contains `main` plus at most one
+  explicitly selected PR.
+- If a reviewer requests hosted validation, use the staging preview workflow
+  and record the deployed URL and result in the PR.
+- Resolve merge conflicts on the PR branch against `main`. Never create
+  staging-only conflict-resolution commits.
 
 ## Safety rules (see docs/decisions/0003-agent-safety-rules.md)
 
 - Small, issue-scoped changes only.
-- Never delete production data, modify secrets, or force-push `main` or `staging`.
+- Never delete production data, modify secrets, or force-push `main`.
+- Agents never push directly to `staging`; only the designated preview
+  workflow may reset that deploy artifact with `--force-with-lease`.
 - All code changes go through a PR; do not merge without human review.

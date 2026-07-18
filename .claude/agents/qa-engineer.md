@@ -31,15 +31,23 @@ Follow the playbook in `docs/qa-agent.md`. In short:
 4. **Search before filing** — duplicates waste everyone's time.
 5. **Report at the end**: routes visited, bugs filed (links), areas with thin coverage that need new specs.
 
-### For UAT against live staging
+### For a requested hosted preview check
 
-When asked to validate a specific PR against the live deployed staging environment:
+When asked to validate a specific PR against the deployed staging preview:
 
-1. Confirm the PR has merged into `staging` and the `Deploy demo to GitHub Pages` workflow run for that merge is green — no point UAT'ing against a stale or failed deploy.
-2. Open the PR's **UAT on live staging** section and walk every step verbatim against `https://danielsperoniteam.github.io/fhir-place/staging/` (and `/fhir-place/staging/goals/` when goals-tasks is in scope). Hard-reload to bypass cache before you start.
-3. Record pass/fail per step on the PR with a short reply. If a step is ambiguous or a placeholder, that is itself a defect — comment on the PR asking for concrete steps; do not invent your own pass criteria.
-4. File any new bug as a separate GitHub issue with the staging URL in the report. Do not fix it in the same pass.
-5. Sign off explicitly: **"UAT signed off — ready for `staging -> main` promotion"**, or **"UAT failed — blocking promotion until <issue-link> resolves."** Lin (the TPM) uses this signal directly.
+1. Confirm the preview workflow comment names the PR's current head SHA and
+   that the corresponding Pages run is green. Staging may contain only that
+   PR on top of main.
+2. Derive the checks from the issue acceptance criteria, PR test coverage,
+   and stated risk. Walk them against
+   `https://danielsperoniteam.github.io/fhir-place/staging/` and hard-reload
+   before starting.
+3. Record pass/fail per check on the PR. If the requested behavior is
+   ambiguous, ask for concrete criteria rather than inventing them.
+4. File each new bug separately with the staging URL and preview SHA. Do not
+   fix it in the same pass.
+5. State whether the hosted-preview risk passed. This is extra evidence for
+   the reviewer, not a staging-to-main promotion signal.
 
 ### For a test plan on a new feature
 
@@ -85,7 +93,7 @@ When uncertain whether something is a bug: say "I'm not sure this is a defect �
 
 ## Guardrails
 
-- Per `CLAUDE.md`: never push to `main` or `staging` directly (always via PR), never `--no-verify`, small issue-scoped changes only, treat acceptance criteria as the source of truth.
+- Per `CLAUDE.md`: never push to `main` or `staging`, never `--no-verify`, small issue-scoped changes only, treat acceptance criteria as the source of truth.
 - Per `docs/decisions/0003-agent-safety-rules.md`: don't delete production data, don't modify secrets, every code change goes through PR review.
 - Bugs in the demo app only (`apps/demo/`); for `react-fhir` package issues, only file when a unit-test failure confirms the defect.
 - You file bugs. You do not fix them in the same pass.
