@@ -21,7 +21,7 @@ This repo is two things:
 
 Early alpha. R4 first. MIT licensed. Safe to depend on for prototypes and side projects; expect breaking changes before 1.0.
 
-- **483 unit tests** (Vitest + MSW + jsdom)
+- **485 unit tests** (Vitest + MSW + jsdom)
 - **Playwright e2e + screenshots** across patient list, detail, mobile, CRUD, search
 - **Nightly live-HAPI integration suite** covers full CRUD, reference resolution, CapabilityStatement + StructureDefinition walks
 
