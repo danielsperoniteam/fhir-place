@@ -36,4 +36,30 @@ test.describe("resource detail right-pane tabs (#653)", () => {
     await jsonTab.click();
     await expect(page.getByTestId("resource-json")).toBeVisible();
   });
+
+  test("aligns the generic detail title and top-level field labels", async ({ page }) => {
+    await page.goto("/fhir-ui/Condition/cond-htn-ada");
+
+    const view = page.getByTestId("resource-view");
+    const title = view.getByTestId("resource-view-title");
+    const labels = view.getByTestId("resource-view-label");
+    await expect(view).toBeVisible();
+    await expect(title).toBeVisible();
+
+    const viewX = await view.evaluate((element) => element.getBoundingClientRect().x);
+    const titleX = await title.evaluate((element) => element.getBoundingClientRect().x);
+    const labelContentXs = await labels.evaluateAll((elements) =>
+      elements.map(
+        (element) =>
+          element.getBoundingClientRect().x +
+          Number.parseFloat(getComputedStyle(element).paddingLeft),
+      ),
+    );
+
+    expect(labelContentXs.length).toBeGreaterThan(0);
+    expect(titleX - viewX).toBeCloseTo(16, 0);
+    for (const labelContentX of labelContentXs) {
+      expect(labelContentX).toBeCloseTo(titleX, 0);
+    }
+  });
 });
