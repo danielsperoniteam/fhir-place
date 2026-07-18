@@ -56,10 +56,11 @@ Operating constraints:
   accept/reject-only backstop at the `FetchFhirClient` boundary. This
   addresses the round-7 confusion that put `confirmWrite` in the registry
   with no way to derive a plan from an opaque `execute()`.
-- **`ToolRegistry.execute` emits audit events centrally** —
-  start/success/refused/failed with `{tool, input, outcome?, error?, ts}`
-  — regardless of whether the handler calls `ctx.audit`. HIPAA §164.312(b)
-  requires every access logged; leaving that to handlers guarantees a miss.
+- **`ToolRegistry.execute` emits audit events centrally with redacted
+  payloads** — `{event, tool, inputKeys, resultShape, errorClass?, ts}`,
+  never raw `input`/`outcome`/`error`. HIPAA §164.312(b) requires the
+  access logged, not the payload; emitting raw values would make the audit
+  log itself an egress path bypassing the envelope-level redaction seam.
 - **`ToolRegistry.execute` validates every tool input against its
   `inputSchema` (JSONSchema7) before dispatch** and refuses on failure.
   Today's single-shot code only spot-checks that `resourceType` is a string and
@@ -73,10 +74,15 @@ Operating constraints:
   `https://host.example/other-service` is same-origin but a different
   application, and the FHIR bearer must not flow to it. The primitive becomes
   `sameBase(target, baseUrl)`, enforced at the request boundary in
-  `FetchFhirClient` — hard refuse or credential strip — and applied by both
-  front doors to reference resolution and the raw escape hatch alike. The path
-  check must respect segment boundaries (accept only `targetPath === basePath`
-  or `targetPath.startsWith(basePath + "/")` on normalized paths); a naive
+  `FetchFhirClient`. For **agent-driven requests, the outside-base case is a
+  hard refuse — credential-stripping is not sufficient**, because even an
+  anonymous fetch is an SSRF / exfiltration primitive (the response would land
+  in the next model turn as a `tool_result`, exposing the user's machine or
+  hosted network). Credential-stripping is only acceptable for user-initiated
+  navigation. Applied by both front doors, to reference resolution and the
+  raw escape hatches alike. The path check respects segment boundaries
+  (accept only `targetPath === basePath` or
+  `targetPath.startsWith(basePath + "/")` on normalized paths); a naive
   `startsWith` would let `/fhir-evil/collect` pass under a `/fhir` base.
 - **PHI-masking seam is envelope-level, not `Resource → Resource`.** Applied
   centrally by `ToolRegistry.execute` over every tool output — Bundles,
@@ -89,10 +95,14 @@ Operating constraints:
   `sandbox-shared` (HAPI public, SMART Health IT — writable public
   corpora we do not control): agent loop requires a per-session
   acknowledgement, since third parties may have uploaded PHI. `phi`:
-  agent loop refused (single-shot `/ask` still works — it sends only the
-  question and query plan). User-added servers default to `phi`. MCP
-  requires `--sandbox-acknowledged` on `sandbox-shared` and a future
-  `--phi-acknowledged` on `phi` (out of scope; will require BAA hosting).
+  the entire Anthropic path — agent loop **and** single-shot `/ask` —
+  is refused. Prior wording that "single-shot Ask is still safe under
+  phi" was wrong: the current `naturalLanguageToFhirQuery` sends
+  `Question: ${question}` directly to Anthropic, and a real patient
+  query contains PHI in the question itself. User-added servers default
+  to `phi`. MCP requires `--sandbox-acknowledged` on `sandbox-shared`
+  and a future `--phi-acknowledged` on `phi` (out of scope; will require
+  BAA hosting).
   Without this gate, the multi-turn loop egresses compacted resources
   to the model on every iteration and "synthetic-only" is unenforceable.
 - **MCP writes are gated by explicit flags, not by undefined hooks.**

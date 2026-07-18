@@ -239,11 +239,17 @@ class ToolRegistry {
    that make multiple hidden requests), the registry cannot derive a plan
    ahead of time; the accept/reject-only backstop at the `FetchFhirClient`
    boundary (§6 Layer B) catches each in-flight request.
-4. **Audit emission, centrally.** The registry emits `ctx.audit({event:
-   "start" | "success" | "refused" | "failed", tool, input, outcome?, error?,
-   ts})` around every call — regardless of whether the handler touches `audit`.
-   HIPAA §164.312(b) requires every access logged; leaving that to handlers
-   guarantees a miss. Handlers may still emit finer-grained events on top.
+4. **Audit emission, centrally — with redacted payloads.** The registry emits
+   `ctx.audit({event, tool, inputKeys, resultShape, errorClass?, ts})` around
+   every call — `event ∈ start | success | refused | failed`, `inputKeys` is
+   the list of JSON keys in the tool input (never their values), `resultShape`
+   is `{type, count?}` (e.g. `{type: "Bundle", count: 20}` or
+   `{type: "CompactBundle", n_series: 3}`), and `errorClass` is the class
+   name. Raw `input`, `outcome`, and `error` values are **never** emitted —
+   otherwise the audit log itself becomes an egress path that bypasses the
+   envelope-level redaction seam. HIPAA §164.312(b) requires every access
+   logged; it does not require the payload logged. Handlers may still emit
+   finer-grained events on top, but those go through `ctx.redact` first.
 
 **Model-neutral by design.** The registry deliberately does not expose a
 `toAnthropicTools()` method: that would drag `@anthropic-ai/sdk` into
@@ -305,17 +311,19 @@ It (a) drops `text`/narrative and `meta`; drops `contained` resources
 be compacted into inline summaries, or a `MedicationRequest` with
 `medicationReference.reference = "#med"` loses its only copy of the Medication
 and no `drillRef` can recover it; (b) dedups `_include`/`_revinclude` resources
-by **version-specific identity** (`entry.fullUrl` when present, otherwise
-`Type/id/_history/versionId` when the entry carries `meta.versionId`,
-falling back to `Type/id` only for unversioned entries) — using
-`entry.search.mode` to isolate the include set. Deduping by bare `Type/id`
-would collapse `Patient/123/_history/1` and `Patient/123/_history/2` into
-one entry despite different clinical data, undermining the version-aware
+by **version-specific identity**: check `meta.versionId` **first** and, if
+present, key by `Type/id/_history/versionId` — search Bundles routinely carry
+the *logical* URL as `entry.fullUrl` (e.g. `http://server/fhir/Patient/123`)
+while the actual version lives only in `resource.meta.versionId`, so
+`fullUrl`-first would collapse versions 1 and 2 into a single key. Fall back to
+`entry.fullUrl` for absolute-URL entries without a `meta.versionId`, and to
+bare `Type/id` only when neither is present. Use `entry.search.mode` to isolate
+the include set. Undermining this pattern also undermines the version-aware
 `resolve_reference` from §5.2;
 (c) aggregates Observation series **only when the Observation is
 result-bearing, the value is a comparable numeric quantity with a coded unit
 identity, and the code carries a stable coding** — key
-**`(subjectId, code.coding[0].system|code, valueQuantity.system|valueQuantity.code)`**,
+**`(subjectId, selectedCoding.system|selectedCoding.code, valueQuantity.system|valueQuantity.code)`**,
 computing `n/last/min/max/firstDate/lastDate`, where `subjectId` is normalized
 to `subject.reference` when present, otherwise
 `subject.identifier.system + "|" + subject.identifier.value` (R4 permits either
@@ -332,6 +340,14 @@ individual entries. Four additional filters:
 - **Coded unit identity, not `valueQuantity.unit` (display text).** UCUM
   `system|code` is the comparability primitive; two Observations with the same
   human-readable `unit` string but different UCUM codes are not comparable.
+- **`selectedCoding`, not `coding[0]`.** Observations routinely carry multiple
+  codings (LOINC + local + SNOMED); FHIR does not guarantee ordering, so two
+  otherwise-identical results can serialize their codings in different orders
+  and split into separate trends. Selection precedence: (a) the coding whose
+  `system|code` matched the search parameter that produced the Bundle, if
+  known; (b) failing that, LOINC over SNOMED over any other well-known
+  system; (c) failing that, the first coding — with the observation held out
+  of aggregation if its selected coding does not appear across siblings.
 - **Comparator absence.** `valueQuantity.comparator` (`<`, `<=`, `>=`, `>`)
   means the value is a bound (`<5 mg/dL`), not an exact measurement. Treating
   it as ordinary would produce false `min/max/last`. Aggregate only when
@@ -520,8 +536,15 @@ egress PHI to the model provider despite our declared posture. Not acceptable.
     does not persist across reloads. This is exactly the class the current
     integration tests target (they `create` arbitrary Patients against
     HAPI public).
-  - **`phi`**: real patient data. Agent loop refuses to start; single-shot
-    `/ask` still works (it sends only question + query plan).
+  - **`phi`**: real patient data. Both the agent loop **and** the single-shot
+    `/ask` are refused — earlier drafts of this proposal allowed single-shot
+    Ask on the grounds that "it sends only the question," but the current
+    `naturalLanguageToFhirQuery` sends `Question: ${question}` directly to
+    Anthropic, and a real patient query like *"give me John Doe's most recent
+    A1c"* contains PHI in the question itself. Under `phi` the entire
+    Anthropic path is disabled; the demo becomes read-only against that
+    server. Enabling it requires the same BAA-covered posture as the agent
+    loop (§8.4).
 - **User-added servers default to `phi`** — the safer default. A user who
   knows a custom server is either controlled-synthetic or a public sandbox
   can flip the class explicitly, behind a modal confirmation spelling out
@@ -555,7 +578,7 @@ deferrable:** anything touching the API key.
 | Audit-logging interface on every tool call | **interface + console sink** | HIPAA §164.312(b) needs every access logged; can't add to N handlers after the fact |
 | Error redaction (`FetchFhirClient` leaks URL + `OperationOutcome.diagnostics` into thrown text) | **implement (cheap)** | same path PHI would leak through later; make redaction habitual |
 | `sameOrigin` token-leak guard (`ask/url.ts`) | **keep, replace as the enforcement primitive** | correct as a UI-render sanity check; insufficient as a credential guard (see next row) |
-| **Base-path credential enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | `client.readReference` accepts absolute URLs and `fhir_raw_request` will let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. **Same-origin is not sufficient** — for a base such as `https://host.example/fhir`, a model-supplied `https://host.example/other-service` passes `sameOrigin` but is a different application; the FHIR bearer must not flow to it. Introduce a `sameBase(target, baseUrl)` primitive and enforce it at the request boundary: hard-refuse or credential-strip anything outside the configured FHIR base. **Path check must respect segment boundaries — not `startsWith`**: after normalizing both paths (strip trailing `/`, resolve `.`/`..`), accept only when `targetPath === basePath` or `targetPath.startsWith(basePath + "/")`. A naive `startsWith("/fhir")` would accept `/fhir-evil/collect`. Applied by both front doors, to reference resolution and the raw escape hatch alike. |
+| **Base-path enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | `client.readReference` accepts absolute URLs and `fhir_raw_get`/`fhir_raw_write` let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. **Same-origin is not sufficient** — for a base such as `https://host.example/fhir`, a model-supplied `https://host.example/other-service` passes `sameOrigin` but is a different application; the FHIR bearer must not flow to it. Introduce a `sameBase(target, baseUrl)` primitive and enforce it at the request boundary: **for agent-driven requests, hard-refuse anything outside the configured FHIR base — credential-stripping is not sufficient**, because even an anonymous fetch to an arbitrary URL by the model is an SSRF / exfiltration primitive (especially in a hosted MCP context: the response body becomes a `tool_result` in the next model turn). Credential-stripping is only acceptable for *user*-initiated navigation (e.g., following a link the user themselves clicked). **Path check must respect segment boundaries — not `startsWith`**: after normalizing both paths (strip trailing `/`, resolve `.`/`..`), accept only when `targetPath === basePath` or `targetPath.startsWith(basePath + "/")`. A naive `startsWith("/fhir")` would accept `/fhir-evil/collect`. Applied by both front doors, to reference resolution and the raw escape hatch alike. |
 | **Tool-input JSONSchema7 validation in `ToolRegistry.execute`** | **implement** | this is the real first line against prompt-injected steering; see §5.1 |
 
 **Already correct in the codebase, worth preserving:** the `sameOrigin` guard
