@@ -21,6 +21,7 @@ server backed by the in-browser MSW mock, so no live FHIR server is needed.
 | `resource-create.screenshot.spec.ts` | ResourceEditor form fields render; submit creates a resource |
 | `delete-error.spec.ts` | Delete failure shows an inline error (not an uncaught exception) |
 | `missing-resource.spec.ts` | Navigating to a missing resource ID shows a not-found state |
+| `resource-list-error.spec.ts` | A failed list search shows an error banner with Retry, and never the "no records match" empty state alongside it |
 | `allergy-intolerance-patient-filter.spec.ts` | AllergyIntolerance list is filtered to the current patient compartment |
 | `procedure-performed-period.spec.ts` | Procedure list "Performed" column renders both `performedDateTime` and `performedPeriod` variants (#476) |
 | `docs.spec.ts` | `/docs` redirects to default doc, sidebar TOC renders, slug deep-links work, unknown slug shows not-found, sidebar Docs button navigates |
