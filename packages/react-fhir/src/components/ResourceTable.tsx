@@ -1,5 +1,5 @@
 import type { Reference, Resource, StructureDefinition } from "fhir/r4";
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useStructureDefinition } from "../hooks/queries.js";
 import { findChoiceVariant, findElement } from "../structure/walker.js";
 import {
@@ -45,6 +45,30 @@ export interface ResourceTableProps<T extends Resource = Resource> {
    */
   layout?: ResourceTableLayout;
   className?: string;
+}
+
+// Tailwind's `sm` breakpoint is 640px — anything below renders the card
+// stack. We default to `false` (desktop) so the first paint matches both
+// the previous CSS-driven behaviour and jsdom (which has no matchMedia
+// and would otherwise render the wrong tree under tests).
+const NARROW_QUERY = "(max-width: 639px)";
+
+function useIsNarrowViewport(): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia(NARROW_QUERY);
+    const sync = () => setNarrow(mql.matches);
+    sync();
+    // Older Safari only implements the deprecated addListener API.
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", sync);
+      return () => mql.removeEventListener("change", sync);
+    }
+    mql.addListener(sync);
+    return () => mql.removeListener(sync);
+  }, []);
+  return narrow;
 }
 
 const headerFromPath = (path: string): string => {
@@ -157,26 +181,29 @@ export function ResourceTable<T extends Resource = Resource>({
     onSortChange({ by, direction });
   };
 
+  // In `auto` mode we pick the layout from a JS-evaluated media query so
+  // exactly one DOM tree renders per viewport. The earlier approach kept both
+  // trees in the DOM and used Tailwind's `hidden sm:block` / `block sm:hidden`
+  // to switch — but the desktop `<tr data-testid="resource-row">` rows then
+  // stayed in the DOM at iPhone widths with `display: none`, and Playwright's
+  // `toBeVisible()` failed on the live smoke test against the deployed demo
+  // (issue #509: "Patient list shows at least one row" — locator resolved 21x
+  // but every match was `hidden`). Rendering only the visible layout makes
+  // `getByTestId("resource-row")` semantics match what the user sees.
+  const isNarrow = useIsNarrowViewport();
   if (resources.length === 0) {
     return <>{emptyState ?? <p className="text-sm text-[var(--text-muted)]">No results.</p>}</>;
   }
 
-  // Tailwind classes that gate each layout. `auto` renders both DOM trees
-  // and the breakpoint hides one — keeps the JS simple (no resize listeners,
-  // no SSR hydration mismatches) at the cost of a tiny extra DOM. Pinned
-  // modes skip the other layout entirely so jsdom unit tests don't see
-  // duplicated nodes.
-  const renderTable = layout !== "cards";
-  const renderCards = layout !== "table";
-  const tableVisibility = layout === "auto" ? "hidden sm:block" : "";
-  const cardsVisibility = layout === "auto" ? "block sm:hidden" : "";
+  const renderTable = layout === "table" || (layout === "auto" && !isNarrow);
+  const renderCards = layout === "cards" || (layout === "auto" && isNarrow);
 
   return (
     <div className={className ?? "rounded border border-[var(--border)] bg-[var(--surface)]"} data-testid="resource-table">
       {/* Desktop / opt-in table layout */}
       {renderTable && (
       <div
-        className={`${tableVisibility} overflow-x-auto`}
+        className="overflow-x-auto"
         data-testid="resource-table-table"
       >
         <table className="w-full text-sm">
@@ -250,13 +277,14 @@ export function ResourceTable<T extends Resource = Resource>({
       </div>
       )}
 
-      {/* Narrow / mobile card-stack layout. Distinct testid (`resource-row-card`)
-          so jsdom unit tests counting `resource-row`s still see only the
-          table rows in `auto` mode (Tailwind's `hidden` doesn't remove DOM,
-          and jsdom doesn't apply CSS). */}
+      {/* Narrow / mobile card-stack layout. Each `<li>` is also a
+          `resource-row` so e2e tests that look for "a row" find the card on
+          mobile viewports the same way they find the `<tr>` on desktop. The
+          container testid `resource-table-cards` disambiguates layout when
+          a test needs to assert which one is on screen. */}
       {renderCards && (
       <ul
-        className={`${cardsVisibility} divide-y divide-[var(--border)]`}
+        className="divide-y divide-[var(--border)]"
         data-testid="resource-table-cards"
       >
         {resources.map((r) => (
@@ -279,7 +307,7 @@ export function ResourceTable<T extends Resource = Resource>({
                 : undefined
             }
             tabIndex={onRowClick ? 0 : undefined}
-            data-testid="resource-row-card"
+            data-testid="resource-row"
           >
             <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-sm">
               {headers.map((h) => (
