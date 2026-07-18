@@ -130,6 +130,12 @@ export function SettingsPage() {
   const applyAndReload = (id: string) => {
     saveActiveServerId(id);
     setActiveId(id);
+    // Sidebar/topbar listens for this and re-renders against the new active
+    // id so the active-server label updates even if window.location.reload()
+    // is suppressed (some iframed/staging contexts). The reload still fires
+    // so the singleton FetchFhirClient + React Query cache rebuild against
+    // the new base URL.
+    window.dispatchEvent(new CustomEvent("fhir-place:active-server-changed"));
     window.location.reload();
   };
 
@@ -391,7 +397,10 @@ function ServerCard({
             flexShrink: 0,
           }}
         />
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "var(--text)", flex: 1 }}>
+        <h3
+          data-testid="server-name"
+          style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "var(--text)", flex: 1 }}
+        >
           {server.label || "(unnamed)"}
         </h3>
         {server.builtin && (

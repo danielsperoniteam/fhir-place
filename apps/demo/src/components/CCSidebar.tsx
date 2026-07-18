@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { fhirQueryKeys, useFhirClient, type SearchParams } from "@fhir-place/react-fhir";
 import { useQueries } from "@tanstack/react-query";
 import type { Bundle, Resource } from "fhir/r4";
-import { ACTIVE_SERVER_CONFIG, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
+import { ACTIVE_SERVER_CONFIG, SETTINGS_ENABLED, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
 import { TOP_RESOURCE_TYPES } from "../resourceListConfig.js";
 import { usePinned } from "../state/pinned.js";
 import { JumpDialog } from "./JumpDialog.js";
@@ -64,8 +64,22 @@ export function CCSidebar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [pickerOpen]);
 
+  // Re-read servers + active id on every render so a Settings-page change
+  // (or any other Use action) is reflected here without a full page reload.
+  // The `active-server-changed` event below bumps a counter to force the
+  // re-render after the localStorage write that updateActiveServer performs.
+  const [, setActiveServerTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setActiveServerTick((n) => n + 1);
+    window.addEventListener("fhir-place:active-server-changed", onChange);
+    return () => window.removeEventListener("fhir-place:active-server-changed", onChange);
+  }, []);
   const servers = loadServers();
-  const activeServerId = loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id;
+  const activeServerId = SETTINGS_ENABLED
+    ? (loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id)
+    : ACTIVE_SERVER_CONFIG.id;
+  const displayServer =
+    servers.find((s) => s.id === activeServerId) ?? ACTIVE_SERVER_CONFIG;
 
   const client = useFhirClient();
   const countQueries = useQueries({
@@ -95,6 +109,7 @@ export function CCSidebar() {
   const switchServer = (id: string) => {
     saveActiveServerId(id);
     setPickerOpen(false);
+    window.dispatchEvent(new CustomEvent("fhir-place:active-server-changed"));
     window.location.reload();
   };
 
@@ -123,10 +138,10 @@ export function CCSidebar() {
             border: "1px solid var(--border)",
             borderRadius: 8,
             background: "var(--sunken)",
-            cursor: "pointer",
+            cursor: SETTINGS_ENABLED ? "pointer" : "default",
           }}
-          onClick={() => setPickerOpen((v) => !v)}
-          title="Switch server"
+          onClick={SETTINGS_ENABLED ? () => setPickerOpen((v) => !v) : undefined}
+          title={SETTINGS_ENABLED ? "Switch server" : "Active server"}
           data-testid="server-picker-trigger"
         >
           <div
@@ -143,7 +158,7 @@ export function CCSidebar() {
               data-testid="active-server-label"
               style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}
             >
-              {ACTIVE_SERVER_CONFIG.label}
+              {displayServer.label}
             </div>
             <div
               data-testid="base-url"
@@ -158,23 +173,25 @@ export function CCSidebar() {
                 whiteSpace: "nowrap",
               }}
             >
-              {ACTIVE_SERVER_CONFIG.baseUrl}
+              {displayServer.baseUrl}
             </div>
           </div>
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="var(--text-muted)"
-            strokeWidth="1.5"
-            style={{ transform: pickerOpen ? "rotate(180deg)" : "none", transition: "transform 120ms", flexShrink: 0 }}
-          >
-            <path d="M3 5l3-3 3 3M3 7l3 3 3-3" />
-          </svg>
+          {SETTINGS_ENABLED && (
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="var(--text-muted)"
+              strokeWidth="1.5"
+              style={{ transform: pickerOpen ? "rotate(180deg)" : "none", transition: "transform 120ms", flexShrink: 0 }}
+            >
+              <path d="M3 5l3-3 3 3M3 7l3 3 3-3" />
+            </svg>
+          )}
         </div>
 
-        {pickerOpen && (
+        {SETTINGS_ENABLED && pickerOpen && (
           <div
             style={{
               position: "absolute",
