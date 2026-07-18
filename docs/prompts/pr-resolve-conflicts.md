@@ -41,8 +41,11 @@ primary checkout:
 REPO_ROOT=$(pwd)
 HEAD_REF=$(gh pr view <pr_number> --json headRefName --jq '.headRefName')
 BASE_REF=$(gh pr view <pr_number> --json baseRefName --jq '.baseRefName')
-WORKTREE=../wt-pr-<pr_number>
+LEGACY_WORKTREE="$(dirname "$REPO_ROOT")/wt-pr-<pr_number>"
+WORKTREE="$(dirname "$REPO_ROOT")/wt-pr-<pr_number>-${WORKTREE_NAMESPACE:-manual}"
 git fetch origin "$HEAD_REF" main
+# Clean up the fixed legacy path used before worktrees were namespaced.
+git -C "$REPO_ROOT" worktree remove --force "$LEGACY_WORKTREE" 2>/dev/null || true
 # Create local tracking branch if it doesn't exist, then add worktree.
 git branch --track "$HEAD_REF" "origin/$HEAD_REF" 2>/dev/null || true
 git worktree add "$WORKTREE" "$HEAD_REF"
@@ -55,7 +58,7 @@ All subsequent git commands run inside `$WORKTREE`. At every exit point
 parent of the main checkout, which is not a git repository:
 
 ```bash
-git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>
+git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"
 ```
 
 ---
@@ -236,7 +239,7 @@ To retry after resolving these manually, comment `/resolve-conflicts` again.
 ```
 
 3. Add the `status: needs-human` label to the PR.
-4. Remove the worktree: `git -C "$REPO_ROOT" worktree remove --force wt-pr-<pr_number>`
+4. Remove the worktree: `git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"`
 5. Exit without pushing anything.
 
 ---
@@ -248,6 +251,8 @@ To retry after resolving these manually, comment `/resolve-conflicts` again.
 - All git work happens inside the `../wt-pr-<pr_number>` worktree created in
   Step 0. Do not modify the primary checkout.
 - Always remove the worktree at every exit path (success and needs-human).
+- The local runner also removes worktrees carrying its unique
+  `WORKTREE_NAMESPACE` on exit, including crashes and turn-limit failures.
 - The workflow's `concurrency` group ensures only one resolution run executes
   per PR at a time.
 - If you find a bug in this prompt or in the workflow, open a regular PR to
