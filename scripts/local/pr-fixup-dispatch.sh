@@ -12,6 +12,7 @@
 # See scripts/run-prompt-locally.sh for the shared runner.
 
 set -Eeuo pipefail
+export RUN_IN_CLEAN_WORKTREE=true
 exec "$(dirname "$0")/../run-prompt-locally.sh" pr-fixup-dispatch \
   --max-turns 250 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,Agent,mcp__github__*" \

@@ -60,6 +60,22 @@ user-facing problem.")
 ## Test results
 -
 
+## Test coverage
+
+List the Playwright specs and assertions that cover user-visible behavior.
+For infra, docs, or private internal changes, write
+`N/A — no user-visible change`.
+
+-
+
+## Hosted preview
+
+Optional. Write `Not requested` unless a reviewer asked for deployed
+validation. When requested, include the preview URL, PR head SHA, staging SHA,
+Pages run, and the risk that was checked.
+
+-
+
 ## Screenshots / recordings
 
 **Required** for any PR that changes anything user-visible — this includes
