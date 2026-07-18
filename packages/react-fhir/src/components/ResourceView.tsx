@@ -90,8 +90,10 @@ export function ResourceView(props: ResourceViewProps) {
 
   return (
     <section className={className} data-testid="resource-view">
-      <header className="mb-3 flex items-baseline gap-2 border-b border-[var(--border)] pb-2">
-        <h2 className="text-lg font-semibold">{resource.resourceType}</h2>
+      <header className="mb-3 flex items-baseline gap-2 border-b border-[var(--border)] px-4 pb-2">
+        <h2 className="text-lg font-semibold" data-testid="resource-view-title">
+          {resource.resourceType}
+        </h2>
         {resource.id && (
           <code className="rounded bg-[var(--sunken)] px-1 py-0.5 text-xs">{resource.id}</code>
         )}
@@ -109,7 +111,11 @@ export function ResourceView(props: ResourceViewProps) {
       <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-[minmax(8rem,1fr)_3fr] sm:gap-y-2">
         {walked.map((w) => (
           <Fragment key={w.key}>
-            <dt className="font-medium text-[var(--text-muted)] sm:pt-0" title={w.path}>
+            <dt
+              className="pl-4 font-medium text-[var(--text-muted)] sm:pt-0"
+              data-testid="resource-view-label"
+              title={w.path}
+            >
               {w.label}
             </dt>
             <dd className="-mt-2 sm:mt-0">

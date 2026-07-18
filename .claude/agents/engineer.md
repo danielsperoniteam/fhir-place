@@ -264,14 +264,9 @@ these as embedded in issue bodies — do not repeat that mistake.
     the change is not ready — exit `needs-human` instead of opening the PR.
     See `docs/decisions/0008-playwright-as-uat-gate.md` for context.
 
-11. **Apply the `uat: skip` label.** All PRs opened under the current
-    process get `uat: skip` (see `scripts/staging/uat-policy.json` —
-    `stackedPrUatDefault` is `"skip"`). This keeps the staging stack
-    quiet and makes CI green + CODEOWNER approval the only merge gate.
-    Apply it with:
-    ```
-    gh pr edit <PR> --add-label "uat: skip"
-    ```
+11. **Do not deploy the PR.** Staging previews are reviewer-requested and
+    workflow-owned. Never push to staging, apply staging/UAT labels, or
+    resolve a conflict only in the staging artifact.
 
 12. **Comment the link.** On the issue:
     `Opened #<PR> — base: main, ready for review. CI green + CODEOWNER
