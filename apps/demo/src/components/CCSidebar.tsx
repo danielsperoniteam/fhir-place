@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { fhirQueryKeys, useFhirClient, type SearchParams } from "@fhir-place/react-fhir";
 import { useQueries } from "@tanstack/react-query";
 import type { Bundle, Resource } from "fhir/r4";
-import { ACTIVE_SERVER_CONFIG, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
+import { ACTIVE_SERVER_CONFIG, SETTINGS_ENABLED, loadActiveServerId, loadServers, saveActiveServerId } from "../config.js";
 import { TOP_RESOURCE_TYPES } from "../resourceListConfig.js";
 import { usePinned } from "../state/pinned.js";
 import { JumpDialog } from "./JumpDialog.js";
@@ -64,8 +64,22 @@ export function CCSidebar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [pickerOpen]);
 
+  // Re-read servers + active id on every render so a Settings-page change
+  // (or any other Use action) is reflected here without a full page reload.
+  // The `active-server-changed` event below bumps a counter to force the
+  // re-render after the localStorage write that updateActiveServer performs.
+  const [, setActiveServerTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setActiveServerTick((n) => n + 1);
+    window.addEventListener("fhir-place:active-server-changed", onChange);
+    return () => window.removeEventListener("fhir-place:active-server-changed", onChange);
+  }, []);
   const servers = loadServers();
-  const activeServerId = loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id;
+  const activeServerId = SETTINGS_ENABLED
+    ? (loadActiveServerId() ?? ACTIVE_SERVER_CONFIG.id)
+    : ACTIVE_SERVER_CONFIG.id;
+  const displayServer =
+    servers.find((s) => s.id === activeServerId) ?? ACTIVE_SERVER_CONFIG;
 
   const client = useFhirClient();
   const countQueries = useQueries({
@@ -95,6 +109,7 @@ export function CCSidebar() {
   const switchServer = (id: string) => {
     saveActiveServerId(id);
     setPickerOpen(false);
+    window.dispatchEvent(new CustomEvent("fhir-place:active-server-changed"));
     window.location.reload();
   };
 
@@ -143,7 +158,7 @@ export function CCSidebar() {
               data-testid="active-server-label"
               style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}
             >
-              {ACTIVE_SERVER_CONFIG.label}
+              {displayServer.label}
             </div>
             <div
               data-testid="base-url"
@@ -158,7 +173,7 @@ export function CCSidebar() {
                 whiteSpace: "nowrap",
               }}
             >
-              {ACTIVE_SERVER_CONFIG.baseUrl}
+              {displayServer.baseUrl}
             </div>
           </div>
           <svg
