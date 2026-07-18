@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeListError,
   labelFromPath,
   labelsForPaths,
   paramsFromUrl,
@@ -193,5 +194,41 @@ describe("labelsForPaths", () => {
     expect(result.id).toBe("Id");
     expect(result["basedOn.reference"]).toBe("Based On");
     expect(result["partOf.reference"]).toBe("Part Of");
+  });
+});
+
+// The staging Communication list surfaced a bare "Load failed" — the raw
+// browser network error — which is useless to the user. `describeListError`
+// translates browser-specific network errors into an actionable hint and
+// leaves structured FHIR/HTTP errors alone.
+describe("describeListError", () => {
+  it("translates browser network errors into a CORS/offline hint", () => {
+    for (const message of [
+      "Load failed", // WebKit
+      "Failed to fetch", // Chromium
+      "NetworkError when attempting to fetch resource.", // Firefox
+    ]) {
+      expect(describeListError(new TypeError(message))).toMatch(
+        /couldn't reach the fhir server/i,
+      );
+    }
+  });
+
+  it("falls back to the hint when the error carries no message", () => {
+    expect(describeListError(new Error(""))).toMatch(
+      /couldn't reach the fhir server/i,
+    );
+    expect(describeListError(undefined)).toMatch(
+      /couldn't reach the fhir server/i,
+    );
+  });
+
+  it("passes structured FHIR/HTTP error messages through unchanged", () => {
+    expect(
+      describeListError(new Error("FHIR GET /Communication failed with 500")),
+    ).toBe("FHIR GET /Communication failed with 500");
+    expect(
+      describeListError(new Error("FHIR GET /Communication timed out after 15000ms")),
+    ).toBe("FHIR GET /Communication timed out after 15000ms");
   });
 });
