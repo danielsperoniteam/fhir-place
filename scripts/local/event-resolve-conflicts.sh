@@ -11,6 +11,7 @@ if [[ -z "$PR" ]]; then
   exit 2
 fi
 
+export RUN_IN_CLEAN_WORKTREE=true
 exec "$(dirname "$0")/../run-prompt-locally.sh" pr-resolve-conflicts \
   --for "PR #$PR" \
   --max-turns 100 \

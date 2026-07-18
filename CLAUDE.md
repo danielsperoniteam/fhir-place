@@ -17,8 +17,16 @@
 
 ## Merge gate
 
-CI green + CODEOWNER approval = mergeable. No `uat: complete` label required.
+CI green + CODEOWNER approval = mergeable. No staging label is part of the
+normal merge gate.
 See `docs/decisions/0008-playwright-as-uat-gate.md` for why.
+
+## Hosted previews
+
+Staging is optional and never an integration branch. The designated preview
+workflow deploys `main` plus at most one explicitly selected PR. Agents do not
+push to staging or resolve staging-only conflicts. See
+`docs/decisions/0009-main-first-single-pr-preview.md`.
 
 ## E2E test maintenance
 
