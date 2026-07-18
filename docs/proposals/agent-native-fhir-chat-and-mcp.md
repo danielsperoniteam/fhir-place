@@ -308,7 +308,7 @@ interface CompactBundleResult {
   entries: { ref: string; type: string; label: string }[]; // 1-line each
   observationSeries?: ObsSeries[];   // ONLY valueQuantity Observations with compatible units
   truncated: boolean;
-  drillRefs: string[];               // "Observation/123" handles
+  drillRefs: string[];               // version-aware; see below
 }
 interface BundleCompactor { compact(b: Bundle, opts?: CompactOptions): CompactBundleResult; }
 ```
@@ -379,8 +379,15 @@ is not necessarily patient-scoped (population queries return Observations across
 many patients), and a key of only `(code, unit)` — or one that collapses
 identifier-only subjects — would silently merge values from different people and
 report bogus min/max/last;
-(d) always emits stable `drillRefs` so the model can fetch full detail via
-`get_resource_detail`. Default `maxEntries: 20` matches today's `_count=20`
+(d) always emits stable, **version-aware** `drillRefs` so the model can fetch
+full detail via `get_resource_detail`. A bare `"Observation/123"` handle would
+collide when compaction preserved two versions of the same logical resource
+(see (b)) and `get_resource_detail` would fetch the current version instead of
+the one summarized. Handles use the same identity ladder as include-dedup:
+`Type/id/_history/versionId` when `meta.versionId` is present; the parsed
+absolute URL when the entry came from a cross-base `fullUrl`; bare `Type/id`
+only for unversioned same-base entries. `entries[].ref` follows the same
+rule. Default `maxEntries: 20` matches today's `_count=20`
 default. This is a pure function — trivially unit-testable and the first thing
 to build after the registry.
 
@@ -450,14 +457,22 @@ would fetch before the user can review or edit, breaking the current contract.
   (the loop won't exit until the hook returns without an edit); (c) skills
   that already made prior requests are not affected, because `plan()` runs
   before any `execute()` side effect.
-- **Layer B — client-boundary backstop (accept/reject-only).** Layer-1
-  skills that omit `plan()` still fire authenticated FHIR requests inside
-  their `execute()`. The `FetchFhirClient` middleware calls
-  `confirmRead`/`confirmWrite` before every request as a defense-in-depth
-  guard, but in **accept/reject-only mode** — no `editedInput`, because
-  editing an in-flight skill request has no coherent semantic. Users who
-  want editability run a Layer-2 primitive; users who invoke a skill
-  express trust in the skill's shape.
+- **Layer B — client-boundary backstop (accept/reject-only, unplanned
+  only).** Layer-1 skills that omit `plan()` still fire authenticated FHIR
+  requests inside their `execute()`. The `FetchFhirClient` middleware calls
+  `confirmRead`/`confirmWrite` on each request in
+  **accept/reject-only** mode (no `editedInput` — editing an in-flight
+  skill request has no coherent semantic). **Double-confirmation is
+  suppressed** for requests that already passed Layer A: the registry
+  attaches a short-lived, request-scoped approval token to each
+  `RequestPlan` it approved via Layer A; `execute()` threads that token
+  through to the client (`client.request({..., approvalToken})`), and the
+  middleware treats a valid token as consent-satisfied and skips the
+  prompt. Tokens are single-use and bound to `(method, url, body-hash)`,
+  so they cannot cover a different request the tool might issue after
+  the approved one. Users who want editability run a Layer-2 primitive;
+  users who invoke a skill express trust in the skill's shape but still
+  get a prompt on each unplanned sub-request.
 
 The browser front door wires the hooks to the existing `/ask` preview UI
 (reads) and a distinct write-confirmation dialog (writes, per ADR 0003).
@@ -599,7 +614,7 @@ deferrable:** anything touching the API key.
 | Audit-logging interface on every tool call | **interface + console sink** | HIPAA §164.312(b) needs every access logged; can't add to N handlers after the fact |
 | Error redaction (`FetchFhirClient` leaks URL + `OperationOutcome.diagnostics` into thrown text) | **implement (cheap)** | same path PHI would leak through later; make redaction habitual |
 | `sameOrigin` token-leak guard (`ask/url.ts`) | **keep, replace as the enforcement primitive** | correct as a UI-render sanity check; insufficient as a credential guard (see next row) |
-| **Base-path enforcement as agent-mode middleware over `FetchFhirClient`** (not a change to the shared client's default contract) | **implement** | `readReference` today is documented and tested to resolve absolute references outside the configured base — non-agent UI navigation relies on that. Do **not** unconditionally refuse cross-base URLs in the shared `FetchFhirClient`; that would regress existing callers. Instead ship the strict check as an **opt-in middleware** the agent path installs: the browser chat and MCP server wrap the client with a `withStrictBase(client, baseUrl)` policy; standard UI code paths keep today's behavior (with the render-time `sameOrigin` UI guard). **For agent-driven requests, the middleware hard-refuses anything outside the base — credential-stripping is not sufficient**, because even an anonymous fetch by the model is an SSRF / exfiltration primitive (the response body becomes a `tool_result` in the next model turn — especially critical in hosted MCP). Credential-stripping is only acceptable for user-initiated UI navigation, if we ever need it. **Path check respects segment boundaries — not `startsWith`**: after normalizing both paths (strip trailing `/`, resolve `.`/`..`), accept only when `targetPath === basePath` or `targetPath.startsWith(basePath + "/")`. A naive `startsWith("/fhir")` would accept `/fhir-evil/collect`. |
+| **Base-path enforcement as agent-mode middleware over `FetchFhirClient`** (not a change to the shared client's default contract) | **implement** | `readReference` today is documented and tested to resolve absolute references outside the configured base — non-agent UI navigation relies on that. Do **not** unconditionally refuse cross-base URLs in the shared `FetchFhirClient`; that would regress existing callers. Instead ship the strict check as an **opt-in middleware** the agent path installs: the browser chat and MCP server wrap the client with a `withStrictBase(client, baseUrl)` policy; standard UI code paths keep today's behavior (with the render-time `sameOrigin` UI guard). **For agent-driven requests, the middleware hard-refuses anything outside the base — credential-stripping is not sufficient**, because even an anonymous fetch by the model is an SSRF / exfiltration primitive (the response body becomes a `tool_result` in the next model turn — especially critical in hosted MCP). Credential-stripping is only acceptable for user-initiated UI navigation, if we ever need it. **`sameBase(target, baseUrl)` is origin equality AND segment-bounded path prefix.** Compare normalized `(scheme, host, port)` for exact equality first — path-only checks let `https://attacker.example/fhir/Patient/1` pass under `https://ehr.example/fhir`, defeating the whole point. Then, after normalizing both paths (strip trailing `/`, resolve `.`/`..`), accept only when `targetPath === basePath` or `targetPath.startsWith(basePath + "/")`. A naive `startsWith("/fhir")` would accept `/fhir-evil/collect`. Both conditions are required. |
 | **Tool-input JSONSchema7 validation in `ToolRegistry.execute`** | **implement** | this is the real first line against prompt-injected steering; see §5.1 |
 
 **Already correct in the codebase, worth preserving:** the `sameOrigin` guard

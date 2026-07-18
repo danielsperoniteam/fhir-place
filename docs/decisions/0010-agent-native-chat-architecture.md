@@ -53,9 +53,14 @@ Operating constraints:
   `plan()` again from scratch — the plan is regenerated, not mutated —
   bounded to 3 iterations. Layer-1 skills that omit `plan()` still fire
   authenticated requests inside `execute()`; those are guarded by an
-  accept/reject-only backstop at the `FetchFhirClient` boundary. This
-  addresses the round-7 confusion that put `confirmWrite` in the registry
-  with no way to derive a plan from an opaque `execute()`.
+  accept/reject-only backstop at the `FetchFhirClient` boundary — but that
+  backstop must not re-prompt for requests Layer A already approved. The
+  registry attaches a single-use approval token bound to
+  `(method, url, body-hash)` to each approved plan; `execute()` threads it
+  through to the client and the middleware treats it as consent-satisfied,
+  skipping the prompt for exactly that request. This addresses the round-7
+  confusion that put `confirmWrite` in the registry with no way to derive a
+  plan from an opaque `execute()`.
 - **`ToolRegistry.execute` emits audit events centrally with redacted
   payloads** — `{event, tool, inputKeys, resultShape, errorClass?, ts}`,
   never raw `input`/`outcome`/`error`. HIPAA §164.312(b) requires the
@@ -80,10 +85,14 @@ Operating constraints:
   even an anonymous fetch is an SSRF / exfiltration primitive (the
   response lands in the next model turn as a `tool_result`, exposing the
   user's machine or hosted network). Credential-stripping is only
-  acceptable for user-initiated navigation. The path check respects
-  segment boundaries (accept only `targetPath === basePath` or
-  `targetPath.startsWith(basePath + "/")` on normalized paths); a naive
-  `startsWith` would let `/fhir-evil/collect` pass under a `/fhir` base.
+  acceptable for user-initiated navigation. `sameBase` requires **both
+  normalized origin equality** — `(scheme, host, port)` exact match — **and**
+  the segment-bounded path prefix (`targetPath === basePath` or
+  `targetPath.startsWith(basePath + "/")` on normalized paths). A path-only
+  check would let `https://attacker.example/fhir/Patient/1` pass under a
+  `https://ehr.example/fhir` base; a naive `startsWith` would let
+  `/fhir-evil/collect` pass under a `/fhir` base. Both conditions are
+  required.
 - **PHI-masking seam is envelope-level, not `Resource → Resource`.** Applied
   centrally by `ToolRegistry.execute` over every tool output — Bundles,
   compacted results, terminology payloads, skill summaries — so nothing that
