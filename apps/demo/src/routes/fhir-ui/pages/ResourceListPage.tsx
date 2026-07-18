@@ -209,6 +209,45 @@ const collectPaths = (value: unknown, prefix = "", out = new Set<string>()): Set
   return out;
 };
 
+// In a Patient compartment view the route owns the `patient` filter. That
+// ownership covers every variant of the key — the bare param and any
+// modifier/chain form (`patient:missing`, `patient.name`) — not just the exact
+// spelling. Filtering only `patient` let a modifier'd key through, which then
+// ANDed against the re-injected `patient=<id>` into a self-contradicting query
+// (Codex review on #732).
+export const isCompartmentOwnedKey = (k: string): boolean =>
+  k === "patient" || k.startsWith("patient:") || k.startsWith("patient.");
+
+/** Build the submitted URL entry list from the form params, dropping any
+ *  compartment-owned key and re-injecting the compartment `patient=<id>`.
+ *  Pure so the compartment-ownership rule is unit-testable. */
+export const submitFilterEntries = (
+  next: SearchParams,
+  patientId?: string,
+): Array<[string, string]> => {
+  const entries: Array<[string, string]> = [];
+  for (const [k, v] of Object.entries(next)) {
+    // The compartment URL owns the patient filter (any modifier/chain variant),
+    // so form-supplied patient values are ignored — users can't navigate out of
+    // the compartment they came in on, or build a self-contradicting query.
+    if (patientId && isCompartmentOwnedKey(k)) continue;
+    if (v === undefined || v === "" || v === null) continue;
+    // Repeated FHIR AND criteria (arrays) — emit one URL entry per value, not a
+    // comma-joined string (which a server reads as OR / composite).
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item !== undefined && item !== "" && item !== null) {
+          entries.push([k, String(item)]);
+        }
+      }
+    } else entries.push([k, String(v)]);
+  }
+  if (patientId && !entries.some(([k]) => isCompartmentOwnedKey(k))) {
+    entries.unshift(["patient", patientId]);
+  }
+  return entries;
+};
+
 export const paramsFromUrl = (
   urlParams: URLSearchParams,
   pageSize: number,
@@ -216,7 +255,12 @@ export const paramsFromUrl = (
 ): SearchParams => {
   const out: SearchParams = { _count: pageSize };
   for (const [k, v] of urlParams.entries()) {
-    if (k === "patient") continue;
+    // In a compartment view the route owns the `patient` filter (and every
+    // modifier/chain variant), so it is stripped here and re-injected below.
+    // Outside a compartment (`patientId` undefined) `patient`/`patient:…` is an
+    // ordinary user filter and must survive — dropping it would run an
+    // unfiltered query while the criterion still shows in the URL.
+    if (patientId && isCompartmentOwnedKey(k)) continue;
     // A _count in the URL overrides the seeded page-size default — arraying
     // it with the seed would emit repeated _count keys on the wire.
     if (k === "_count") {
@@ -235,10 +279,15 @@ export const paramsFromUrl = (
   return out;
 };
 
-const formInitialFromUrl = (urlParams: URLSearchParams): Record<string, string> => {
+const formInitialFromUrl = (
+  urlParams: URLSearchParams,
+  patientId?: string,
+): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const [k, v] of urlParams.entries()) {
-    if (k === "patient") continue;
+    // Hide the compartment-owned `patient` filter from the editable form only
+    // inside a compartment view; elsewhere it's a normal, editable criterion.
+    if (patientId && isCompartmentOwnedKey(k)) continue;
     out[k] = v;
   }
   return out;
@@ -325,7 +374,10 @@ export function ResourceListPage() {
   );
   const [draftParams, setDraftParams] = useState<SearchParams>(params);
   useEffect(() => setDraftParams(params), [params]);
-  const formInitial = useMemo(() => formInitialFromUrl(searchParams), [searchParams]);
+  const formInitial = useMemo(
+    () => formInitialFromUrl(searchParams, patientId),
+    [searchParams, patientId],
+  );
   const formKey = searchParams.toString();
   // A query is savable once the URL carries any search params (#254 PR A).
   const hasActiveQuery = formKey.length > 0;
@@ -404,20 +456,10 @@ export function ResourceListPage() {
   );
 
   const submitFilters = (next: SearchParams) => {
-    const entries: Array<[string, string]> = [];
-    for (const [k, v] of Object.entries(next)) {
-      // In a Patient compartment view the URL owns the `patient` filter;
-      // ignore form-supplied patient values so users can't accidentally
-      // navigate themselves out of the compartment they came in on.
-      if (k === "patient" && patientId) continue;
-      if (v === undefined || v === "" || v === null) continue;
-      if (Array.isArray(v)) entries.push([k, v.join(",")]);
-      else entries.push([k, String(v)]);
-    }
-    if (patientId && !entries.some(([k]) => k === "patient")) {
-      entries.unshift(["patient", patientId]);
-    }
-    setSearchParams(Object.fromEntries(entries), { replace: true });
+    // Build URLSearchParams from an entry list rather than an object so
+    // repeated keys survive (Object.fromEntries would collapse them).
+    const entries = submitFilterEntries(next, patientId);
+    setSearchParams(new URLSearchParams(entries), { replace: true });
   };
 
   const heading = patientId ? resourceType : config?.title ?? resourceType;

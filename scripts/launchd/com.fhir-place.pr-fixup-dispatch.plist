@@ -2,8 +2,8 @@
 <!--
   PR fixup dispatcher at 09:00 and 14:00 ET (twice daily). Runs
   BEFORE the issue-mode engineer-dispatch in each window
-  (engineer-dispatch is at 09:30 / 14:30) so red-CI / unresolved-thread
-  / uat: needs-changes PRs are addressed before new work gets pulled
+  (engineer-dispatch is at 09:30 / 14:30) so red-CI, conflict, and
+  unresolved-thread PRs are addressed before new work gets pulled
   from the backlog. The 30-minute stagger keeps both runs off the
   same Claude Max OAuth session simultaneously (rate-limit avoidance).
   See `docs/prompts/pr-fixup-dispatch.md` for what it does.
