@@ -189,14 +189,6 @@ export const labelsForPaths = (paths: string[]): Record<string, string> => {
   return result;
 };
 
-const summaryPathsFromStructure = (resourceType: string, paths: string[]): string[] => {
-  const prefix = `${resourceType}.`;
-  return paths
-    .filter((path) => path.startsWith(prefix) && path.split(".").length > 2)
-    .map((path) => path.slice(prefix.length))
-    .filter((path) => !path.includes(".extension") && !path.includes(".modifierExtension"));
-};
-
 const collectPaths = (value: unknown, prefix = "", out = new Set<string>()): Set<string> => {
   if (value === null || value === undefined) return out;
   if (Array.isArray(value)) {
