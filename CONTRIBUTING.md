@@ -33,8 +33,7 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 
 ## Shipping a PR
 
-1. Branch off `main`. (See "Staging deploys" below for the staging-promote
-   step you do before review.)
+1. Branch off `main` and open the PR against `main`.
 2. Write the code + tests. Match the existing style (`tsc --strict`, Vitest, MSW for HTTP mocking). Every library-level change should have unit-test coverage; behaviour that touches real servers should also have an integration test in `packages/react-fhir/integration/`.
 3. **Add a changeset** if your PR changes `@fhir-place/react-fhir`:
    ```bash
@@ -43,24 +42,47 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
    Pick the bump (`patch` / `minor` / `major`) and describe the change in human terms. Commit the generated `.changeset/*.md` alongside your code.
 4. Open the PR. CI runs typecheck + tests + build. The release workflow automatically opens / updates a "Version Packages" PR that bumps versions + CHANGELOG when your PR lands; merging that second PR triggers a fresh npm publish.
 
+### PR body — repro for bugs, customer problem for everything else
+
+A reviewer should be able to read the PR body and answer "should we
+ship this?" without opening the diff. The template
+(`.github/pull_request_template.md`) carries the canonical schema; the
+short version:
+
+- **Bug fix** → fill in `### Bug being fixed`,
+  `` ### Reproduce on `main` `` (numbered, copy-pasteable steps —
+  preconditions / action / observed broken behavior),
+  `### Expected behavior`, and `### Root cause`. Every step concrete
+  enough that someone who has never seen this code can paste/click and
+  observe the bug. "Open the app and notice it's broken" is not a
+  repro step. If you cannot write a real repro, the issue is not a
+  bug — push back on triage rather than ship.
+- **Feature / refactor / infra / docs / dep bump** → fill in
+  `### Customer / user problem this solves` (2–3 sentences in the
+  voice of the person it hurts: developer evaluating fhir-place,
+  clinical informaticist, on-call, future maintainer). If the linked
+  issue states the problem well, paste that paragraph verbatim and
+  link the issue — don't make the reviewer click through. Then
+  `### Why now / why this approach`. Pure internal hygiene may write
+  `N/A — internal hygiene, no user-facing problem.` in the problem
+  section; no other section gets that escape hatch.
+
+The PR-review routine grep-checks these headings verbatim and posts
+an advisory comment if they're missing. It will not block merge for a
+missing block today (humans approve), but the comment is loud.
+
 > **Note:** `release.yml` is currently disabled (renamed to `release.yml.disabled`) until npm publishing is set up. The flow described above and the warning below apply once it's re-enabled — pending changesets accumulate in `.changeset/*.md` in the meantime and are not lost. To re-enable: flip the org-level "Allow GitHub Actions to create and approve pull requests" setting, populate the `NPM_TOKEN` repo secret, and rename the workflow back.
 
 > **Do not manually create a "chore: release" PR.** The `changesets/action` manages that PR itself (pushing to `changeset-release/main` and opening a bot-owned PR). A human-authored PR targeting `main` from any other branch with the same title causes the action to fail when it tries to update the conflicting PR. If the Release workflow shows a red check on `main` and the only step that failed is the `changesets/action`, look for an open PR titled "chore: release" that was not created by `github-actions[bot]` — closing it unblocks the workflow.
 
-## Staging deploys
+## Optional hosted preview
 
-The `staging` branch is a continuously-rebuilt deploy target:
+CI green plus CODEOWNER approval is the normal merge gate. Staging is an
+optional, disposable preview for deployment-specific risk:
 
 ```
-staging = origin/main + every open PR with reviewDecision == APPROVED
+staging = origin/main + zero or one explicitly selected PR
 ```
-
-Stacking is automatic — when a PR receives an approving CODEOWNER
-review, the [`stack-approved-prs.yml`](.github/workflows/stack-approved-prs.yml)
-workflow resets staging to main HEAD, merges every approved-and-open
-PR's head in order, and force-pushes. `pages.yml` redeploys
-`/staging/` with the new tip. Staging has no branch protection — it's
-a deploy artifact, not a source-of-truth branch.
 
 URLs:
 
@@ -69,31 +91,18 @@ URLs:
 - `staging` is published at <https://danielsperoniteam.github.io/fhir-place/staging/>
   (goals-tasks at `/fhir-place/staging/goals/`).
 
-**Flow:**
+A maintainer can add the `preview: staging` label or run the
+`Preview one PR on staging` workflow with the PR number after required checks
+are green. At most one open PR may carry the label. The workflow starts from
+current main, merges that one PR, deploys `/staging/`, and comments the exact
+PR SHA and Pages run on the PR.
 
-1. Open every PR — human or agent — with `base: main`.
-2. Get CODEOWNER approval. On approval, `stack-approved-prs.yml`
-   rebuilds staging automatically (you don't push to staging
-   yourself).
-3. Walk the PR's **UAT on live staging** steps against the live
-   `/staging/` URL. If anything is off, push a fix to the PR
-   branch — staging rebuilds on the next event (push, approval, or
-   close).
-4. When UAT passes, merge the PR to `main`. The next staging
-   rebuild excludes it (it's on main now, no longer "approved
-   and open").
+If the preview merge conflicts, resolve the PR branch against main. Do not
+create a staging-only resolution. Removing the label, closing the PR, or
+dispatching the reset action returns staging to main.
 
-**Direct-to-main commits** trigger a staging rebuild from the new
-main HEAD automatically (the workflow fires on `push: main`). No
-separate sync step needed — every rebuild starts from main HEAD, so
-drift is impossible.
-
-**Agents never push to staging.** Engineer subagents only push to
-their `bot/*` branches; staging is owned by `stack-approved-prs.yml`
-and force-rebuilt from scratch on every relevant event. See
-`.claude/agents/engineer.md` and `AGENTS.md`. Every agent-authored
-PR must include a UAT section with concrete copy-pasteable steps for
-the live staging URL.
+Agents and contributors never push to staging. Staging is never merged into
+main. See [ADR 0009](docs/decisions/0009-main-first-single-pr-preview.md).
 
 ## Bump conventions
 

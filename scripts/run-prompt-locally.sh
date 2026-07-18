@@ -156,6 +156,9 @@ mkdir -p "$LOG_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "=== run $RUN_ID :: provider=$PROVIDER prompt=$PROMPT_FILE ==="
 
+# Trim before any early exit, including dirty-checkout and auth failures.
+find "$LOG_DIR" -name "${PROMPT_BASENAME}-*.log" -mtime +14 -delete 2>/dev/null || true
+
 # Single-run lock per prompt. Atomic on POSIX. Stale-lock recovery checks
 # whether the recorded PID is still alive.
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -307,9 +310,6 @@ set -e
 if [[ $RC -ne 0 ]]; then
   osascript -e "tell application \"Messages\" to send \"$PROVIDER $PROMPT_BASENAME failed rc=$RC run=$RUN_ID - see $LOG_FILE\" to participant \"$PHONE\" of (service 1 whose service type is iMessage)" 2>/dev/null || true
 fi
-
-# Trim old logs (~14 days).
-find "$LOG_DIR" -name "${PROMPT_BASENAME}${TARGET_SLUG:+-$TARGET_SLUG}-*.log" -mtime +14 -delete 2>/dev/null || true
 
 echo "=== run $RUN_ID complete (provider=$PROVIDER rc=$RC) ==="
 exit "$RC"

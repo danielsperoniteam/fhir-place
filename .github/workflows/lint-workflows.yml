@@ -1,0 +1,93 @@
+# Lints the workflows themselves. Runs on every PR that touches
+# `.github/workflows/**` and on push to main. Two checks:
+#
+#   1. actionlint — community-standard syntax and shellcheck pass over
+#      every workflow file. Pinned to a release SHA so a moving tag
+#      cannot silently change behavior.
+#   2. lint-workflow-permissions — repo-specific custom lint that asserts
+#      `permissions:` and `env:` declarations match each step's shell
+#      content. Written after PRs #545 and #517 silently 403'd on
+#      missing `pull-requests: write` and missing `GH_TOKEN`.
+#
+# Read-only — no contents/issues/pull-requests writes. If either check
+# returns non-zero, the job fails.
+
+name: Lint workflows
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/lint-workflow-permissions.mjs'
+      - 'scripts/lint-workflow-permissions.test.mjs'
+      - '.github/workflows/lint-workflows.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/lint-workflow-permissions.mjs'
+      - 'scripts/lint-workflow-permissions.test.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-workflows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # actionlint — community-maintained workflow + shellcheck linter.
+      # Pinned to the v1.72.0 release commit SHA so a tag move cannot
+      # smuggle in a behaviour change. Bump intentionally via PR.
+      #
+      # reviewdog config:
+      #   reporter: local        — prints findings to the job log; no
+      #                            external posting (we don't grant
+      #                            `checks: write` to this lint job).
+      #   filter_mode: nofilter  — don't try to diff against base; the
+      #                            default `added` mode needs a git diff
+      #                            source that local-reporter doesn't
+      #                            have, which makes the action error
+      #                            with "diff command is empty".
+      #   fail_level: error      — exit non-zero on error-severity
+      #                            findings (the modern replacement for
+      #                            the deprecated fail_on_error input).
+      - name: actionlint
+        uses: reviewdog/action-actionlint@6fb7acc99f4a1008869fa8a0f09cfca740837d9d # v1.72.0
+        with:
+          fail_level: error
+          reporter: local
+          filter_mode: nofilter
+          # Ignore two pre-existing findings that this PR intentionally
+          # does not fix (the scope is the lint gate, not workflow
+          # cleanup). Each one has a follow-up tracked in the PR body.
+          #
+          #   SC2129  — discover-test-patients.yml uses repeated
+          #             `>> $GITHUB_STEP_SUMMARY` redirects; shellcheck
+          #             prefers `{ cmd1; cmd2; } >> file`. Cosmetic.
+          #   expression — project-sync.yml uses `${{ secrets.* }}` in a
+          #             job-level `if:`, which GitHub silently evaluates
+          #             to false. The job has never actually run; fixing
+          #             it is a behavior change separate from this lint
+          #             PR.
+          actionlint_flags: -ignore SC2129 -ignore "is not allowed here"
+
+      - name: Run lint-workflow-permissions self-tests
+        run: node --test scripts/lint-workflow-permissions.test.mjs
+
+      - name: Lint workflow permissions + env
+        run: node scripts/lint-workflow-permissions.mjs .github/workflows

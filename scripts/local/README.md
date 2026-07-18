@@ -1,20 +1,17 @@
 # Local agent automation
 
 This directory contains shell drivers that run the SDLC prompts locally
-on your machine rather than on GitHub Actions. The shared runner defaults
-to `claude --print` with the OAuth session from `claude login`, but can
-also run the same prompt with Codex CLI by setting `AGENT_PROVIDER=codex`
-or randomly choose between installed local providers with
-`AGENT_PROVIDER=random`.
+on your machine (via `claude --print` with the OAuth session from
+`claude login`) rather than on GitHub Actions (which uses the paid
+`ANTHROPIC_API_KEY`). Same prompts, same agents, same safety rules —
+just billed against the Claude Max subscription.
 
 ## Pieces
 
 - [`../run-prompt-locally.sh`](../run-prompt-locally.sh) — the shared
-  runner. Handles lock, log, pause file, dirty-tree refusal, iMessage
-  notification on failure, and `--add-dir` for the worktree parent.
-  Set `AGENT_PROVIDER=claude|codex|random` to choose the local provider.
-  Claude remains the default. When Claude is selected, the runner never
-  sets `ANTHROPIC_API_KEY`, so `claude` falls back to OAuth.
+  runner. Handles lock, log, pause file, dirty-tree refusal, and `--add-dir`
+  for the worktree parent.
+  Never sets `ANTHROPIC_API_KEY`, so `claude` falls back to OAuth.
 - `engineer-dispatch.sh` — picks up to 3 ready issues per run, hands
   each to the engineer subagent in a worktree. Runs **twice daily** at
   09:00 and 14:00 ET while we get comfortable with the local drivers
@@ -25,9 +22,6 @@ or randomly choose between installed local providers with
   bot bugs. Runs 05:00 ET.
 - `daily-doc-sync.sh` — keeps the in-repo doc-sync wiki + redacted
   prompts in sync. Runs 06:00 ET.
-- `hourly-uat-validation.sh` — walks each open PR's "UAT on live
-  staging" checklist against `/staging/`, sets `uat: passed` /
-  `uat: failed` labels. Runs at :15.
 
 Event-triggered prompts are dispatched by the polling daemon at
 [`../poll-events.sh`](../poll-events.sh). It polls GitHub every
@@ -48,12 +42,10 @@ restarts if it crashes.
 1. **Repo lives at `~/src/fhir-place`.** Other paths require setting
    `REPO_ROOT` in the launchd plist or your shell.
 
-2. **Log in to the providers you want launchd to use.** For Claude, run
-   `claude login` once. The OAuth session gets stored in `~/.config/claude`
-   (or platform equivalent). For Codex, confirm `codex exec "Reply ok"`
-   works from a terminal using the same macOS user that owns the launchd
-   jobs. Random selection only chooses providers that are present on
-   `PATH`, but a stale provider login will still fail the selected run.
+2. **Log in to Claude.** Run `claude login` once. The OAuth session
+   gets stored in `~/.config/claude` (or platform equivalent). Without
+   this, the drivers will exit early because `claude --print` can't
+   authenticate.
 
 3. **Stash a GitHub PAT in the keychain.** Create a fine-grained PAT
    at <https://github.com/settings/personal-access-tokens> with the
@@ -80,7 +72,7 @@ restarts if it crashes.
    ```
 
    Repeat for `daily-qa-pass`, `daily-doc-sync`, `hourly-engineer-dispatch`,
-   `hourly-uat-validation`, and `poll-events` as desired.
+   and `poll-events` as desired.
    `poll-events` is the daemon that handles event-triggered prompts
    (new issue, new PR, slash commands) — install it the same way as
    the cron plists; its plist sets `KeepAlive: true` so it restarts if
@@ -110,27 +102,6 @@ If you get "missing GITHUB_TOKEN", the keychain step didn't take. If
 you get "claude: command not found", install via `npm i -g claude` and
 log in.
 
-To smoke-test Codex without changing launchd:
-
-```bash
-AGENT_PROVIDER=codex ~/src/fhir-place/scripts/local/daily-pm-triage.sh
-ls -t ~/src/fhir-place/logs/daily-pm-triage-codex-*.log | head -1 | xargs tail -50
-```
-
-To let a launchd job choose either local provider, add an environment
-variable to that plist:
-
-```xml
-<key>EnvironmentVariables</key>
-<dict>
-  <key>AGENT_PROVIDER</key>
-  <string>random</string>
-</dict>
-```
-
-Use `claude` or `codex` instead of `random` when a prompt is only proven
-under one provider.
-
 ## Tradeoffs vs GHA
 
 | | local (this directory) | GHA |
@@ -153,13 +124,8 @@ Each row is a state transition in the issue/PR lifecycle. "Trigger"
 is how the action fires; "AI runner" is where any LLM work executes
 (and therefore what bills it).
 
-`Local agent` = `scripts/run-prompt-locally.sh` here, on Daniel's Mac,
-using `AGENT_PROVIDER=claude|codex|random`. Claude uses the local OAuth
-session. Codex uses Codex CLI auth.
-`Local Claude` = `AGENT_PROVIDER=claude`, `claude --print` against the
-Claude Max OAuth session.
-`Local Codex` = `AGENT_PROVIDER=codex`, `codex exec` against local Codex
-CLI auth.
+`Local Claude` = `claude --print` here, on Daniel's Mac, against the
+Claude Max OAuth session — subscription-billed.
 `Hosted Claude` = `anthropics/claude-code-action@v1` on GHA against
 `ANTHROPIC_API_KEY` — pay-per-token.
 `Hosted Codex` = ChatGPT Codex GitHub app — covered by the Codex
@@ -168,34 +134,29 @@ subscription.
 
 | Transition | Triggered by | Workflow / driver | AI runner | Notes |
 | --- | --- | --- | --- | --- |
-| New issue → triaged (labels, dedupe, priority) | `poll-events.sh` (local, every 60s) **+** `issues: opened` (GHA) | `scripts/local/event-issue-review.sh` (local) **+** `.github/workflows/issue-review.yml` (GHA, still on) | Local agent | Disable GHA copy once the daemon proves out. |
-| Stale backlog → triaged overnight | cron daily | `scripts/local/daily-pm-triage.sh` (local) **+** `daily-pm-triage.yml` (GHA, still on) | Local agent | GHA copy will turn off once the local run is stable. |
-| Ready issue → bot branch + draft PR | cron twice daily (09:00, 14:00 ET) | `scripts/local/engineer-dispatch.sh` (local) **+** `hourly-engineer-dispatch.yml` (GHA, still on, daily) | Local agent | Heaviest workload. Twice-daily for now while we get comfortable; will go back to hourly once the cadence proves out. Disable GHA copy once stable to stop double-billing. |
-| `/dispatch-engineer` comment on issue | `poll-events.sh` (local, every 60s) **+** `issue_comment: created` (GHA) | `scripts/local/event-dispatch-engineer.sh` (local) **+** `.github/workflows/dispatch-engineer-on-issue.yml` (GHA, still on) | Local agent | Collaborator-gated; eyes reaction marks dispatched. |
-| PR opened / ready_for_review → automated review | `poll-events.sh` (local, every 60s) **+** `pull_request` (GHA) | `scripts/local/event-pr-review.sh` (local) **+** `.github/workflows/pr-review.yml` (GHA, still on) **+** Codex auto-review (GitHub app) | Local agent + Hosted Codex (subscription) | Codex auto-review still covers PRs separately; the local prompt can run under Claude or Codex. |
-| PR labeled `uat: requested` → `/staging/` deploy | `push` to `staging` after stack workflow lands the PR | `.github/workflows/pages.yml` | No AI | Deterministic build + deploy. |
-| Staged PR → UAT walked, `uat: passed` / `uat: failed` | cron hourly | `scripts/local/hourly-uat-validation.sh` (local) — GHA schedule currently commented out | Local agent | GHA copy is manual-only, local is the primary. |
-| `/resolve-conflicts` comment on PR, or bot PR blocked by merge conflicts | `poll-events.sh` (local, every 60s) **+** `issue_comment: created` (GHA) **+** `pr-fixup-dispatch` workflow dispatch | `scripts/local/event-resolve-conflicts.sh` (local) **+** `.github/workflows/pr-resolve-conflicts.yml` (GHA, still on) | Local agent for slash command; hosted Claude for fixup dispatch | Collaborator-gated on manual command. Bot merge conflicts can be picked up automatically; agent resolves hand-authored conflicts and escalates only when ambiguous. |
-| PR approved + `uat: passed` → stacked onto `staging` | `pull_request_review`, `pull_request`, `push` (GHA) | `.github/workflows/stack-approved-prs.yml`; conflict fallback: `.github/workflows/staging-stack-agent.yml` | Hosted Claude only on conflict | Clean merges stay deterministic. Conflicted staging integrations go to the agent; human escalation is reserved for binary/generated/ambiguous conflicts. |
-| `staging` green → PR mergeable to `main` | reviewer action | (manual) | No AI | Gate is human + CI checks. |
+| New issue → triaged (labels, dedupe, priority) | `poll-events.sh` (local, every 60s) | `scripts/local/event-issue-review.sh` | Local Claude | The hosted agent job is disabled. |
+| Stale backlog → triaged overnight | launchd daily | `scripts/local/daily-pm-triage.sh` | Local Claude | The hosted agent job is disabled. |
+| Ready issue → bot branch + PR | launchd twice daily (09:00, 14:00 ET) | `scripts/local/engineer-dispatch.sh` | Local Claude | Heaviest workload; the hosted agent job is disabled. |
+| `/dispatch-engineer` comment on issue | `poll-events.sh` (local, every 60s) | `scripts/local/event-dispatch-engineer.sh` | Local Claude | Collaborator-gated; eyes reaction marks dispatched. |
+| PR opened / ready_for_review → automated review | `poll-events.sh` (local, every 60s) plus Codex auto-review | `scripts/local/event-pr-review.sh` plus Codex GitHub app | Local Claude plus Hosted Codex | The GitHub Actions Claude job is disabled. |
+| Reviewer requests one hosted preview | `preview: staging` label or manual workflow dispatch | `.github/workflows/preview-pr-on-staging.yml` + `.github/workflows/pages.yml` | No AI | Deterministic `main + one PR`; comments the deployed SHA after Pages succeeds. |
+| `/resolve-conflicts` comment on PR, or same-repository PR blocked by merge conflicts | `poll-events.sh` (local, every 60s; conflict scan every 5 minutes) | `scripts/local/event-resolve-conflicts.sh` | Local Claude | Collaborator-gated on manual command. Automatic runs use a clean control worktree and a durable `(base SHA, head SHA)` marker with two-hour backoff. The hosted workflow remains disabled. |
+| PR becomes mergeable to `main` | required CI + CODEOWNER approval | protected PR flow | No AI | Hosted preview is optional evidence, not a separate merge path. |
 | Merge to `main` → Pages deploy | `push: main` (GHA) | `.github/workflows/pages.yml` | No AI | Deterministic. |
-| Daily exploratory QA against real FHIR | cron daily | `scripts/local/daily-qa-pass.sh` (local) **+** `daily-qa-pass.yml` (GHA, still on) | Local agent | Heaviest single workload; boots its own dev server. |
-| Daily docs freshness check | cron daily | `scripts/local/daily-doc-sync.sh` (local) | Local agent | No GHA equivalent — local is the only runner. |
+| Daily exploratory QA against real FHIR | launchd daily | `scripts/local/daily-qa-pass.sh` | Local Claude | Heaviest single workload; the hosted agent job is disabled. |
+| Daily docs freshness check | cron daily | `scripts/local/daily-doc-sync.sh` (local) | Local Claude (subscription) | No GHA equivalent — local is the only runner. |
 | Nightly live-site Playwright | cron daily | `.github/workflows/live-site-monitor.yml` | No AI | Fixed suite, deterministic. |
 | Nightly integration | cron daily | `.github/workflows/integration.yml` | No AI | Real-FHIR Playwright suite. |
 | Issue / PR / label / project state changes | `issues`, `pull_request`, `push` (GHA) | `.github/workflows/project-sync.yml` | No AI | Pure script. |
 | Label vocab changes on main | `push: main` (paths) | `.github/workflows/sync-labels.yml` | No AI | Pure script. |
 | Workflow failure | `workflow_run: failure` (GHA) | `.github/workflows/on-failure-issue.yml` | No AI | Files an issue on red runs. |
 
-**Cost-shifting summary.** Every "Local agent" row above is running
-through this repo's local drivers (cron-fired via launchd or event-fired
-via `poll-events.sh`). Set `AGENT_PROVIDER=claude` to spend against the
-Claude Max OAuth session, `AGENT_PROVIDER=codex` to use local Codex CLI,
-or `AGENT_PROVIDER=random` to split runs between whichever providers are
-installed. The GHA twins of those rows are still enabled for
-belt-and-suspenders during the bake-in window; flip them off (rename
-`.yml.disabled` or `if: false`) once each local driver has 5–10 clean
-runs.
+**Cost-shifting summary.** Local agent rows run through launchd or
+`poll-events.sh`. `AGENT_PROVIDER=claude` uses the Claude Max subscription,
+`AGENT_PROVIDER=codex` uses the local Codex CLI, and `AGENT_PROVIDER=random`
+selects between installed providers. Check each workflow before assuming a
+hosted twin is live; conflict resolution and PR fixup jobs are explicitly
+disabled in Actions. Deterministic GitHub workflows do not spend model tokens.
 
 ## SDLC feedback-loop closes (this PR)
 
@@ -212,28 +173,12 @@ feedback loop after a bot PR was opened. This PR closes all four:
 ### How they layer
 
 ```
-new issue → engineer-dispatch (09:00, 14:00 ET) → opens bot/* PR with CI running
-                                                            │
-                          ┌─────────────────────────────────┴─────────────────────────────────┐
-                          ▼                                                                   ▼
-                    CI succeeds                                                          CI fails
-                          │                                                                   │
-                          ▼                                                                   ▼
-            human reviews → comments               flake-handler retries up to 2× (auto)
-                    │                                                                         │
-        ┌───────────┼───────────┐                          ┌─────────────┴──────────────┐
-        ▼           ▼           ▼                          ▼                            ▼
-   approves   requests        merge                  retry passes                  3rd failure
-   + uat:     changes         conflict               (PR moves on)                       │
-   passed         │              │                                                       ▼
-        │        ▼              ▼                                            pr-fixup-dispatch (09:30, 14:30)
-        ▼  /address-comments  /resolve-conflicts                                  picks up red-CI PR,
-   auto-merge   (agent          (agent thinks                                 dispatches engineer subagent
-   via native   addresses       through real                                       to existing branch
-   GitHub      threads,         conflict, pushes                                          │
-   setting    pushes, replies   resolution)                                               ▼
-              inline)                                                       engineer either fixes or
-                                                                            self-applies needs-human
+issue -> engineer dispatch -> bot PR to main -> CI + review -> human merge
+                                      |              |
+                                      |              +-> requested comments -> address-comments
+                                      +-> red CI -> bounded retry -> PR fixup
+                                      +-> merge conflict -> resolve on the PR branch against main
+                                      +-> optional hosted preview -> main + this PR on staging
 ```
 
 Agents own the genuinely-hard decisions (real conflicts, real bugs,
@@ -268,45 +213,23 @@ EST 10          -                           engineer-dispatch      (10:05 EST / 
    14    engineer-dispatch  (14:00)                  -
    15 … 23      -                                    -
 
-uat-validation fires at  :15  of every hour (local launchd only)
-
 DST notes:
 - launchd `StartCalendarInterval` is local clock time — 07:00 ET year-round.
 - GHA `cron` is UTC, so GHA fires shift an hour with DST. Rows above show
   EST first / EDT in parens.
 ```
 
-### Repeating slots (every hour, every day, ET)
-
-```
-:00  ★ engineer-dispatch (local) — but ONLY at 09:00 and 14:00 (twice daily)
-:15  ★ uat-validation    (local) — every hour
-:30  - (nothing scheduled)
-:45  - (nothing scheduled)
-```
-
 ## Collision analysis
 
 The runner uses a per-prompt lockfile (`/tmp/fhir-place-<name>.lock`),
 so two copies of the **same** prompt cannot stomp on each other. The
-lock name intentionally does not include the selected provider, so a
-random Claude run and a random Codex run cannot both work the same
-issue or PR at once. The risks below are **different** prompts firing
-close together.
+risks below are **different** prompts firing close together.
 
 ### Concrete overlap windows (ET)
 
 With engineer-dispatch on a twice-daily schedule (09:00 + 14:00), the
-sharp QA-pass collision is gone. UAT-validation still fires every
-hour at `:15`, so its overlaps are the only ones to watch.
-
-| Time | Routines that may overlap | Risk |
-| --- | --- | --- |
-| 05:15 | qa-pass (~15 min in) + uat-validation | Low. UAT walks `/staging/`, not localhost. Both hit GitHub API. |
-| 06:15 | doc-sync + uat-validation | Low. |
-| 07:15 | pm-triage + uat-validation | Low. |
-| 09:00 + 09:15 | engineer-dispatch (start) → uat-validation 15 min later | Low. Different surfaces; UAT runs read-only against `/staging/`. |
-| 14:00 + 14:15 | engineer-dispatch (start) → uat-validation 15 min later | Low. Same as 09:00. |
+sharp QA-pass collision is gone. Hosted preview deployment is event-driven
+and does not consume the local Claude session.
 
 ### Cross-routine hazards
 
@@ -317,13 +240,12 @@ hour at `:15`, so its overlaps are the only ones to watch.
    either move engineer-dispatch off `:05` during the 05:00 QA window,
    or have the engineer subagent fall back to a random free port for
    screenshots.
-2. **Provider rate limits (MEDIUM).** Three concurrent local agent runs
-   during overlap windows can still hit Claude Max or Codex limits,
-   depending on `AGENT_PROVIDER`. **Mitigation:** stagger by ≥10 min
-   within an hour and use `AGENT_PROVIDER=random` only after both
-   providers have clean runs for that prompt.
+2. **Claude Max rate limits (MEDIUM).** Three concurrent `claude --print`
+   sessions during overlap windows count against the same Max account.
+   Hitting the limit silently degrades the output of whichever session
+   gets throttled. **Mitigation:** stagger by ≥10 min within an hour.
 3. **GitHub PAT rate limit (LOW).** Fine-grained PAT gets 5000 req/hr.
-   Combined ceiling across all five routines is well under that.
+   Combined ceiling across the active routines is well under that.
 4. **Mac CPU under load (MEDIUM).** Two Playwright runs concurrently
    (QA + engineer screenshots) on an M-series Mac is OK; Playwright +
    `pnpm build` + e2e on top of that may bottleneck. **Mitigation:**
@@ -343,7 +265,6 @@ hour at `:15`, so its overlaps are the only ones to watch.
 07:00  pm-triage          (medium)
 09:00  engineer-dispatch  ← morning fire (twice daily, not hourly)
 14:00  engineer-dispatch  ← afternoon fire (twice daily, not hourly)
-xx:15  uat-validation     (hourly)
 ```
 
 Twice-daily engineer-dispatch is the temporary cadence — both fires

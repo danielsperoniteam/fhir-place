@@ -4,6 +4,7 @@ import {
   BUILTIN_SERVERS,
   DEFAULT_ACTIVE_SERVER_ID,
   buildRequestHeaders,
+  loadActiveRequestHeaders,
   loadActiveServerId,
   loadServers,
   resolveActiveServer,
@@ -312,6 +313,36 @@ describe("resolveActiveServer", () => {
   it("falls back to the default id when active id matches nothing", () => {
     saveActiveServerId("never-existed");
     expect(resolveActiveServer().id).toBe(DEFAULT_ACTIVE_SERVER_ID);
+  });
+
+  it("falls back to the default id when the active server has a blank base URL", () => {
+    saveServers([
+      {
+        id: "custom-blank",
+        label: "Blank",
+        baseUrl: "",
+        authMode: "bearer",
+        bearerToken: "tok",
+      },
+    ]);
+    saveActiveServerId("custom-blank");
+    expect(resolveActiveServer().id).toBe(DEFAULT_ACTIVE_SERVER_ID);
+  });
+});
+
+describe("loadActiveRequestHeaders", () => {
+  it("reads bearer settings from the active server in localStorage", () => {
+    saveServers([
+      {
+        id: "custom-headers",
+        label: "Header Server",
+        baseUrl: "https://example.org/fhir",
+        authMode: "bearer",
+        bearerToken: "tok",
+      },
+    ]);
+    saveActiveServerId("custom-headers");
+    expect(loadActiveRequestHeaders()).toEqual({ Authorization: "Bearer tok" });
   });
 });
 

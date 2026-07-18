@@ -9,6 +9,7 @@ import type {
   Resource,
   Timing,
 } from "fhir/r4";
+import { ucumDisplay } from "./ucumDisplay.js";
 
 /**
  * Pure string-formatters for FHIR datatypes. Used by the read-side renderers
@@ -59,11 +60,22 @@ export function formatCodeableConcept(cc: CodeableConcept | undefined): string {
   return formatCoding(first);
 }
 
+/**
+ * A Quantity's `code` may only be read as UCUM when `system` says so (or is
+ * absent — UCUM is FHIR's implicit default for unit codes). A site-specific
+ * system scopes its own codes; decoding those as UCUM would misrender them.
+ */
+export const isUcumQuantity = (q: Quantity): boolean =>
+  !q.system || q.system === "http://unitsofmeasure.org";
+
 export function formatQuantity(q: Quantity | undefined): string {
   if (!q) return "";
   const comparator = q.comparator ?? "";
   const num = q.value === undefined ? "" : String(q.value);
-  const unit = q.unit ?? q.code ?? "";
+  // Prefer the human display unit; fall back to a decoded UCUM code
+  // ("10*9/L" → "10⁹/L") rather than the raw symbol (#368). Non-UCUM
+  // systems keep their raw code.
+  const unit = q.unit ?? (isUcumQuantity(q) ? ucumDisplay(q.code) : q.code ?? "");
   return `${comparator}${num}${unit ? ` ${unit}` : ""}`.trim();
 }
 

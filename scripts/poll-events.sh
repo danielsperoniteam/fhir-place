@@ -208,26 +208,13 @@ poll_once() {
     --jq '[.[] | {id, body, author_association, user: .user.login, html_url, issue_url}]' \
     2>/dev/null || echo '[]')
   echo "$comments" | jq -c '.[]' | while read -r row; do
-    local cid body assoc url issue_url num
+    local cid body assoc url issue_url num cross_repo
     cid=$(echo "$row" | jq -r '.id')
     body=$(echo "$row" | jq -r '.body')
     assoc=$(echo "$row" | jq -r '.author_association')
     url=$(echo "$row" | jq -r '.html_url')
     issue_url=$(echo "$row" | jq -r '.issue_url')
     num=$(basename "$issue_url")
-
-    # Staging conflict marker — posted by github-actions[bot], bypass collaborator gate.
-    if echo "$body" | grep -q '<!-- staging-stack-agent-dispatch '; then
-      if echo "$url" | grep -q '/pull/'; then
-        if already_handled "$cid"; then continue; fi
-        local sha
-        sha=$(echo "$body" | grep -o 'sha=[^ >]*' | cut -d= -f2 | head -1)
-        echo "staging-conflict marker on PR #$num (comment $cid sha=$sha) → local resolver"
-        mark_handled "$cid"
-        dispatch_async "$REPO_ROOT/scripts/local/event-staging-conflict.sh" "$num" "$sha"
-      fi
-      continue
-    fi
 
     if ! is_collaborator "$assoc"; then
       continue
@@ -247,6 +234,13 @@ poll_once() {
       # /resolve-conflicts is PR-only.
       if echo "$url" | grep -q '/pull/'; then
         if already_handled "$cid"; then continue; fi
+        cross_repo=$(gh pr view "$num" --repo "$REPO" --json isCrossRepository \
+          --jq '.isCrossRepository' 2>/dev/null || echo "unknown")
+        if [[ "$cross_repo" != "false" ]]; then
+          echo "/resolve-conflicts rejected for PR #$num (cross-repository or unreadable)"
+          mark_handled "$cid"
+          continue
+        fi
         echo "/resolve-conflicts on PR #$num (comment $cid) → conflict resolver"
         mark_handled "$cid"
         dispatch_async "$REPO_ROOT/scripts/local/event-resolve-conflicts.sh" "$num"
@@ -296,25 +290,44 @@ poll_once() {
   if (( POLL_ITER % 5 == 0 )); then
     local conflicting_prs
     conflicting_prs=$(gh pr list --repo "$REPO" --state open \
-      --json number,headRefName,isDraft,mergeStateStatus \
-      --jq '[.[] | select(.isDraft == false) | {number, head: .headRefName, mergeable: .mergeStateStatus}]' \
+      --limit 200 \
+      --json number,headRefName,headRefOid,baseRefOid,isDraft,isCrossRepository,mergeStateStatus,labels \
+      --jq '[.[] | select(.isDraft == false and .isCrossRepository == false and ([.labels[].name] | contains(["status: needs-human"]) | not)) | {number, head: .headRefName, head_sha: .headRefOid, base_sha: .baseRefOid, mergeable: .mergeStateStatus}]' \
       2>/dev/null || echo '[]')
     echo "$conflicting_prs" | jq -c '.[]' | while read -r row; do
-      local num head mergeable
+      local num head head_sha base_sha mergeable resolver_lock resolver_pid
       num=$(echo "$row" | jq -r '.number')
       head=$(echo "$row" | jq -r '.head')
+      head_sha=$(echo "$row" | jq -r '.head_sha')
+      base_sha=$(echo "$row" | jq -r '.base_sha')
       mergeable=$(echo "$row" | jq -r '.mergeable')
       [[ "$mergeable" != "DIRTY" ]] && continue
-      # Dedup: skip if a resolver was dispatched in the last 2 hours.
+      resolver_lock="/tmp/fhir-place-pr-resolve-conflicts-PR-$num.lock"
+      if [[ -d "$resolver_lock" ]]; then
+        resolver_pid=$(cat "$resolver_lock/pid" 2>/dev/null || true)
+        if [[ -n "$resolver_pid" ]] && kill -0 "$resolver_pid" 2>/dev/null; then
+          echo "PR #$num conflict resolver already in flight (pid $resolver_pid) — skip"
+          continue
+        fi
+      fi
+      # Durable dedupe keyed to the exact merge inputs. If a run dies before
+      # its summary, the dispatch marker still prevents a five-minute storm.
+      # A new base or head SHA is new work and may dispatch immediately.
       local two_hours_ago
       two_hours_ago=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
                       || date -u --date='2 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-      local recent_resolver
+      local dispatch_marker recent_resolver
+      dispatch_marker="<!-- resolve-conflicts:dispatch base=$base_sha head=$head_sha -->"
       recent_resolver=$(gh api "repos/$REPO/issues/$num/comments?since=$two_hours_ago" \
-        --jq '[.[] | select(.body | contains("/resolve-conflicts"))] | length' \
+        --jq "[.[] | select(.body | contains(\"$dispatch_marker\"))] | length" \
         2>/dev/null || echo '0')
       if [[ "$recent_resolver" -gt 0 ]]; then
-        echo "PR #$num conflict detected but resolver recently dispatched — skip"
+        echo "PR #$num conflict inputs already dispatched in the last 2h — skip"
+        continue
+      fi
+      if ! gh pr comment "$num" --repo "$REPO" --body "$dispatch_marker
+Automated conflict resolution queued for base \`$base_sha\` and head \`$head_sha\`." >/dev/null; then
+        echo "PR #$num conflict marker failed; not dispatching an untracked run" >&2
         continue
       fi
       echo "PR #$num ($head) conflicts with main → auto resolve-conflicts"

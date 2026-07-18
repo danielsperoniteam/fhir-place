@@ -44,10 +44,13 @@ test.describe("Patient list — URL sync", () => {
     await expect(page).not.toHaveURL(/_count=/);
   });
 
-  test("does not expose the unfinished saved-query action", async ({ page }) => {
+  test("saved-query action is present and gated on an active query", async ({ page }) => {
+    // #355 removed a dead Save-query button; #254 PR A shipped the real one.
+    // Disabled on a bare list URL, enabled once params are in the URL —
+    // full save/load/delete coverage lives in saved-queries.spec.ts.
     await page.goto("/Patient");
 
     const toolbar = page.getByTestId("search-params-toolbar");
-    await expect(toolbar.getByRole("button", { name: "Save query" })).toHaveCount(0);
+    await expect(toolbar.getByTestId("save-query")).toBeDisabled();
   });
 });

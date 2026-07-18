@@ -3,6 +3,7 @@ import {
   FhirError,
   HintedDetail,
   ResourceView,
+  ReverseReferences,
   getLayoutHint,
   useDeleteResource,
   useResource,
@@ -15,8 +16,10 @@ import { CompartmentSection } from "../../../components/CompartmentSection.js";
 import { PatientCompartmentLinks } from "../../../components/PatientCompartmentLinks.js";
 import { CC_FONT, CC_MONO, ccBtn } from "../../../components/ccStyles.js";
 import { PATIENT_COMPARTMENT } from "../../../compartment.js";
+import { USE_HASH_ROUTER } from "../../../config.js";
 import { patientFieldOptions } from "../../../patientFields.js";
 import { RESOURCE_LIST_CONFIG } from "../../../resourceListConfig.js";
+import { resourceCollectionLabel } from "../resourceLabels.js";
 
 const PATIENT_FIELDS_KEY = "fhir-place-demo-patient-detail-fields";
 
@@ -37,24 +40,64 @@ const HTML_ESCAPES: Record<string, string> = {
 };
 const escapeHtml = (s: string): string => s.replace(/[&<>]/g, (c) => HTML_ESCAPES[c]!);
 
+// Single-pass JSON line colorizer.
+//
+// The previous four-pass approach (chain of .replace() calls) had a subtle
+// bug (issue #611): the first pass wrapped `"key":` in a span, consuming the
+// structural colon. Subsequent passes then scanned the rest of the line for
+// `:` patterns and matched colons *inside* string values (e.g. ISO timestamps
+// like `"2026-05-09T03:11:26"`) inserting stray spaces after each colon.
+//
+// Fix: a single regex that matches each JSON "key: value" pair or standalone
+// token as a unit, so the entire string value — colons and all — is consumed
+// in one match and is never revisited.
+//
+// Named capture groups:
+//   key        — the quoted key string
+//   sep        — the `: ` separator (colon + optional whitespace)
+//   strVal     — a quoted string value that follows a key+sep
+//   primVal    — a number/bool/null value that follows a key+sep
+//   standalone — a quoted string that is NOT preceded by a key (array element)
+const JSON_LINE_TOKEN_RE =
+  /(?<key>"(?:[^"\\]|\\.)*")(?<sep>\s*:\s*)(?:(?<strVal>"(?:[^"\\]|\\.)*")|(?<primVal>true|false|null|-?\d+(?:\.\d+)?))|(?<standalone>"(?:[^"\\]|\\.)*")/g;
+
 export function colorJson(line: string): string {
-  return escapeHtml(line)
-    .replace(
-      /("(?:[^"\\]|\\.)*")(\s*:)/g,
-      `<span style="color:var(--accent-text)">$1</span>$2`,
-    )
-    .replace(
-      /:\s*("(?:[^"\\]|\\.)*")/g,
-      `: <span style="color:var(--success)">$1</span>`,
-    )
-    .replace(
-      /:\s*(true|false|null)/g,
-      `: <span style="color:var(--accent)">$1</span>`,
-    )
-    .replace(
-      /:\s*(-?\d+(?:\.\d+)?)/g,
-      `: <span style="color:var(--accent)">$1</span>`,
-    );
+  return escapeHtml(line).replace(
+    JSON_LINE_TOKEN_RE,
+    (_match, ...args) => {
+      // Named groups are the last element of the args array in modern JS.
+      const g = args[args.length - 1] as {
+        key?: string;
+        sep?: string;
+        strVal?: string;
+        primVal?: string;
+        standalone?: string;
+      };
+      if (g.key !== undefined && g.strVal !== undefined) {
+        // "key": "string value"
+        return (
+          `<span style="color:var(--accent-text)">${g.key}</span>${g.sep}` +
+          `<span style="color:var(--success)">${g.strVal}</span>`
+        );
+      }
+      if (g.key !== undefined && g.primVal !== undefined) {
+        // "key": true / false / null / 42
+        return (
+          `<span style="color:var(--accent-text)">${g.key}</span>${g.sep}` +
+          `<span style="color:var(--accent)">${g.primVal}</span>`
+        );
+      }
+      if (g.key !== undefined) {
+        // "key": (value not captured — structural line like "key": {)
+        return `<span style="color:var(--accent-text)">${g.key}</span>${g.sep ?? ""}`;
+      }
+      if (g.standalone !== undefined) {
+        // Standalone string (array element)
+        return `<span style="color:var(--success)">${g.standalone}</span>`;
+      }
+      return _match;
+    },
+  );
 }
 
 export function ResourceDetailPage() {
@@ -131,36 +174,47 @@ export function ResourceDetailPage() {
       >
         <Link
           to={`/fhir-ui/${resourceType}`}
+          data-testid="resource-detail-back-link"
           style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "none" }}
         >
-          ← All {resourceType.toLowerCase()}s
+          ← All {resourceCollectionLabel(resourceType)}
         </Link>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {isPatient && patientFields.length > 0 && (
-            <ColumnPicker
-              options={patientFields}
-              defaultSelected={patientDefaultFields}
-              onChange={setVisibleFields}
-              storageKey={PATIENT_FIELDS_KEY}
-              buttonLabel="Fields"
-              searchPlaceholder="Filter fields…"
-            />
-          )}
-          <Link
-            to={`/fhir-ui/${resourceType}/${id}/edit`}
-            style={ccBtn("secondary")}
-            data-testid="edit-resource"
+        {/* Action buttons gate on resource presence: a 404/410 means there
+            is nothing to view fields on, edit, or delete. Rendering them
+            anyway invites the Edit-route-to-a-ghost failure (#482) and a
+            Delete confirm that can only ever surface a 404. Capability-
+            based gating is a separate concern (#159). */}
+        {!notFound && (
+          <div
+            data-testid="resource-actions"
+            style={{ display: "flex", gap: 6, alignItems: "center" }}
           >
-            Edit
-          </Link>
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            style={ccBtn("danger")}
-            data-testid="delete-resource"
-          >
-            Delete
-          </button>
-        </div>
+            {isPatient && patientFields.length > 0 && (
+              <ColumnPicker
+                options={patientFields}
+                defaultSelected={patientDefaultFields}
+                onChange={setVisibleFields}
+                storageKey={PATIENT_FIELDS_KEY}
+                buttonLabel="Fields"
+                searchPlaceholder="Filter fields…"
+              />
+            )}
+            <Link
+              to={`/fhir-ui/${resourceType}/${id}/edit`}
+              style={ccBtn("secondary")}
+              data-testid="edit-resource"
+            >
+              Edit
+            </Link>
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              style={ccBtn("danger")}
+              data-testid="delete-resource"
+            >
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Delete confirm */}
@@ -245,9 +299,10 @@ export function ResourceDetailPage() {
           </p>
           <Link
             to={`/fhir-ui/${resourceType}`}
+            data-testid="resource-not-found-back-link"
             style={{ fontSize: 12, color: "var(--text-muted)" }}
           >
-            ← Back to all {resourceType.toLowerCase()}s
+            ← Back to all {resourceCollectionLabel(resourceType)}
           </Link>
         </div>
       )}
@@ -506,19 +561,49 @@ function ReferencesPane({
 }) {
   const refs = extractReferences(resource);
 
-  if (refs.length === 0) {
-    return (
+  // Incoming references ("Referenced by", #253) render below the outgoing
+  // list — additive, so the pane is useful even when either half is empty.
+  const referencedBy = resource.id ? (
+    <div style={{ marginTop: refs.length === 0 ? 0 : 14 }}>
       <div
         style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 13,
-          color: "var(--text-muted)",
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: 0.6,
+          textTransform: "uppercase",
+          color: "var(--text-subtle)",
+          margin: "0 0 6px",
         }}
       >
-        No references found
+        Referenced by
+      </div>
+      <ReverseReferences
+        resourceType={resource.resourceType}
+        id={resource.id}
+        // Router-aware: clicks go through the SPA router (works under
+        // BrowserRouter and the hosted build's HashRouter alike); the href
+        // stays correct for middle-click / copy in both modes.
+        hrefFor={(type, id) =>
+          USE_HASH_ROUTER ? `#/fhir-ui/${type}/${id}` : `/fhir-ui/${type}/${id}`
+        }
+        onNavigate={(type, id) => onNavigate(`/fhir-ui/${type}/${id}`)}
+      />
+    </div>
+  ) : null;
+
+  if (refs.length === 0) {
+    return (
+      <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--text-muted)",
+            padding: "8px 0 4px",
+          }}
+        >
+          No outgoing references found
+        </div>
+        {referencedBy}
       </div>
     );
   }
@@ -578,6 +663,7 @@ function ReferencesPane({
           );
         })}
       </div>
+      {referencedBy}
     </div>
   );
 }
