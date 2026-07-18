@@ -457,4 +457,22 @@ describe("ResourceEditor", () => {
     // The fallback renders a textarea with the JSON contents
     expect(screen.getByDisplayValue(/"nested"/)).toBeInTheDocument();
   });
+
+  it("emits no <dt> or <dd> elements, including for nested BackboneElement fields (regression: #587 validateDOMNesting)", async () => {
+    // Populate a name array item so that the BackboneElement FieldGroup is
+    // rendered — this is what previously caused dt/dd nesting inside a dd.
+    const user = userEvent.setup();
+    const { container } = wrap(
+      <ResourceEditor
+        resource={loaded}
+        structureDefinition={PatientStructureDefinition}
+      />,
+    );
+    // Expand the name array so nested HumanName fields are visible.
+    await user.click(screen.getByRole("button", { name: /add name/i }));
+    // dt and dd are only valid inside dl; their presence anywhere in the
+    // rendered output means invalid HTML that React would warn about.
+    expect(container.querySelectorAll("dt")).toHaveLength(0);
+    expect(container.querySelectorAll("dd")).toHaveLength(0);
+  });
 });
