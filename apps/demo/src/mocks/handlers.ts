@@ -38,13 +38,23 @@ const okJson = (data: any, init?: ResponseInit) =>
     },
   });
 
-const readSearch = [{ code: "read" }, { code: "search-type" }];
+// Compartment-type handlers below implement create/update/delete in addition
+// to read+search. The CapabilityStatement must advertise the same set so the
+// capability-gated UI (`useResourceCapabilities`) renders the matching write
+// buttons. Patient gets the same full set via its inline `interaction` array.
+const fullCrud = [
+  { code: "read" },
+  { code: "search-type" },
+  { code: "create" },
+  { code: "update" },
+  { code: "delete" },
+];
 const capabilityResource = (
   type: string,
   searchParam: Array<{ name: string; type: "token" | "reference" | "date"; documentation?: string }>,
 ) => ({
   type,
-  interaction: readSearch,
+  interaction: fullCrud,
   searchParam,
 });
 
@@ -85,7 +95,7 @@ export const handlers = [
             },
             {
               type: "Observation",
-              interaction: readSearch,
+              interaction: fullCrud,
               searchParam: [
                 { name: "_id", type: "token" },
                 { name: "code", type: "token" },

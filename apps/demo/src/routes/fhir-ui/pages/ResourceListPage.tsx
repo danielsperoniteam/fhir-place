@@ -10,6 +10,7 @@ import {
   useFhirClient,
   usePagedSearch,
   useResource,
+  useResourceCapabilities,
   useStructureDefinition,
 } from "@fhir-place/react-fhir";
 import type { Patient, Reference, Resource } from "fhir/r4";
@@ -464,7 +465,10 @@ export function ResourceListPage() {
 
   const heading = patientId ? resourceType : config?.title ?? resourceType;
   const singular = config?.singular ?? resourceType.toLowerCase();
-  const showCreate = !patientId && Boolean(config);
+  const { canCreate } = useResourceCapabilities(resourceType);
+  // Default-hide when CapabilityStatement is loading or the type is not
+  // advertised — better than rendering a button that 405s on click.
+  const showCreate = !patientId && Boolean(config) && canCreate;
   const priorityParams = config?.priorityParams;
 
   const totalStr = (() => {

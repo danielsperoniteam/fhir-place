@@ -25,6 +25,7 @@ import {
   usePagedSearch,
   useReadReferences,
   useResource,
+  useResourceCapabilities,
   useResources,
   useSearch,
   useSearchParameter,
@@ -84,6 +85,95 @@ describe("query hooks", () => {
     const { result } = renderHook(() => useCapabilities(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.resourceType).toBe("CapabilityStatement");
+  });
+
+  describe("useResourceCapabilities", () => {
+    const capWith = (
+      type: string,
+      codes: string[],
+    ): import("fhir/r4").CapabilityStatement => ({
+      resourceType: "CapabilityStatement",
+      status: "active",
+      date: "2024-01-01",
+      kind: "instance",
+      fhirVersion: "4.0.1",
+      format: ["json"],
+      rest: [
+        {
+          mode: "server",
+          resource: [
+            { type, interaction: codes.map((code) => ({ code: code as never })) },
+          ],
+        },
+      ],
+    });
+
+    it("reads create/update/delete/search-type from advertised interactions", () => {
+      const { wrapper } = mkWrapper();
+      const cap = capWith("Patient", ["read", "search-type", "create", "update", "delete"]);
+      const { result } = renderHook(
+        () => useResourceCapabilities("Patient", { capabilityStatement: cap }),
+        { wrapper },
+      );
+      expect(result.current.canCreate).toBe(true);
+      expect(result.current.canUpdate).toBe(true);
+      expect(result.current.canDelete).toBe(true);
+      expect(result.current.canSearch).toBe(true);
+    });
+
+    it("denies write interactions a server omits", () => {
+      const { wrapper } = mkWrapper();
+      const cap = capWith("Observation", ["read", "search-type"]);
+      const { result } = renderHook(
+        () => useResourceCapabilities("Observation", { capabilityStatement: cap }),
+        { wrapper },
+      );
+      expect(result.current.canCreate).toBe(false);
+      expect(result.current.canUpdate).toBe(false);
+      expect(result.current.canDelete).toBe(false);
+      expect(result.current.canSearch).toBe(true);
+    });
+
+    it("denies all when the resource type is not advertised at all", () => {
+      const { wrapper } = mkWrapper();
+      const cap = capWith("Patient", ["create", "update", "delete"]);
+      const { result } = renderHook(
+        () => useResourceCapabilities("Observation", { capabilityStatement: cap }),
+        { wrapper },
+      );
+      expect(result.current.canCreate).toBe(false);
+      expect(result.current.canUpdate).toBe(false);
+      expect(result.current.canDelete).toBe(false);
+      expect(result.current.canSearch).toBe(false);
+    });
+
+    it("denies all while the CapabilityStatement is loading", () => {
+      // Hang the metadata request so the query stays in loading state.
+      server.use(
+        http.get(`${BASE}/metadata`, async () => {
+          await new Promise(() => {});
+          return HttpResponse.json({});
+        }),
+      );
+      const { wrapper } = mkWrapper();
+      const { result } = renderHook(() => useResourceCapabilities("Patient"), { wrapper });
+      expect(result.current.isLoading).toBe(true);
+      expect(result.current.canCreate).toBe(false);
+      expect(result.current.canUpdate).toBe(false);
+      expect(result.current.canDelete).toBe(false);
+    });
+
+    it("denies all when resourceType is undefined", () => {
+      const { wrapper } = mkWrapper();
+      const cap = capWith("Patient", ["create", "update", "delete"]);
+      const { result } = renderHook(
+        () => useResourceCapabilities(undefined, { capabilityStatement: cap }),
+        { wrapper },
+      );
+      expect(result.current.canCreate).toBe(false);
+      expect(result.current.canUpdate).toBe(false);
+      expect(result.current.canDelete).toBe(false);
+    });
   });
 
   it("useResource is disabled when id is undefined", () => {

@@ -64,6 +64,70 @@ export function useCapabilities(options?: ReadQueryOpts<CapabilityStatement>) {
   });
 }
 
+export interface ResourceCapabilities {
+  /** `true` when the server advertises `create` for this resource type. */
+  canCreate: boolean;
+  /** `true` when the server advertises `update` for this resource type. */
+  canUpdate: boolean;
+  /** `true` when the server advertises `delete` for this resource type. */
+  canDelete: boolean;
+  /** `true` when the server advertises `search-type` for this resource type. */
+  canSearch: boolean;
+  /** `true` while the CapabilityStatement is still loading. */
+  isLoading: boolean;
+  /** `true` when the CapabilityStatement could not be loaded. */
+  isError: boolean;
+}
+
+const DENY_ALL: ResourceCapabilities = {
+  canCreate: false,
+  canUpdate: false,
+  canDelete: false,
+  canSearch: false,
+  isLoading: false,
+  isError: false,
+};
+
+/**
+ * Reports which interactions the server advertises for `resourceType` via
+ * `CapabilityStatement.rest.resource[].interaction[]`. Defaults to **deny** —
+ * `false` for every flag — when the type is unknown, the metadata is still
+ * loading, or the request errored. UIs that gate write buttons on these flags
+ * therefore default-hide rather than render an action that will 405.
+ *
+ * Pass a `capabilityStatement` override to bypass the network fetch (useful
+ * for tests, offline mode, or shared parents that already hold the metadata).
+ */
+export function useResourceCapabilities(
+  resourceType: string | undefined,
+  options?: { capabilityStatement?: CapabilityStatement },
+): ResourceCapabilities {
+  const capQuery = useCapabilities({ enabled: !options?.capabilityStatement });
+  const cap = options?.capabilityStatement ?? capQuery.data;
+  const isLoading = !options?.capabilityStatement && capQuery.isLoading;
+  const isError = !options?.capabilityStatement && capQuery.isError;
+
+  if (!resourceType) return { ...DENY_ALL, isLoading, isError };
+  if (!cap) return { ...DENY_ALL, isLoading, isError };
+
+  const resource = cap.rest
+    ?.flatMap((r) => r.resource ?? [])
+    .find((r) => r.type === resourceType);
+  if (!resource) return { ...DENY_ALL, isLoading, isError };
+
+  const codes = new Set(
+    (resource.interaction ?? []).map((i) => i.code).filter(Boolean),
+  );
+  return {
+    canCreate: codes.has("create"),
+    canUpdate: codes.has("update"),
+    canDelete: codes.has("delete"),
+    canSearch: codes.has("search-type"),
+    isLoading,
+    isError,
+  };
+}
+
 export function useResource<T extends Resource = Resource>(
   type: string,
   id: string | undefined,
