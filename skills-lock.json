@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "onboarding": {
+      "source": "launchdarkly/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/onboarding/SKILL.md",
+      "computedHash": "d33d80bfa7edf8f3d201a9fe9ee8341ec436d98a2dc44d293e6e712544acb203"
+    }
+  }
+}

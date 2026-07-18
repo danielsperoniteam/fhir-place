@@ -108,6 +108,22 @@ these as embedded in issue bodies — do not repeat that mistake.
    abstractions"). Don't refactor adjacent code, don't rename things, don't
    add comments that explain WHAT — only WHY when non-obvious.
 
+   **Feature-flag wrapping (per ADR 0006).** Read the issue's labels:
+   - `flag: required` → wrap the change in a default-off LaunchDarkly flag.
+     Pick a key per the naming convention `<area>-<short-name>` (kebab-case,
+     no version suffixes). The fallback variant must be the **current
+     production behavior** so the flag-off state is a no-op. Add a "Rollout
+     plan" section to the PR body with the flag key, the fallback variant,
+     and the suggested first targeting cohort (default: Daniel's email,
+     then percentage rollout).
+   - `flag: optional` → exit `status: needs-human` with a comment naming
+     which trigger from ADR 0006 you think applies and why; a person decides.
+   - No `flag:` label → ship unwrapped, no PR-body section needed.
+
+   Do **not** create the flag in LaunchDarkly yourself — leave that to the
+   human reviewer at merge time. Your job is to wire the conditional in
+   code with the right key; the dashboard side is theirs.
+
    **Capture screenshots for any user-visible change.** This includes
    demo-app changes **and** library changes in `packages/react-fhir/**`
    (which are user-visible via the demo). Procedure:

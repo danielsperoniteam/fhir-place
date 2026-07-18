@@ -11,6 +11,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@22.19.17)
+      '@launchdarkly/node-server-sdk':
+        specifier: ^9.10.14
+        version: 9.12.1
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17
@@ -986,6 +989,15 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@launchdarkly/js-sdk-common@2.25.1':
+    resolution: {integrity: sha512-erG2RbA8QQMKW+D9Y7Uahez1dU+TzmyTzv9qlB7b0Pr/DS2SmUg5H8pJbkLcRrSxoshczZdB1UqsuE3RAk7UYQ==}
+
+  '@launchdarkly/js-server-sdk-common@2.19.3':
+    resolution: {integrity: sha512-1VTbCagS11S5LCefGTzLNXwgdGwdQBjEkymjh5O/TfdguPADX6yRCFSAjBWtw7Hb9H8C8NAQ6hY/fpadonKgUA==}
+
+  '@launchdarkly/node-server-sdk@9.12.1':
+    resolution: {integrity: sha512-GX33IDZ/e1EvzRTO5Wn0X6samUSqKthJT3P0Y8P2gQ0D1peswJ/QsPcKZoPgu7QMWSC2wkFKQ8jkEAJguHsIow==}
 
   '@lhncbc/ucum-lhc@4.2.0':
     resolution: {integrity: sha512-OEiWX7IHFHLTFs7+w5EvGtI5dhXhhL0341LqZ9WEBWErtoY0/9xl/vn+wwT9vnBHnjQ7Ux0o7iEUXvN8uVn4xg==}
@@ -2552,6 +2564,10 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
+  launchdarkly-eventsource@2.2.0:
+    resolution: {integrity: sha512-u38fYlLSq/m6oFz0MS1/76Sj2xzlYhTKZ+sf/vju6PA86PMc6fPlY5k8CdU79edLXjNwsvIQTDvDNy3llDqB8A==}
+    engines: {node: '>=0.12.0'}
+
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
@@ -2597,6 +2613,10 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
+
+  lru-cache@6.0.0:
+    resolution: {integrity: sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==}
+    engines: {node: '>=10'}
 
   luxon@1.28.1:
     resolution: {integrity: sha512-gYHAa180mKrNIUJCbwpmD0aTu9kV0dREDrwNnuyFAsO1Wt0EVYSZelPnJlbj9HplzXX/YWXHFTL45kvZ53M0pw==}
@@ -3237,6 +3257,11 @@ packages:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
     hasBin: true
 
+  semver@7.5.4:
+    resolution: {integrity: sha512-1bCSESV6Pv+i21Hvpxp3Dx+pSD8lIPt8uVjRrxAUt/nbswYc+tK6Y2btiULjd4+fnq15PX+nqQDC7Oft7WkwcA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   semver@7.7.4:
     resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
     engines: {node: '>=10'}
@@ -3795,6 +3820,9 @@ packages:
 
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
+
+  yallist@4.0.0:
+    resolution: {integrity: sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==}
 
   yaml@2.9.0:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
@@ -4463,6 +4491,21 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@launchdarkly/js-sdk-common@2.25.1': {}
+
+  '@launchdarkly/js-server-sdk-common@2.19.3':
+    dependencies:
+      '@launchdarkly/js-sdk-common': 2.25.1
+      semver: 7.5.4
+
+  '@launchdarkly/node-server-sdk@9.12.1':
+    dependencies:
+      '@launchdarkly/js-server-sdk-common': 2.19.3
+      https-proxy-agent: 7.0.6
+      launchdarkly-eventsource: 2.2.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@lhncbc/ucum-lhc@4.2.0':
     dependencies:
@@ -6277,6 +6320,8 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
+  launchdarkly-eventsource@2.2.0: {}
+
   levn@0.4.1:
     dependencies:
       prelude-ls: 1.2.1
@@ -6313,6 +6358,10 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lru-cache@6.0.0:
+    dependencies:
+      yallist: 4.0.0
 
   luxon@1.28.1: {}
 
@@ -7215,6 +7264,10 @@ snapshots:
 
   semver@6.3.1: {}
 
+  semver@7.5.4:
+    dependencies:
+      lru-cache: 6.0.0
+
   semver@7.7.4: {}
 
   set-cookie-parser@2.7.2: {}
@@ -7841,6 +7894,8 @@ snapshots:
   y18n@5.0.8: {}
 
   yallist@3.1.1: {}
+
+  yallist@4.0.0: {}
 
   yaml@2.9.0: {}
 
