@@ -26,7 +26,11 @@ export function formatSearchRequest(
   params?: SearchParams,
 ): SearchRequestPreview {
   const qs = buildSearchParams(params);
-  const queryString = qs.toString();
+  // URLSearchParams percent-encodes `:` (modifier keys like `given:exact`)
+  // even though RFC 3986 allows a literal colon in the query. Decode it for
+  // readability — this preview's job is to teach FHIR search syntax, and
+  // both spellings are equivalent on the wire.
+  const queryString = qs.toString().replace(/%3A/g, ":");
   const path = `/${resourceType}${queryString ? `?${queryString}` : ""}`;
   return {
     method: "GET",
