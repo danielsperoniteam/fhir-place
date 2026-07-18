@@ -524,18 +524,23 @@ egress PHI to the model provider despite our declared posture. Not acceptable.
 
 - Every FHIR server in `config.ts` carries a
   `dataClass: "synthetic-controlled" | "sandbox-shared" | "phi"` flag.
-  - **`synthetic-controlled`**: closed corpus we own (MSW handlers, local
-    HAPI seeded from our fixtures). Agent loop auto-approves.
-  - **`sandbox-shared`**: public writable sandboxes — HAPI public, SMART
-    Health IT. Anyone can POST anything, including PHI accidentally
-    uploaded by a third party; the corpus is not controlled and we cannot
-    guarantee it. Agent loop requires an explicit **per-session**
-    acknowledgement banner: *"This is a shared public sandbox — anyone can
-    upload data to it. Any PHI others uploaded would be egressed to
-    Anthropic if you continue. Continue for this session?"* Acknowledgement
-    does not persist across reloads. This is exactly the class the current
-    integration tests target (they `create` arbitrary Patients against
-    HAPI public).
+  - **`synthetic-controlled`**: **only** fixture-backed transports the app
+    itself owns end-to-end — MSW handlers running in-process. Nothing over a
+    network. Agent loop auto-approves.
+  - **`sandbox-shared`**: every FHIR endpoint reached over the network,
+    including endpoints we currently think of as "ours" — public HAPI,
+    SMART Health IT, Firely, test.fhir.org, and **`localhost:8080/fhir`**.
+    We identify these by URL only; the app cannot prove that a given
+    localhost URL is the Docker HAPI we seeded rather than an unrelated
+    server the user happens to be running, and cannot prove the corpus of
+    a public sandbox is uncontaminated. Anyone can POST anything to those
+    endpoints — the current integration suite itself creates arbitrary
+    Patients against public HAPI. Agent loop requires an explicit
+    **per-session** acknowledgement banner: *"This is a shared / unverified
+    sandbox — anyone (including test fixtures you may not control) can
+    upload data to it. Continue for this session?"* Acknowledgement does
+    not persist across reloads. Env-var overrides of the built-in server
+    list also land here at minimum.
   - **`phi`**: real patient data. Both the agent loop **and** the single-shot
     `/ask` are refused — earlier drafts of this proposal allowed single-shot
     Ask on the grounds that "it sends only the question," but the current
@@ -578,7 +583,7 @@ deferrable:** anything touching the API key.
 | Audit-logging interface on every tool call | **interface + console sink** | HIPAA §164.312(b) needs every access logged; can't add to N handlers after the fact |
 | Error redaction (`FetchFhirClient` leaks URL + `OperationOutcome.diagnostics` into thrown text) | **implement (cheap)** | same path PHI would leak through later; make redaction habitual |
 | `sameOrigin` token-leak guard (`ask/url.ts`) | **keep, replace as the enforcement primitive** | correct as a UI-render sanity check; insufficient as a credential guard (see next row) |
-| **Base-path enforcement inside `FetchFhirClient`** (not only at the `/ask` render layer) | **implement** | `client.readReference` accepts absolute URLs and `fhir_raw_get`/`fhir_raw_write` let the model supply arbitrary URLs; `request()` unconditionally merges static/dynamic/custom auth headers before fetching. **Same-origin is not sufficient** — for a base such as `https://host.example/fhir`, a model-supplied `https://host.example/other-service` passes `sameOrigin` but is a different application; the FHIR bearer must not flow to it. Introduce a `sameBase(target, baseUrl)` primitive and enforce it at the request boundary: **for agent-driven requests, hard-refuse anything outside the configured FHIR base — credential-stripping is not sufficient**, because even an anonymous fetch to an arbitrary URL by the model is an SSRF / exfiltration primitive (especially in a hosted MCP context: the response body becomes a `tool_result` in the next model turn). Credential-stripping is only acceptable for *user*-initiated navigation (e.g., following a link the user themselves clicked). **Path check must respect segment boundaries — not `startsWith`**: after normalizing both paths (strip trailing `/`, resolve `.`/`..`), accept only when `targetPath === basePath` or `targetPath.startsWith(basePath + "/")`. A naive `startsWith("/fhir")` would accept `/fhir-evil/collect`. Applied by both front doors, to reference resolution and the raw escape hatch alike. |
+| **Base-path enforcement as agent-mode middleware over `FetchFhirClient`** (not a change to the shared client's default contract) | **implement** | `readReference` today is documented and tested to resolve absolute references outside the configured base — non-agent UI navigation relies on that. Do **not** unconditionally refuse cross-base URLs in the shared `FetchFhirClient`; that would regress existing callers. Instead ship the strict check as an **opt-in middleware** the agent path installs: the browser chat and MCP server wrap the client with a `withStrictBase(client, baseUrl)` policy; standard UI code paths keep today's behavior (with the render-time `sameOrigin` UI guard). **For agent-driven requests, the middleware hard-refuses anything outside the base — credential-stripping is not sufficient**, because even an anonymous fetch by the model is an SSRF / exfiltration primitive (the response body becomes a `tool_result` in the next model turn — especially critical in hosted MCP). Credential-stripping is only acceptable for user-initiated UI navigation, if we ever need it. **Path check respects segment boundaries — not `startsWith`**: after normalizing both paths (strip trailing `/`, resolve `.`/`..`), accept only when `targetPath === basePath` or `targetPath.startsWith(basePath + "/")`. A naive `startsWith("/fhir")` would accept `/fhir-evil/collect`. |
 | **Tool-input JSONSchema7 validation in `ToolRegistry.execute`** | **implement** | this is the real first line against prompt-injected steering; see §5.1 |
 
 **Already correct in the codebase, worth preserving:** the `sameOrigin` guard

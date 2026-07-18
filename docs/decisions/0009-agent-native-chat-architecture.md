@@ -67,21 +67,21 @@ Operating constraints:
   `params` is a non-null object — that is a shape sanity check, not schema
   validation, and it is not sufficient once the model drives multi-turn tool
   calls.
-- **Base-path credential enforcement moves inside the FHIR client.** The
-  existing `sameOrigin` guard runs only at UI-render time and — more
-  importantly — is not strong enough as a credential guard: for a base such as
-  `https://host.example/fhir`, a model-supplied
-  `https://host.example/other-service` is same-origin but a different
-  application, and the FHIR bearer must not flow to it. The primitive becomes
-  `sameBase(target, baseUrl)`, enforced at the request boundary in
-  `FetchFhirClient`. For **agent-driven requests, the outside-base case is a
-  hard refuse — credential-stripping is not sufficient**, because even an
-  anonymous fetch is an SSRF / exfiltration primitive (the response would land
-  in the next model turn as a `tool_result`, exposing the user's machine or
-  hosted network). Credential-stripping is only acceptable for user-initiated
-  navigation. Applied by both front doors, to reference resolution and the
-  raw escape hatches alike. The path check respects segment boundaries
-  (accept only `targetPath === basePath` or
+- **Base-path enforcement is agent-mode middleware over `FetchFhirClient`,
+  not a change to the shared client's default contract.** `readReference` is
+  today documented and tested to resolve absolute references outside the
+  configured base, and existing non-agent UI navigation relies on that.
+  Regressing that behavior in the shared client would break non-agent
+  callers. Instead the strict check ships as an opt-in wrapper —
+  `withStrictBase(client, baseUrl)` — that the browser chat and MCP server
+  install; standard UI paths keep today's behavior (plus the render-time
+  `sameOrigin` guard). For **agent-driven requests, the outside-base case
+  is a hard refuse — credential-stripping is not sufficient**, because
+  even an anonymous fetch is an SSRF / exfiltration primitive (the
+  response lands in the next model turn as a `tool_result`, exposing the
+  user's machine or hosted network). Credential-stripping is only
+  acceptable for user-initiated navigation. The path check respects
+  segment boundaries (accept only `targetPath === basePath` or
   `targetPath.startsWith(basePath + "/")` on normalized paths); a naive
   `startsWith` would let `/fhir-evil/collect` pass under a `/fhir` base.
 - **PHI-masking seam is envelope-level, not `Resource → Resource`.** Applied
@@ -91,10 +91,14 @@ Operating constraints:
 - **Synthetic-only enforcement is a hard gate, not a declared posture,
   with three classes.** Every FHIR server config carries a
   `dataClass: "synthetic-controlled" | "sandbox-shared" | "phi"` flag.
-  `synthetic-controlled` (MSW, our own local HAPI): auto-approved.
-  `sandbox-shared` (HAPI public, SMART Health IT — writable public
-  corpora we do not control): agent loop requires a per-session
-  acknowledgement, since third parties may have uploaded PHI. `phi`:
+  `synthetic-controlled` is reserved for fixture-backed transports the app
+  owns end-to-end (MSW handlers in-process) — nothing over a network. Any
+  networked endpoint, including `localhost:8080/fhir` (we identify by URL,
+  we cannot prove ownership) and public sandboxes (HAPI, SMART Health IT,
+  Firely, test.fhir.org), lands in `sandbox-shared`: agent loop requires a
+  per-session acknowledgement, since we cannot guarantee an uncontrolled
+  or unverified corpus. Env-var overrides of the built-in list also land
+  in `sandbox-shared` at minimum. `phi`:
   the entire Anthropic path — agent loop **and** single-shot `/ask` —
   is refused. Prior wording that "single-shot Ask is still safe under
   phi" was wrong: the current `naturalLanguageToFhirQuery` sends
