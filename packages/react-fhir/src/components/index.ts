@@ -2,6 +2,7 @@ export * from "./Narrative.js";
 export * from "./codedValue/index.js";
 export * from "./renderers.js";
 export * from "./ResourceView.js";
+export * from "./clinicalSafetyGuardrails.js";
 export * from "./inputs/index.js";
 export * from "./ResourceEditor.js";
 export * from "./ResourceSearch.js";

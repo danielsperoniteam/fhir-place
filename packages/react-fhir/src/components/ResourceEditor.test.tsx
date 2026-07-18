@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Observation, Patient } from "fhir/r4";
+import type { AllergyIntolerance, Observation, Patient } from "fhir/r4";
 import { describe, expect, it, vi } from "vitest";
 import { FetchFhirClient } from "../client/FetchFhirClient.js";
 import { FhirClientProvider } from "../hooks/FhirClientProvider.js";
 import { PatientStructureDefinition } from "../../test/fixtures/StructureDefinition-Patient.js";
 import { ObservationStructureDefinition } from "../../test/fixtures/StructureDefinition-Observation.js";
+import { AllergyIntoleranceStructureDefinition } from "../../test/fixtures/StructureDefinition-AllergyIntolerance.js";
 import { ResourceEditor } from "./ResourceEditor.js";
 
 const wrap = (ui: React.ReactElement) => {
@@ -195,6 +196,27 @@ describe("ResourceEditor", () => {
       system: "http://terminology.hl7.org/CodeSystem/data-absent-reason",
       code: "unknown",
     });
+  });
+
+  it("keeps AllergyIntolerance criticality discoverable with a guardrail", () => {
+    const allergy: AllergyIntolerance = {
+      resourceType: "AllergyIntolerance",
+      patient: { reference: "Patient/ada" },
+      criticality: "high",
+    };
+    wrap(
+      <ResourceEditor
+        resource={allergy}
+        structureDefinition={AllergyIntoleranceStructureDefinition}
+      />,
+    );
+
+    const guardrail = screen.getByTestId("resource-editor-clinical-safety-guardrail");
+    expect(
+      within(guardrail).getByText(/developer-tool warning, not clinical decision support/),
+    ).toBeInTheDocument();
+    expect(within(guardrail).getByText("criticality")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "criticality" })).toBeInTheDocument();
   });
 
   it("saves an Observation valueQuantity with a valid UCUM code", async () => {

@@ -1,9 +1,10 @@
-import type { Reference, Resource, StructureDefinition } from "fhir/r4";
+import type { AllergyIntolerance, Reference, Resource, StructureDefinition } from "fhir/r4";
 import { Fragment, type ReactNode } from "react";
 import { useStructureDefinition } from "../hooks/queries.js";
 import { findChoiceVariant, findElement } from "../structure/walker.js";
 import type { DetailHint, FieldPath, LayoutHint } from "../layout-hints/types.js";
 import { getByPath } from "./ResourceTable.js";
+import { resourceEditorClinicalSafetyGuardrailFor } from "./clinicalSafetyGuardrails.js";
 import {
   defaultTypeRenderers,
   type FhirTypeRenderer,
@@ -48,6 +49,7 @@ export function HintedDetail(props: HintedDetailProps) {
   );
   const sd = structureDefinition ?? sdQuery.data;
   const renderers = { ...defaultTypeRenderers, ...props.renderers };
+  const guardrail = resourceEditorClinicalSafetyGuardrailFor(resource.resourceType);
 
   if (!detail) return null;
 
@@ -57,6 +59,14 @@ export function HintedDetail(props: HintedDetailProps) {
         <Hero
           resource={resource}
           fields={detail.hero}
+          sd={sd}
+          renderers={renderers}
+          onReferenceClick={onReferenceClick}
+        />
+      )}
+      {guardrail?.resourceType === "AllergyIntolerance" && (
+        <AllergyIntoleranceReactionsContext
+          resource={resource as AllergyIntolerance}
           sd={sd}
           renderers={renderers}
           onReferenceClick={onReferenceClick}
@@ -75,6 +85,203 @@ export function HintedDetail(props: HintedDetailProps) {
       ))}
     </section>
   );
+}
+
+type AllergyIntoleranceReaction = NonNullable<AllergyIntolerance["reaction"]>[number];
+
+interface AllergyIntoleranceReactionsContextProps {
+  resource: AllergyIntolerance;
+  sd: StructureDefinition | undefined;
+  renderers: TypeRenderers;
+  onReferenceClick?: (ref: Reference) => void;
+}
+
+function AllergyIntoleranceReactionsContext({
+  resource,
+  sd,
+  renderers,
+  onReferenceClick,
+}: AllergyIntoleranceReactionsContextProps) {
+  const guardrail = resourceEditorClinicalSafetyGuardrailFor("AllergyIntolerance")!;
+  const reactions = Array.isArray(resource.reaction) ? resource.reaction : [];
+  const hasCriticality = hasValue(resource.criticality);
+  const hasVerificationStatus = hasValue(resource.verificationStatus);
+  const hasReactions = reactions.length > 0;
+
+  if (!hasCriticality && !hasVerificationStatus && !hasReactions) return null;
+
+  return (
+    <section
+      className="hinted-detail__section"
+      data-testid="hinted-detail-section-reactions"
+    >
+      <h3 data-testid="hinted-detail-section-title">{guardrail.title}</h3>
+      <p
+        className="mb-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-950"
+        data-testid="allergyintolerance-safety-warning"
+      >
+        {guardrail.warning}
+      </p>
+      <dl>
+        {hasCriticality && (
+          <Fragment>
+            <dt title="AllergyIntolerance.criticality">criticality</dt>
+            <dd data-testid="hinted-detail-field-criticality">
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
+                criticality: {resource.criticality}
+              </code>
+            </dd>
+          </Fragment>
+        )}
+        {hasVerificationStatus && (
+          <Fragment>
+            <dt title="AllergyIntolerance.verificationStatus">verificationStatus</dt>
+            <dd data-testid="hinted-detail-field-verificationStatus">
+              <RenderField
+                value={resource.verificationStatus}
+                fieldPath="verificationStatus"
+                resourceType={resource.resourceType}
+                sd={sd}
+                renderers={renderers}
+                onReferenceClick={onReferenceClick}
+              />
+            </dd>
+          </Fragment>
+        )}
+        {hasReactions && (
+          <Fragment>
+            <dt title="AllergyIntolerance.reaction">reaction</dt>
+            <dd data-testid="hinted-detail-field-reaction">
+              <ReactionList
+                reactions={reactions}
+                resourceType={resource.resourceType}
+                sd={sd}
+                renderers={renderers}
+                onReferenceClick={onReferenceClick}
+              />
+            </dd>
+          </Fragment>
+        )}
+      </dl>
+    </section>
+  );
+}
+
+interface ReactionListProps {
+  reactions: readonly AllergyIntoleranceReaction[];
+  resourceType: string;
+  sd: StructureDefinition | undefined;
+  renderers: TypeRenderers;
+  onReferenceClick?: (ref: Reference) => void;
+}
+
+function ReactionList({
+  reactions,
+  resourceType,
+  sd,
+  renderers,
+  onReferenceClick,
+}: ReactionListProps) {
+  return (
+    <ol className="space-y-2" data-testid="allergyintolerance-reaction-list">
+      {reactions.map((reaction, index) => (
+        <li key={index} className="rounded border border-slate-200 p-2">
+          <dl className="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-[minmax(6rem,1fr)_3fr]">
+            <ReactionField
+              label="manifestation"
+              fieldPath="reaction.manifestation"
+              value={reaction.manifestation}
+              resourceType={resourceType}
+              sd={sd}
+              renderers={renderers}
+              onReferenceClick={onReferenceClick}
+            />
+            <ReactionField
+              label="severity"
+              fieldPath="reaction.severity"
+              value={reaction.severity}
+              resourceType={resourceType}
+              sd={sd}
+              renderers={renderers}
+              onReferenceClick={onReferenceClick}
+            />
+            <ReactionField
+              label="substance"
+              fieldPath="reaction.substance"
+              value={reaction.substance}
+              resourceType={resourceType}
+              sd={sd}
+              renderers={renderers}
+              onReferenceClick={onReferenceClick}
+            />
+          </dl>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+interface ReactionFieldProps {
+  label: string;
+  fieldPath: FieldPath;
+  value: unknown;
+  resourceType: string;
+  sd: StructureDefinition | undefined;
+  renderers: TypeRenderers;
+  onReferenceClick?: (ref: Reference) => void;
+}
+
+function ReactionField({
+  label,
+  fieldPath,
+  value,
+  resourceType,
+  sd,
+  renderers,
+  onReferenceClick,
+}: ReactionFieldProps) {
+  if (!hasValue(value)) return null;
+
+  return (
+    <Fragment>
+      <dt title={`${resourceType}.${fieldPath}`}>{label}</dt>
+      <dd>
+        <RenderArrayOrField
+          value={value}
+          fieldPath={fieldPath}
+          resourceType={resourceType}
+          sd={sd}
+          renderers={renderers}
+          onReferenceClick={onReferenceClick}
+        />
+      </dd>
+    </Fragment>
+  );
+}
+
+interface RenderArrayOrFieldProps extends RenderFieldProps {
+  value: unknown;
+}
+
+function RenderArrayOrField(props: RenderArrayOrFieldProps): ReactNode {
+  if (Array.isArray(props.value)) {
+    return (
+      <ul className="space-y-1">
+        {props.value.map((item, index) => (
+          <li key={index}>
+            <RenderField {...props} value={item} />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <RenderField {...props} />;
+}
+
+function hasValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
 }
 
 interface HeroProps {

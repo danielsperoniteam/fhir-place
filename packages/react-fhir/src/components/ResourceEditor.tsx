@@ -26,6 +26,7 @@ import {
   type PathInputs,
   type TypeInputs,
 } from "./inputs/index.js";
+import { resourceEditorClinicalSafetyGuardrailFor } from "./clinicalSafetyGuardrails.js";
 
 export interface ResourceEditorProps {
   resource: Resource;
@@ -166,6 +167,7 @@ export function ResourceEditor(props: ResourceEditorProps) {
     () => ({ ...defaultPathInputs, ...props.pathInputs }),
     [props.pathInputs],
   );
+  const guardrail = resourceEditorClinicalSafetyGuardrailFor(resource.resourceType);
 
   const setAt = useCallback(
     (path: Path, value: unknown) => {
@@ -233,6 +235,25 @@ export function ResourceEditor(props: ResourceEditorProps) {
           <code className="rounded bg-[var(--chip,#f1f5f9)] px-1 py-0.5 text-xs">{draft.id}</code>
         )}
       </header>
+
+      {guardrail && (
+        <aside
+          className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
+          data-testid="resource-editor-clinical-safety-guardrail"
+        >
+          <p className="font-medium">{guardrail.title}</p>
+          <p className="mt-1">{guardrail.warning}</p>
+          <p className="mt-1 text-xs">
+            Fields:{" "}
+            {guardrail.fields.map((field, index) => (
+              <Fragment key={field}>
+                {index > 0 ? ", " : null}
+                <code>{field}</code>
+              </Fragment>
+            ))}
+          </p>
+        </aside>
+      )}
 
       <FieldGroup
         sd={sd}

@@ -26,5 +26,11 @@ test.describe("HintedDetail — AllergyIntolerance reference implementation", ()
 
     // The fixture includes a `reaction` array → Reactions section renders.
     await expect(page.getByTestId("hinted-detail-section-reactions")).toBeVisible();
+    await expect(page.getByTestId("hinted-detail-section-reactions")).toContainText(
+      "criticality: high",
+    );
+    await expect(page.getByTestId("hinted-detail-section-reactions")).toContainText(
+      "developer-tool warning, not clinical decision support",
+    );
   });
 });

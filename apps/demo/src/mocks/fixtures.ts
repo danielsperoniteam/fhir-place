@@ -226,6 +226,7 @@ export const allergiesFor = (patientId: string): AllergyIntolerance[] => {
       id: "ai-pen-ada",
       clinicalStatus: { text: "active" },
       verificationStatus: { text: "confirmed" },
+      criticality: "high",
       code: { text: "Penicillin" },
       patient: adaPatientRef,
       reaction: [
@@ -470,9 +471,12 @@ export const compartmentStructureDefinitions: StructureDefinition[] = [
   mkSd("AllergyIntolerance", [
     { path: "clinicalStatus", short: "active | inactive | resolved", type: "CodeableConcept" },
     { path: "verificationStatus", short: "unconfirmed | confirmed | refuted | entered-in-error", type: "CodeableConcept" },
+    { path: "criticality", short: "low | high | unable-to-assess", type: "code" },
     { path: "code", short: "Code that identifies the allergy or intolerance", type: "CodeableConcept" },
     { path: "patient", short: "Who the sensitivity is for", type: "Reference" },
     { path: "reaction", short: "Adverse reaction events linked to exposure to substance", type: "BackboneElement", array: true },
+    { path: "reaction.manifestation", short: "Clinical symptoms/signs associated with the event", type: "CodeableConcept", array: true },
+    { path: "reaction.severity", short: "mild | moderate | severe", type: "code" },
   ]),
   mkSd("Procedure", [
     { path: "status", short: "preparation | in-progress | not-done | on-hold | stopped | completed | entered-in-error | unknown", type: "code" },
