@@ -294,6 +294,61 @@ describe("ColumnPicker", () => {
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
   });
 
+  it("panel has data-testid column-picker-panel when open", async () => {
+    const user = userEvent.setup();
+    render(<ColumnPicker options={options} onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    expect(screen.getByTestId("column-picker-panel")).toBeInTheDocument();
+  });
+
+  it("applies a positive translateX when the panel's left edge is inside the viewport left boundary", async () => {
+    // Simulate mobile: panel renders with left edge at -8px (clipped 8px off-screen).
+    // The layout effect should compute a shift of 8 + 8 = 16px to bring it to ≥ 8px.
+    const user = userEvent.setup();
+    render(<ColumnPicker options={options} onChange={() => {}} />);
+
+    const panel = () => screen.queryByTestId("column-picker-panel");
+
+    // Mock getBoundingClientRect on the panel element to simulate a left-clipped position.
+    // We spy before the click so the ref is populated after the panel mounts.
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () {
+      if ((this as HTMLElement).dataset.testid === "column-picker-panel") {
+        return { left: -8, right: 216, top: 40, bottom: 304, width: 224, height: 264, x: -8, y: 40, toJSON: () => ({}) };
+      }
+      return originalGetBoundingClientRect.call(this);
+    };
+
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+
+    // After open, useLayoutEffect fires and sets panelShift = 8 + 8 = 16.
+    expect(panel()).toBeInTheDocument();
+    expect(panel()?.style.transform).toBe("translateX(16px)");
+
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  });
+
+  it("does not apply a translateX when the panel is already fully within the viewport", async () => {
+    const user = userEvent.setup();
+    render(<ColumnPicker options={options} onChange={() => {}} />);
+
+    // Simulate desktop: panel renders well inside the viewport (left = 900px).
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () {
+      if ((this as HTMLElement).dataset.testid === "column-picker-panel") {
+        return { left: 900, right: 1124, top: 40, bottom: 304, width: 224, height: 264, x: 900, y: 40, toJSON: () => ({}) };
+      }
+      return originalGetBoundingClientRect.call(this);
+    };
+
+    await user.click(screen.getByRole("button", { name: /columns/i }));
+    const panel = screen.getByTestId("column-picker-panel");
+    // No transform is applied when left edge is well inside the viewport.
+    expect(panel.style.transform).toBeFalsy();
+
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  });
+
   it("respects the controlled `selected` prop", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
