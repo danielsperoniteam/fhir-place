@@ -5,6 +5,7 @@ export * from "./binding.js";
 export * from "./searchBinding.js";
 export * from "./format.js";
 export * from "./searchModifiers.js";
+export * from "./columns.js";
 export * from "./ucumDisplay.js";
 export {
   coreStructureDefinition,
