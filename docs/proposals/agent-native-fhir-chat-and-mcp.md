@@ -275,18 +275,29 @@ Every one of these maps onto a method that already exists on `FetchFhirClient`.
 
 **Version-specific references — required fix.** `resolve_reference` must
 recognize the `_history/<version>` form and dispatch **without rebasing to the
-active client's baseUrl**. Two cases:
+active client's baseUrl**, **and** it must respect §8.3's `sameBase` refusal
+in agent mode. Three cases:
 
 - **Relative** (`Patient/123/_history/2`): route to `client.vread(type, id,
   versionId)`. Today `FetchFhirClient.readReference` splits on `/` and calls
   `read()`, silently returning the **current** version.
-- **Absolute** (`https://b.example/fhir/Patient/123/_history/2`): preserve the
-  parsed absolute URL and fetch it directly via
-  `client.request({ path: absoluteURL })` — which already handles absolute
-  paths. Routing through `client.vread(type, id, versionId)` would rebuild the
-  request against the *active* base and ground the answer in the wrong server;
-  routing through `client.read()` would drop the version. Only the raw
-  absolute-URL path is correct.
+- **Absolute, same-base** (`<active-base>/Patient/123/_history/2`): preserve
+  the parsed absolute URL and fetch via `client.request({ path: absoluteURL })`.
+  Routing through `client.vread(type, id, versionId)` would rebuild against
+  the active base too (harmless in this case) but re-rewrites the URL;
+  routing through `client.read()` would drop the version. The absolute path
+  is the honest one.
+- **Absolute, cross-base**
+  (`https://other.example/fhir/Patient/123/_history/2`): **refused** in agent
+  mode. This is the collision between the round-2/13 "preserve absolute
+  historical URLs" rule and §8.3's `withStrictBase` hard-refuse posture;
+  the security rule wins because a cross-base fetch by the model is the
+  exact SSRF/exfiltration primitive `withStrictBase` exists to block. The
+  tool returns an error the model can surface: *"reference points to a
+  different server; not resolved in agent mode."* If cross-base
+  historical resolution ever becomes a real requirement, it needs an
+  explicit user allow-listing or a future `--allow-cross-base` policy —
+  out of scope here.
 
 The existing typed `SearchBuilder` (`react-fhir/src/client/searchBuilder.ts`)
 already supports chained search (`whereChained` → `subject:Patient.name=…`),
@@ -429,7 +440,12 @@ flag `degraded: true` rather than exposing nothing.
 - calls `registry.describe()` and adapts the model-neutral descriptors into
   `Anthropic.Messages.Tool[]` in the app layer (see §5.1). On each `tool_use`
   block, dispatches via `registry.execute(name, input, ctx)` with `ctx.client` =
-  the active `FetchFhirClient` and `ctx.readOnly = true`;
+  the active `FetchFhirClient` and `ctx.readOnly` derived from the session's
+  write policy (default `true`; flipped to `false` only when the browser
+  session has a wired write-confirmation dialog **and** the user has
+  explicitly enabled write mode — hard-coding it `true` would make the
+  §6 write-confirmation dialog and the optional `fhir_raw_write` path
+  unreachable);
 - keeps today's `FhirQueryPlan` / `buildSearchUrl` / request-preview /
   `sameOrigin` guard as the rendering layer for the `search_resource` primitive,
   so the existing `/ask` UX (and its token-leak protection) keeps working — the

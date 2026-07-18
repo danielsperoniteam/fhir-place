@@ -134,15 +134,18 @@ Operating constraints:
   rather than per-tool, prevents the model from picking a skill or raw tool to
   bypass the preview. The MCP path leaves `confirmRead` undefined (auto-run).
 - **`resolve_reference` dispatches version-specific references without
-  rebasing.** Today `FetchFhirClient.readReference` splits on `/`, calls
-  `read()`, and silently returns the current version. The fix has two arms:
-  a **relative** `Patient/123/_history/2` routes to
-  `client.vread(type, id, versionId)`; an **absolute**
-  `https://other.example/fhir/Patient/123/_history/2` preserves the parsed
-  URL and fetches via `client.request({path: absoluteURL})`. `vread` rebuilds
-  against the active client's baseUrl and would ground the answer in the
-  wrong server — only the raw absolute path is correct for cross-base
-  historical refs.
+  rebasing, and refuses cross-base fetches in agent mode.** Today
+  `FetchFhirClient.readReference` splits on `/`, calls `read()`, and silently
+  returns the current version. The fix has three arms: relative
+  (`Patient/123/_history/2`) routes to `client.vread(type, id, versionId)`;
+  absolute same-base preserves the parsed URL via
+  `client.request({path: absoluteURL})`; absolute cross-base
+  (`https://other.example/fhir/…`) is **refused**, because it collides with
+  `withStrictBase` (§ base-path enforcement) — an agent-driven cross-base
+  fetch is the exact SSRF/exfiltration primitive that boundary blocks. The
+  security rule wins over any historical-fidelity motivation; cross-base
+  historical resolution, if ever needed, requires an explicit user allow or
+  a future `--allow-cross-base` policy.
 - **`@fhir-place/react-fhir` marks its React / React-DOM / TanStack Query
   peers as optional** (`peerDependenciesMeta.*.optional`) before the MCP package
   ships. Subpath imports alone do not exempt Node-only consumers from
