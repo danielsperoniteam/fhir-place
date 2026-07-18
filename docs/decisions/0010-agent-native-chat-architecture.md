@@ -1,4 +1,4 @@
-# 0009 Agent-Native Chat Architecture
+# 0010 Agent-Native Chat Architecture
 
 ## Status
 Proposed

@@ -2,11 +2,11 @@
 
 - **Status:** Draft for review
 - **Date:** 2026-05-26
-- **Decision record:** `docs/decisions/0009-agent-native-chat-architecture.md`
+- **Decision record:** `docs/decisions/0010-agent-native-chat-architecture.md`
 - **Builds on:** ADR 0003 (Agent Safety Rules), ADR 0004 (Positioning & Wedge)
 - **Scope chosen by sponsor:** full agent-native pivot · in-app chat **and** MCP
   server in the same effort · synthetic/sandbox data only for now (PHI-ready by
-  design) · deliverables land in-repo as this proposal + ADR 0009.
+  design) · deliverables land in-repo as this proposal + ADR 0010.
 
 ## 1. TL;DR
 
@@ -253,7 +253,7 @@ class ToolRegistry {
 
 **Model-neutral by design.** The registry deliberately does not expose a
 `toAnthropicTools()` method: that would drag `@anthropic-ai/sdk` into
-`agent-core` and break ADR 0009's no-LLM-SDK invariant. Instead each front
+`agent-core` and break ADR 0010's no-LLM-SDK invariant. Instead each front
 door owns its own adapter: `apps/demo/src/ask/chatLoop.ts` maps
 `describe()` output to `Anthropic.Messages.Tool[]`; the MCP server maps it to
 the MCP tool schema. `agent-core` stays model-agnostic.
@@ -386,7 +386,7 @@ to build after the registry.
 **before** issuing any `code=` search — replacing the current "use codes when
 you confidently know them" instruction. Offline fallback: the bundled core
 valuesets in `react-fhir/src/structure/core` before degrading to text search.
-When ADR 0009 moves from Proposed to Accepted, settle two details: whether
+When ADR 0010 moves from Proposed to Accepted, settle two details: whether
 grounding hits a local expansion service or remote `$expand` by default (the
 config already allows either), and which binding strengths trigger grounding —
 at minimum `required` and `extensible` bindings should, `preferred`/`example`
@@ -679,5 +679,5 @@ the roadmap reflected in `README.md` per ADR 0001 / 0004.
 - **ADR 0004 (Positioning):** this is the concrete realization of "reserve room
   for LLM/MCP work" and "an MCP package is permitted under `packages/`." It does
   **not** rename anything, consistent with 0004's decision.
-- **ADR 0009 (this proposal's decision record):** records the "one core, two
+- **ADR 0010 (this proposal's decision record):** records the "one core, two
   front doors," synthetic-now / PHI-ready, read-only-by-default choices.
