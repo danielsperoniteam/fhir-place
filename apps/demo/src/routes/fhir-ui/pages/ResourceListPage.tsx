@@ -293,6 +293,22 @@ const formInitialFromUrl = (
   return out;
 };
 
+// A failed `fetch()` rejects with a bare TypeError whose message is
+// browser-specific and tells the user nothing actionable — "Load failed" in
+// WebKit, "Failed to fetch" in Chromium, "NetworkError…" in Firefox. None of
+// them convey that the request never reached the server (offline, DNS, or a
+// CORS rejection). Translate those into a hint; pass structured FHIR/HTTP
+// errors (timeouts, 4xx/5xx with an OperationOutcome) through unchanged.
+const NETWORK_ERROR_RE = /^(load failed|failed to fetch|networkerror)/i;
+
+export const describeListError = (error: unknown): string => {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (!message || NETWORK_ERROR_RE.test(message)) {
+    return "Couldn't reach the FHIR server. It may be offline or blocking cross-origin (CORS) requests — try a different server in Settings.";
+  }
+  return message;
+};
+
 export function ResourceListPage() {
   const { resourceType = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -372,6 +388,7 @@ export function ResourceListPage() {
     isFetching,
     isError,
     error,
+    refetch,
     links,
     goTo,
   } = usePagedSearch<Resource>(resourceType, params);
@@ -771,9 +788,10 @@ export function ResourceListPage() {
       {/* Error state */}
       {isError && (
         <div
+          data-testid="resource-list-error"
           style={{
             margin: "12px 24px 0",
-            padding: "10px 14px",
+            padding: "12px 14px",
             borderRadius: 8,
             border: "1px solid var(--danger)",
             background: "var(--danger-soft)",
@@ -781,7 +799,10 @@ export function ResourceListPage() {
             color: "var(--danger)",
           }}
         >
-          {(error as Error)?.message ?? "Search failed"}
+          <p style={{ margin: "0 0 8px" }}>{describeListError(error)}</p>
+          <button onClick={() => refetch()} style={ccBtn("secondary")}>
+            Retry
+          </button>
         </div>
       )}
 
@@ -866,7 +887,11 @@ export function ResourceListPage() {
             />
           </div>
         ) : (
-          !isLoading && (
+          // A failed search leaves `resources` empty, but that is not the
+          // same as a successful zero-result search — don't claim "no
+          // records match" underneath the error banner (see staging bug).
+          !isLoading &&
+          !isError && (
             <div
               style={{
                 background: "var(--surface)",
