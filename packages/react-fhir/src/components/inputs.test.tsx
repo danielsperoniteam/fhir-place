@@ -891,6 +891,48 @@ describe("CodingInput async combobox (large/partial ValueSets)", () => {
     expect(screen.getByText("Code")).toBeInTheDocument();
     expect(screen.getByText("Display")).toBeInTheDocument();
   });
+
+  it("shows 'Terminology unavailable' inline warning when $expand fails mid-combobox (CORS/network error)", async () => {
+    // Initial useValueSet probe returns a partial expansion → combobox mode is selected.
+    // Subsequent $expand?filter= calls fail (simulating tx.fhir.org CORS failure).
+    server.use(
+      http.get(`${BASE}/ValueSet/$expand`, ({ request }) => {
+        const url = new URL(request.url);
+        const filter = url.searchParams.get("filter");
+        if (!filter) {
+          return HttpResponse.json({
+            resourceType: "ValueSet",
+            status: "active",
+            url: snomedVs,
+            expansion: {
+              identifier: "x",
+              timestamp: "2024-01-01T00:00:00Z",
+              total: 999_999,
+              contains: [],
+            },
+          });
+        }
+        // Simulate CORS/network failure on filtered expand calls.
+        return HttpResponse.error();
+      }),
+    );
+    render(
+      <CodingInput
+        value={undefined}
+        onChange={() => {}}
+        context={{ path: "Condition.code", typeCode: "Coding", element: conditionCodeElement }}
+      />,
+      { wrapper: mkWrapper() },
+    );
+    const input = await screen.findByRole("combobox", { name: "code" });
+    await userEvent.type(input, "diab");
+    await waitFor(() =>
+      expect(screen.getByTestId("terminology-error")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("terminology-error")).toHaveTextContent(
+      "Terminology unavailable",
+    );
+  });
 });
 
 const ReferenceInput = defaultTypeInputs.Reference!;

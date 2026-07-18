@@ -167,9 +167,14 @@ export const AsyncCodeCombobox = ({
         )}
       </div>
       {isError && options.length === 0 && (
-        <p role="alert" className="mt-1 text-xs text-amber-700">
-          Terminology server unreachable. Code lookup is unavailable; enter a
-          code manually or check the terminology server in Settings.
+        <p
+          role="alert"
+          className="mt-1 text-xs text-amber-700"
+          data-testid="terminology-error"
+        >
+          Terminology unavailable: terminology server unreachable. Code lookup
+          is unavailable; enter a code manually or check the terminology server
+          in Settings.
         </p>
       )}
       {open && (
@@ -184,8 +189,11 @@ export const AsyncCodeCombobox = ({
           ) : isFetching ? (
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">Searching…</li>
           ) : isError && options.length === 0 ? (
-            <li className="px-2 py-1 text-amber-700">
-              Terminology server unreachable
+            <li
+              className="px-2 py-1 text-amber-700"
+              data-testid="terminology-error-option"
+            >
+              Terminology unavailable: terminology server unreachable
             </li>
           ) : options.length === 0 ? (
             <li className="px-2 py-1 text-[var(--text-subtle,#94a3b8)]">No matches</li>
