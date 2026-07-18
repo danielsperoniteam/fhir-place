@@ -274,12 +274,19 @@ the MCP tool schema. `agent-core` stays model-agnostic.
 Every one of these maps onto a method that already exists on `FetchFhirClient`.
 
 **Version-specific references — required fix.** `resolve_reference` must
-recognize the `Type/id/_history/<version>` form and route it through
-`client.vread(type, id, versionId)`, not `client.read(type, id)`. Today
-`FetchFhirClient.readReference` splits on `/` and calls `read()`, silently
-returning the **current** version — which would ground an answer in the wrong
-historical resource. The fix is a small change to `readReference` itself (detect
-the `_history/<v>` suffix) so both front doors get it for free.
+recognize the `_history/<version>` form and dispatch **without rebasing to the
+active client's baseUrl**. Two cases:
+
+- **Relative** (`Patient/123/_history/2`): route to `client.vread(type, id,
+  versionId)`. Today `FetchFhirClient.readReference` splits on `/` and calls
+  `read()`, silently returning the **current** version.
+- **Absolute** (`https://b.example/fhir/Patient/123/_history/2`): preserve the
+  parsed absolute URL and fetch it directly via
+  `client.request({ path: absoluteURL })` — which already handles absolute
+  paths. Routing through `client.vread(type, id, versionId)` would rebuild the
+  request against the *active* base and ground the answer in the wrong server;
+  routing through `client.read()` would drop the version. Only the raw
+  absolute-URL path is correct.
 
 The existing typed `SearchBuilder` (`react-fhir/src/client/searchBuilder.ts`)
 already supports chained search (`whereChained` → `subject:Patient.name=…`),
@@ -535,12 +542,17 @@ egress PHI to the model provider despite our declared posture. Not acceptable.
     server the user happens to be running, and cannot prove the corpus of
     a public sandbox is uncontaminated. Anyone can POST anything to those
     endpoints — the current integration suite itself creates arbitrary
-    Patients against public HAPI. Agent loop requires an explicit
+    Patients against public HAPI. **Every Anthropic path** — both the
+    single-shot `/ask` and the multi-turn loop — requires an explicit
     **per-session** acknowledgement banner: *"This is a shared / unverified
     sandbox — anyone (including test fixtures you may not control) can
-    upload data to it. Continue for this session?"* Acknowledgement does
-    not persist across reloads. Env-var overrides of the built-in server
-    list also land here at minimum.
+    upload data to it, so your question and any results may reach Anthropic
+    with data you didn't intend. Continue for this session?"* Single-shot
+    is included because `naturalLanguageToFhirQuery` sends the question
+    verbatim, and a query like *"give me John Doe's most recent A1c"* would
+    leak a name to Anthropic without warning. Acknowledgement does not
+    persist across reloads. Env-var overrides of the built-in server list
+    also land here at minimum.
   - **`phi`**: real patient data. Both the agent loop **and** the single-shot
     `/ask` are refused — earlier drafts of this proposal allowed single-shot
     Ask on the grounds that "it sends only the question," but the current
@@ -550,10 +562,14 @@ egress PHI to the model provider despite our declared posture. Not acceptable.
     Anthropic path is disabled; the demo becomes read-only against that
     server. Enabling it requires the same BAA-covered posture as the agent
     loop (§8.4).
-- **User-added servers default to `phi`** — the safer default. A user who
-  knows a custom server is either controlled-synthetic or a public sandbox
-  can flip the class explicitly, behind a modal confirmation spelling out
-  what each class means.
+- **User-added servers default to `phi`** — the safer default. A user may
+  flip a custom (network) server down to `sandbox-shared` behind a modal
+  confirmation, but **not** to `synthetic-controlled` — that class is
+  reserved for in-process fixture transports the app owns end-to-end, which
+  no user-configured network endpoint can be. Trying to flip a network
+  endpoint to `synthetic-controlled` is refused in settings; the strongest
+  downgrade available is `sandbox-shared` with its per-session
+  acknowledgement.
 - MCP path: the same three-class flag lives in the server config the
   customer supplies. The MCP server refuses to start under `phi` unless
   a future `--phi-acknowledged` flag is supplied (that flag will require

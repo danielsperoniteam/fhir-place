@@ -95,18 +95,19 @@ Operating constraints:
   owns end-to-end (MSW handlers in-process) — nothing over a network. Any
   networked endpoint, including `localhost:8080/fhir` (we identify by URL,
   we cannot prove ownership) and public sandboxes (HAPI, SMART Health IT,
-  Firely, test.fhir.org), lands in `sandbox-shared`: agent loop requires a
-  per-session acknowledgement, since we cannot guarantee an uncontrolled
-  or unverified corpus. Env-var overrides of the built-in list also land
-  in `sandbox-shared` at minimum. `phi`:
-  the entire Anthropic path — agent loop **and** single-shot `/ask` —
-  is refused. Prior wording that "single-shot Ask is still safe under
-  phi" was wrong: the current `naturalLanguageToFhirQuery` sends
-  `Question: ${question}` directly to Anthropic, and a real patient
-  query contains PHI in the question itself. User-added servers default
-  to `phi`. MCP requires `--sandbox-acknowledged` on `sandbox-shared`
-  and a future `--phi-acknowledged` on `phi` (out of scope; will require
-  BAA hosting).
+  Firely, test.fhir.org), lands in `sandbox-shared`: **every Anthropic path
+  — both single-shot `/ask` and the multi-turn loop — requires a per-session
+  acknowledgement**, because we cannot guarantee an uncontrolled corpus and
+  the question itself (e.g. `give me John Doe's A1c`) egresses to Anthropic.
+  Env-var overrides of the built-in list also land in `sandbox-shared` at
+  minimum. **User-configured network endpoints cannot be flipped to
+  `synthetic-controlled`** — that class is reserved for in-process
+  transports the app owns; the strongest downgrade available for a custom
+  server is `sandbox-shared`. `phi`: the entire Anthropic path — agent loop
+  **and** single-shot `/ask` — is refused (the question carries PHI even
+  when no resources are fetched). User-added servers default to `phi`. MCP
+  requires `--sandbox-acknowledged` on `sandbox-shared` and a future
+  `--phi-acknowledged` on `phi` (out of scope; will require BAA hosting).
   Without this gate, the multi-turn loop egresses compacted resources
   to the model on every iteration and "synthetic-only" is unenforceable.
 - **MCP writes are gated by explicit flags, not by undefined hooks.**
