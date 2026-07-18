@@ -521,11 +521,14 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   const { valueSet: valueSetUrl } = bindingFor(element);
   const { data: vs, isLoading } = useValueSet(valueSetUrl);
   const codes = codesFromValueSet(vs);
-  // The `:of-type` / coded-only narrowing below keys off the *resolved*
-  // element type. Until the SearchParameter and StructureDefinition queries
-  // settle, `element` is undefined and the menu looks narrower than it will be
-  // — so we must not clear a hydrated modifier during that window (see below).
-  const metadataSettled = !specQuery.isLoading && !sdQuery.isLoading;
+  // The element-based narrowing (`:of-type` needs Identifier backing, the
+  // coded-only modifiers need a coded target) is only trustworthy once the
+  // SearchParameter *and* StructureDefinition have **successfully** resolved.
+  // An errored or still-loading query must not be read as proof of invalidity —
+  // that would wipe a valid hydrated modifier on a transient failure. A param
+  // with no element path (`_id`, …) has no SD to wait on (Codex + Marco #771).
+  const elementMetadataResolved =
+    specQuery.isSuccess && (!elementPath || sdQuery.isSuccess);
 
   // FHIR R4 limits `:of-type` to token params backed by an Identifier — drop
   // it for code/CodeableConcept tokens (gender, status, _id, …). When the
@@ -559,16 +562,25 @@ function TokenSearchField({ base, param, value, onChange, profile, modifier, onM
   // it; `onModifier("")` → `setModifier` also drops the incompatible value on
   // the grammar change (Codex review on #732).
   //
-  // But only once `metadataSettled`: for a valid hydrated criterion like
-  // `identifier:of-type=…`, `element` is undefined on the first render while
-  // the queries load, so the menu transiently omits `:of-type`. Clearing then
-  // would erase the modifier and value before the StructureDefinition can
-  // confirm the target is Identifier-backed (Codex review on #732).
+  // Two tiers of "invalid" (Codex + Marco review on #771):
+  //  - name-known: `_id` can never take a subsumption / ValueSet / of-type
+  //    modifier, no metadata required → clear immediately (don't defer past the
+  //    load window and let an unnormalized `_id:in` submit).
+  //  - element-based: `:of-type` / coded-only exclusions depend on the resolved
+  //    element, so only clear once that metadata has *successfully* resolved —
+  //    otherwise a valid hydrated `identifier:of-type=…` is wiped mid-load or on
+  //    a transient fetch error.
+  const activeModifier = modifier ?? "";
+  const nameConfirmedInvalid =
+    param.name === "_id" &&
+    (activeModifier === "of-type" || CODED_ONLY_TOKEN_MODIFIERS.has(activeModifier));
   const modifierUnavailable =
-    Boolean(modifier) && !tokenModifiers.includes(modifier as string);
+    Boolean(modifier) && !tokenModifiers.includes(activeModifier);
   useEffect(() => {
-    if (metadataSettled && modifierUnavailable) onModifier?.("");
-  }, [metadataSettled, modifierUnavailable, onModifier]);
+    if (nameConfirmedInvalid || (modifierUnavailable && elementMetadataResolved)) {
+      onModifier?.("");
+    }
+  }, [nameConfirmedInvalid, modifierUnavailable, elementMetadataResolved, onModifier]);
 
   const wrap = (children: ReactNode): ReactNode =>
     fieldWrapper(children, param, base, modifier, onModifier, tokenModifiers);
@@ -836,8 +848,12 @@ function DateSearchField({ base, param, value, onChange, profile, modifier, onMo
   const element = elementPath && sd ? findElement(sd, elementPath) : undefined;
   const targetsRange = element?.type?.some((t) => RANGE_DATE_TYPES.has(t.code)) ?? false;
   const datePrefixes = datePrefixOptions(targetsRange, spec?.comparator);
-  // Range/comparator backing isn't known until these queries settle.
-  const metadataSettled = !specQuery.isLoading && !sdQuery.isLoading;
+  // Range/comparator backing is only *proven* once these queries succeed. An
+  // errored or still-loading query must not be read as "scalar" — that would
+  // strip a valid `sa`/`eb` boundary. A param with no element path has no SD to
+  // wait on (Marco #771).
+  const metadataSettled =
+    specQuery.isSuccess && (!elementPath || sdQuery.isSuccess);
 
   // External clears (form Clear, AI replacing criteria) empty `value`
   // without going through commit — drop the parked prefix with it so it
@@ -925,8 +941,9 @@ function PrefixedValueField({
   // (Codex review on #732).
   const specQuery = useSearchParameter(base, param.name ?? "");
   const numericPrefixes = numericPrefixOptions(specQuery.data?.comparator);
-  // Advertised comparators aren't known until the SearchParameter query settles.
-  const metadataSettled = !specQuery.isLoading;
+  // Advertised comparators aren't proven until the SearchParameter query
+  // succeeds; don't strip a hydrated prefix while it's loading or on error.
+  const metadataSettled = specQuery.isSuccess;
 
   // See DateSearchField: external clears also drop the parked prefix.
   useEffect(() => {
