@@ -29,6 +29,16 @@ test.describe("CRUD flows", () => {
   });
 
   test("create → edit → delete a patient end-to-end", async ({ page }) => {
+    // The edit page mounts ResourceEditor, which used to emit React
+    // validateDOMNesting warnings (<dt>/<dd> outside a <dl>). Guard against
+    // a regression by failing the test on any such console error.
+    const domNestingErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error" && msg.text().includes("validateDOMNesting")) {
+        domNestingErrors.push(msg.text());
+      }
+    });
+
     await page.goto("/Patient");
     await page.getByTestId("create-patient").click();
     await expect(page).toHaveURL(/\/Patient\/new/);
@@ -68,6 +78,10 @@ test.describe("CRUD flows", () => {
     await page.getByTestId("edit-resource").click();
     await expect(page).toHaveURL(/\/edit$/);
     const familyInput = page.getByRole("textbox", { name: "Family" });
+    await expect(familyInput).toBeVisible();
+    // The edit page (ResourceEditor) must render with valid HTML — no
+    // <dt>/<dd>-outside-<dl> warnings once the form has mounted.
+    expect(domNestingErrors).toEqual([]);
     await familyInput.fill("Hamilton-Apollo");
     await page.getByRole("button", { name: /save changes/i }).click();
     await expect(page.getByText("Margaret Hamilton-Apollo")).toBeVisible();

@@ -197,6 +197,29 @@ describe("ResourceEditor", () => {
     });
   });
 
+  it("renders nested FieldGroups without invalid <dt>/<dd> DOM nesting", () => {
+    // Patient.name is an array of HumanName (a BackboneElement), so each row
+    // mounts a nested FieldGroup. Before the fix, FieldGroup emitted <dt>/<dd>
+    // inside a parent <dd>, tripping React's validateDOMNesting check.
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { container } = wrap(
+      <ResourceEditor
+        resource={loaded}
+        structureDefinition={PatientStructureDefinition}
+      />,
+    );
+    const nestingWarnings = consoleError.mock.calls.filter((call) =>
+      call.some(
+        (arg) => typeof arg === "string" && arg.includes("validateDOMNesting"),
+      ),
+    );
+    expect(nestingWarnings).toEqual([]);
+    // The editor must not emit definition-list elements at all — the layout
+    // is CSS grid over <div>s, not a <dl>.
+    expect(container.querySelectorAll("dt, dd")).toHaveLength(0);
+    consoleError.mockRestore();
+  });
+
   it("saves an Observation valueQuantity with a valid UCUM code", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
