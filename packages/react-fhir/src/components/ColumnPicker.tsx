@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export interface ColumnPickerOption {
   /** Stable identifier for the column (typically the FHIR path used by `<ResourceTable>`). */
@@ -132,7 +132,12 @@ export function ColumnPicker({
 
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  // Positive translateX applied to the panel when it would clip past the
+  // left edge of the viewport. Recomputed via useLayoutEffect each time the
+  // panel opens so it adapts to the button's runtime position.
+  const [panelShift, setPanelShift] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const checkboxRefs = useRef<Array<HTMLInputElement | null>>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const panelId = useId();
@@ -143,6 +148,21 @@ export function ColumnPicker({
   // a future visit where they want the full list.
   useEffect(() => {
     if (!open) setFilter("");
+  }, [open]);
+
+  // On mobile the panel is right-anchored to the trigger button, which can
+  // sit near the left edge of the viewport. Measure the rendered panel and
+  // shift it right by exactly enough to keep its left edge ≥ 8px inside the
+  // viewport. This runs after paint so there is no layout flash.
+  useLayoutEffect(() => {
+    if (!open || !panelRef.current) {
+      setPanelShift(0);
+      return;
+    }
+    const rect = panelRef.current.getBoundingClientRect();
+    const MARGIN = 8;
+    const overflow = MARGIN - rect.left;
+    setPanelShift(overflow > 0 ? overflow : 0);
   }, [open]);
 
   useEffect(() => {
@@ -221,11 +241,14 @@ export function ColumnPicker({
 
       {open && (
         <div
+          ref={panelRef}
           id={panelId}
           role="group"
           aria-label="Choose visible columns"
           onKeyDown={handleListKeyDown}
-          className="absolute right-0 z-10 mt-1 flex max-h-64 min-w-[14rem] flex-col rounded border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg"
+          data-testid="column-picker-panel"
+          className="absolute right-0 z-10 mt-1 flex max-h-64 min-w-[14rem] max-w-[calc(100vw-16px)] flex-col rounded border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg"
+          style={panelShift > 0 ? { transform: `translateX(${panelShift}px)` } : undefined}
         >
           {showSearch && (
             <div className="mb-1 flex-shrink-0">

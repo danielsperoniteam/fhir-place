@@ -4,7 +4,7 @@
 #
 # Triggers:
 #   - issues: opened / labeled / unlabeled / closed / reopened
-#   - pull_request: opened / ready_for_review / labeled / closed
+#   - pull_request: opened / ready_for_review / closed
 #   - push to main (safety net for direct-merge cases that didn't fire
 #     the pull_request closed event — rare; the pull_request handler
 #     is the primary path)
@@ -18,8 +18,6 @@
 #                                          -> Todo
 #   PR opened (or ready_for_review)
 #     and PR closes the issue              -> Ready for review (the linked issue)
-#   PR labeled `uat: requested`
-#     and PR closes the issue              -> Ready for UAT
 #   PR merged into main
 #     and PR closes the issue              -> Released
 #
@@ -36,7 +34,7 @@ on:
   issues:
     types: [opened, labeled, unlabeled, closed, reopened]
   pull_request:
-    types: [opened, ready_for_review, labeled, closed]
+    types: [opened, ready_for_review, closed]
   push:
     branches: [main]
 
@@ -61,7 +59,6 @@ jobs:
       OPT_BLOCKED: bafdbe19
       OPT_IN_PROGRESS: 47fc9ee4
       OPT_READY_REVIEW: 3de50531
-      OPT_READY_UAT: b068b741
       OPT_RELEASED: 98236657
     steps:
       - name: Decide transition + apply it
@@ -76,7 +73,6 @@ jobs:
               blocked: process.env.OPT_BLOCKED,
               in_progress: process.env.OPT_IN_PROGRESS,
               ready_review: process.env.OPT_READY_REVIEW,
-              ready_uat: process.env.OPT_READY_UAT,
               released: process.env.OPT_RELEASED,
             };
 
@@ -183,14 +179,6 @@ jobs:
                   core.info(`PR merged into unexpected base ${base}; ignoring.`);
                   return;
                 }
-              } else if (action === 'labeled') {
-                // `uat: requested` is the trigger to move into Ready for UAT —
-                // the engineer applies it after opening the PR; a downstream
-                // workflow then publishes the build to /staging/.
-                const added = context.payload.label && context.payload.label.name;
-                if (added !== 'uat: requested') return;
-                target = OPTS.ready_uat;
-                label = 'Ready for UAT';
               } else if (action === 'opened' || action === 'ready_for_review') {
                 if (pr.draft && action === 'opened') {
                   // A draft PR isn't ready for review yet — leave the issue where it is.
