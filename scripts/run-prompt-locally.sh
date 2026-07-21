@@ -45,12 +45,17 @@ shift
 # Used by event-triggered drivers (issue-review, pr-review,
 # dispatch-engineer-on-issue, pr-resolve-conflicts) to scope the run.
 TARGET=""
+SKIP_DIRTY_CHECK=false
 CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --for)
       TARGET="$2"
       shift 2
+      ;;
+    --skip-dirty-check)
+      SKIP_DIRTY_CHECK=true
+      shift
       ;;
     *)
       CLAUDE_ARGS+=("$1")
@@ -143,9 +148,10 @@ if [[ "${RUN_IN_CLEAN_WORKTREE:-false}" == "true" ]]; then
   REPO_ROOT="$CLEAN_RUNNER_ROOT"
   cd "$REPO_ROOT"
   echo "clean control worktree: $REPO_ROOT"
-elif ! git diff --quiet || ! git diff --cached --quiet; then
+elif [[ "$SKIP_DIRTY_CHECK" != "true" ]] && { ! git diff --quiet || ! git diff --cached --quiet; }; then
   # General jobs still protect the human checkout. Conflict jobs opt into the
   # clean control worktree above and never operate from this dirty tree.
+  # Pass --skip-dirty-check for prompts that never touch the tree.
   echo "dirty working tree at $REPO_ROOT — skipping"
   exit 0
 fi
