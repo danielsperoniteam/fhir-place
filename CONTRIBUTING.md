@@ -33,8 +33,7 @@ VITE_USE_MOCK=false VITE_FHIR_BASE_URL=http://localhost:8080/fhir pnpm dev
 
 ## Shipping a PR
 
-1. Branch off `main`. (See "Staging deploys" below for the staging-promote
-   step you do before review.)
+1. Branch off `main` and open the PR against `main`.
 2. Write the code + tests. Match the existing style (`tsc --strict`, Vitest, MSW for HTTP mocking). Every library-level change should have unit-test coverage; behaviour that touches real servers should also have an integration test in `packages/react-fhir/integration/`.
 3. **Add a changeset** if your PR changes `@fhir-place/react-fhir`:
    ```bash
@@ -76,20 +75,14 @@ missing block today (humans approve), but the comment is loud.
 
 > **Do not manually create a "chore: release" PR.** The `changesets/action` manages that PR itself (pushing to `changeset-release/main` and opening a bot-owned PR). A human-authored PR targeting `main` from any other branch with the same title causes the action to fail when it tries to update the conflicting PR. If the Release workflow shows a red check on `main` and the only step that failed is the `changesets/action`, look for an open PR titled "chore: release" that was not created by `github-actions[bot]` — closing it unblocks the workflow.
 
-## Staging deploys
+## Optional hosted preview
 
-The `staging` branch is a continuously-rebuilt deploy target:
+CI green plus CODEOWNER approval is the normal merge gate. Staging is an
+optional, disposable preview for deployment-specific risk:
 
 ```
-staging = origin/main + every open PR with reviewDecision == APPROVED
+staging = origin/main + zero or one explicitly selected PR
 ```
-
-Stacking is automatic — when a PR receives an approving CODEOWNER
-review, the [`stack-approved-prs.yml`](.github/workflows/stack-approved-prs.yml)
-workflow resets staging to main HEAD, merges every approved-and-open
-PR's head in order, and force-pushes. `pages.yml` redeploys
-`/staging/` with the new tip. Staging has no branch protection — it's
-a deploy artifact, not a source-of-truth branch.
 
 URLs:
 
@@ -98,31 +91,18 @@ URLs:
 - `staging` is published at <https://danielsperoniteam.github.io/fhir-place/staging/>
   (goals-tasks at `/fhir-place/staging/goals/`).
 
-**Flow:**
+A maintainer can add the `preview: staging` label or run the
+`Preview one PR on staging` workflow with the PR number after required checks
+are green. At most one open PR may carry the label. The workflow starts from
+current main, merges that one PR, deploys `/staging/`, and comments the exact
+PR SHA and Pages run on the PR.
 
-1. Open every PR — human or agent — with `base: main`.
-2. Get CODEOWNER approval. On approval, `stack-approved-prs.yml`
-   rebuilds staging automatically (you don't push to staging
-   yourself).
-3. Walk the PR's **UAT on live staging** steps against the live
-   `/staging/` URL. If anything is off, push a fix to the PR
-   branch — staging rebuilds on the next event (push, approval, or
-   close).
-4. When UAT passes, merge the PR to `main`. The next staging
-   rebuild excludes it (it's on main now, no longer "approved
-   and open").
+If the preview merge conflicts, resolve the PR branch against main. Do not
+create a staging-only resolution. Removing the label, closing the PR, or
+dispatching the reset action returns staging to main.
 
-**Direct-to-main commits** trigger a staging rebuild from the new
-main HEAD automatically (the workflow fires on `push: main`). No
-separate sync step needed — every rebuild starts from main HEAD, so
-drift is impossible.
-
-**Agents never push to staging.** Engineer subagents only push to
-their `bot/*` branches; staging is owned by `stack-approved-prs.yml`
-and force-rebuilt from scratch on every relevant event. See
-`.claude/agents/engineer.md` and `AGENTS.md`. Every agent-authored
-PR must include a UAT section with concrete copy-pasteable steps for
-the live staging URL.
+Agents and contributors never push to staging. Staging is never merged into
+main. See [ADR 0009](docs/decisions/0009-main-first-single-pr-preview.md).
 
 ## Bump conventions
 

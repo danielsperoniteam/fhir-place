@@ -18,6 +18,9 @@
 #   LOCK_NAME — defaults to the prompt's basename; used to namespace the
 #               single-run lock so two different prompts can run at the
 #               same time but two copies of the same prompt cannot
+#   RUN_IN_CLEAN_WORKTREE — set to true for jobs that must run even when the
+#               human checkout is dirty. The runner creates and removes a
+#               detached control worktree at origin/main.
 #
 # Design choices:
 #   - launchd-friendly: explicit PATH, exec >/2 redirect for tee-to-log,
@@ -99,6 +102,9 @@ mkdir -p "$LOG_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "=== run $RUN_ID :: $PROMPT_FILE ==="
 
+# Trim before any early exit, including dirty-checkout and auth failures.
+find "$LOG_DIR" -name "${PROMPT_BASENAME}-*.log" -mtime +14 -delete 2>/dev/null || true
+
 # Single-run lock per prompt. Atomic on POSIX. Stale-lock recovery checks
 # whether the recorded PID is still alive.
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -113,20 +119,43 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   fi
 fi
 echo $$ > "$LOCK_DIR/pid"
-trap 'rm -rf "$LOCK_DIR"' EXIT
+PRIMARY_REPO_ROOT="$REPO_ROOT"
+CLEAN_RUNNER_ROOT=""
+WORKTREE_NAMESPACE="$RUN_ID-$$"
+export WORKTREE_NAMESPACE
+cleanup() {
+  while IFS= read -r task_worktree; do
+    case "$task_worktree" in
+      *-"$WORKTREE_NAMESPACE")
+        git -C "$PRIMARY_REPO_ROOT" worktree remove --force "$task_worktree" 2>/dev/null || true
+        ;;
+    esac
+  done < <(git -C "$PRIMARY_REPO_ROOT" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+  if [[ -n "$CLEAN_RUNNER_ROOT" ]]; then
+    git -C "$PRIMARY_REPO_ROOT" worktree remove --force "$CLEAN_RUNNER_ROOT" 2>/dev/null || true
+  fi
+  rm -rf "$LOCK_DIR"
+}
+trap cleanup EXIT
 
-cd "$REPO_ROOT"
+cd "$PRIMARY_REPO_ROOT"
+git fetch origin --prune --tags --quiet
+git worktree prune
 
-# Refuse to run with a dirty primary checkout — likely the human is mid-edit.
-# Prompts that need to mutate the tree create worktrees of their own.
-# Pass --skip-dirty-check for prompts that never touch the tree (e.g. uat-validation).
-if [[ "$SKIP_DIRTY_CHECK" != "true" ]] && { ! git diff --quiet || ! git diff --cached --quiet; }; then
+if [[ "${RUN_IN_CLEAN_WORKTREE:-false}" == "true" ]]; then
+  CLEAN_RUNNER_ROOT="$(dirname "$PRIMARY_REPO_ROOT")/.fhir-place-runner-${LOCK_NAME}-${WORKTREE_NAMESPACE}"
+  git worktree add --detach "$CLEAN_RUNNER_ROOT" origin/main
+  REPO_ROOT="$CLEAN_RUNNER_ROOT"
+  cd "$REPO_ROOT"
+  echo "clean control worktree: $REPO_ROOT"
+elif [[ "$SKIP_DIRTY_CHECK" != "true" ]] && { ! git diff --quiet || ! git diff --cached --quiet; }; then
+  # General jobs still protect the human checkout. Conflict jobs opt into the
+  # clean control worktree above and never operate from this dirty tree.
+  # Pass --skip-dirty-check for prompts that never touch the tree.
   echo "dirty working tree at $REPO_ROOT — skipping"
   exit 0
 fi
 
-git fetch origin --prune --tags --quiet
-git worktree prune
 git branch --format '%(if:equals=[gone])%(upstream:track)%(then)%(refname:short)%(end)' \
   | grep -v '^$' | grep -E '^(bot|claude|codex)/' | xargs git branch -D 2>/dev/null || true
 
@@ -188,9 +217,6 @@ build_stdin | claude \
   "${CLAUDE_ARGS[@]}"
 RC=$?
 set -e
-
-# Trim old logs (~14 days).
-find "$LOG_DIR" -name "${PROMPT_BASENAME}-*.log" -mtime +14 -delete 2>/dev/null || true
 
 echo "=== run $RUN_ID complete (rc=$RC) ==="
 exit "$RC"
