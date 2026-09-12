@@ -51,6 +51,7 @@ const CANONICAL = [
   { name: 'status: in-progress', color: 'fbca04', description: 'Engineer-dispatch agent has claimed this issue. Bot-managed; humans should not edit.' },
   { name: 'status: needs-human', color: 'd93f0b', description: 'Engineer-dispatch agent stopped — see latest comment for the failure.' },
   { name: 'status: agent-paused', color: '000000', description: 'Kill switch on the dispatch tracking issue — dispatchers skip while present.' },
+  { name: 'preview: staging', color: '5319e7', description: 'Deploy this one PR as the shared staging preview. At most one open PR may carry it.' },
   // origin:
   { name: 'origin: bot-filed', color: 'ededed', description: 'Auto-filed by automation (e.g. live-site-monitor.yml).' },
   // phase tracking — preserved as-is, no prefix (project-tracking convention).

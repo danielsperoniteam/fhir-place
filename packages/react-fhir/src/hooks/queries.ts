@@ -209,6 +209,8 @@ export interface UsePagedSearchResult<T extends Resource> {
   isError: boolean;
   error: Error | null;
   links: BundlePageLinks;
+  /** Retry the current page after a failed request. */
+  refetch: () => void;
   /** Navigate to a specific page link. No-op when the link is absent. */
   goTo: (url: string | undefined) => void;
 }
@@ -264,6 +266,7 @@ export function usePagedSearch<T extends Resource = Resource>(
     isError: query.isError,
     error: query.error,
     links: bundlePageLinks(query.data),
+    refetch: query.refetch,
     goTo,
   };
 }

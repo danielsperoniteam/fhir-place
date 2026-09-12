@@ -1,0 +1,407 @@
+# Owns the disposable staging branch.
+#
+# staging = origin/main + zero or one explicitly selected PR
+#
+# A maintainer starts a preview with workflow_dispatch and a PR number. A
+# push to main rebuilds the active preview against the new main head. Closing
+# the active PR, or dispatching the reset action, resets staging to main.
+# Staging is never a merge source for main.
+
+name: Preview one PR on staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Deploy one PR or reset staging to main"
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - reset
+      pr_number:
+        description: "Open PR number when action is preview"
+        required: false
+        type: string
+  push:
+    branches: [main]
+  pull_request_target:
+    types: [labeled, unlabeled, synchronize, closed, ready_for_review, converted_to_draft, reopened, edited]
+
+permissions:
+  actions: write # dispatch and confirm the trusted Pages workflow on main
+  contents: write # reset the workflow-owned staging branch
+  pull-requests: write # report a successful preview on the selected PR
+
+concurrency:
+  group: staging-preview
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine requested staging state
+        id: request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+          EVENT_BASE: ${{ github.event.pull_request.base.ref }}
+          INPUT_ACTION: ${{ inputs.action }}
+          INPUT_PR: ${{ inputs.pr_number }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin staging:refs/remotes/origin/staging || true
+
+          ACTIVE_PR=""
+          if git show origin/staging:.staging-preview.json > /tmp/staging-preview.json 2>/dev/null; then
+            ACTIVE_PR=$(jq -r '.pr_number // empty' /tmp/staging-preview.json)
+          fi
+
+          SELECTED=$(gh pr list \
+            --state open \
+            --label "preview: staging" \
+            --json number \
+            --jq '[.[].number]')
+
+          CONTEXT=$(jq -n \
+            --arg eventName "$EVENT_NAME" \
+            --arg eventAction "$EVENT_ACTION" \
+            --arg eventLabel "$EVENT_LABEL" \
+            --arg eventBase "$EVENT_BASE" \
+            --arg eventPr "$EVENT_PR" \
+            --arg inputAction "$INPUT_ACTION" \
+            --arg inputPr "$INPUT_PR" \
+            --arg activePr "$ACTIVE_PR" \
+            --argjson selectedPrs "$SELECTED" \
+            '{eventName: $eventName, eventAction: $eventAction, eventLabel: $eventLabel, eventBase: $eventBase,
+              eventPr: $eventPr, inputAction: $inputAction, inputPr: $inputPr,
+              activePr: $activePr, selectedPrs: $selectedPrs}')
+          DECISION=$(PREVIEW_CONTEXT="$CONTEXT" node scripts/staging/preview-selection.mjs)
+          OPERATION=$(echo "$DECISION" | jq -r '.operation')
+          PR_NUMBER=$(echo "$DECISION" | jq -r '.prNumber')
+          SELECTION_ERROR=$(echo "$DECISION" | jq -r '.selectionError')
+          REMOVE_PRS=$(echo "$DECISION" | jq -c '.removePrs')
+
+          echo "operation=$OPERATION" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "active_pr=$ACTIVE_PR" >> "$GITHUB_OUTPUT"
+          echo "selection_error=$SELECTION_ERROR" >> "$GITHUB_OUTPUT"
+          echo "remove_prs=$REMOVE_PRS" >> "$GITHUB_OUTPUT"
+          echo "Operation: $OPERATION${PR_NUMBER:+ for PR #$PR_NUMBER}"
+
+      - name: Validate selected PR
+        id: pr
+        if: steps.request.outputs.operation == 'preview'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.request.outputs.pr_number }}
+        run: |
+          if ! PR=$(gh pr view "$PR_NUMBER" --json state,isDraft,baseRefName,headRefOid,headRepositoryOwner); then
+            echo "head_sha=" >> "$GITHUB_OUTPUT"
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "reason=PR #$PR_NUMBER does not exist or is not readable." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          HEAD_SHA=$(echo "$PR" | jq -r '.headRefOid')
+          REPO_OWNER=${GITHUB_REPOSITORY%%/*}
+          VALIDATION=$(PREVIEW_PR="$PR" \
+            PREVIEW_REPO_OWNER="$REPO_OWNER" \
+            PREVIEW_PR_NUMBER="$PR_NUMBER" \
+            node scripts/staging/preview-selection.mjs)
+          VALID=$(echo "$VALIDATION" | jq -r '.valid')
+          REASON=$(echo "$VALIDATION" | jq -r '.reason')
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "valid=$VALID" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+
+      - name: Build requested staging commit
+        id: build
+        if: steps.request.outputs.operation != 'noop'
+        env:
+          OPERATION: ${{ steps.request.outputs.operation }}
+          PR_NUMBER: ${{ steps.request.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PR_VALID: ${{ steps.pr.outputs.valid }}
+          PR_INVALID_REASON: ${{ steps.pr.outputs.reason }}
+          EVENT_NAME: ${{ github.event_name }}
+          REMOVE_PRS: ${{ steps.request.outputs.remove_prs }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE_SHA=$(git rev-parse origin/main)
+          OLD_STAGING_SHA=""
+          if git show-ref --verify --quiet refs/remotes/origin/staging; then
+            OLD_STAGING_SHA=$(git rev-parse origin/staging)
+          fi
+
+          push_staging() {
+            if [ -n "$OLD_STAGING_SHA" ] && [ "$OLD_STAGING_SHA" = "$(git rev-parse HEAD)" ]; then
+              PUSHED=false
+              echo "Staging already points at the requested commit."
+              return
+            fi
+            PUSHED=true
+            if [ -n "$OLD_STAGING_SHA" ]; then
+              git push \
+                --force-with-lease="refs/heads/staging:$OLD_STAGING_SHA" \
+                origin HEAD:staging
+            else
+              git push origin HEAD:staging
+            fi
+          }
+
+          PUSHED=false
+          REQUEST_SUCCEEDED=true
+          FAILURE_REASON=""
+
+          fail_request() {
+            REQUEST_SUCCEEDED=false
+            if [ -n "$FAILURE_REASON" ]; then
+              FAILURE_REASON="$FAILURE_REASON $1"
+            else
+              FAILURE_REASON="$1"
+            fi
+          }
+
+          label_status() {
+            if ! gh pr view "$1" --json labels --jq \
+                '[.labels[].name] | contains(["preview: staging"])' 2>/dev/null; then
+              echo "unknown"
+            fi
+          }
+
+          remove_preview_label() {
+            selected_pr="$1"
+            if gh pr edit "$selected_pr" --remove-label "preview: staging"; then
+              return
+            fi
+            status=$(label_status "$selected_pr")
+            if [ "$status" != "false" ]; then
+              fail_request "Failed to remove preview: staging from PR #$selected_pr."
+            fi
+          }
+
+          add_preview_label() {
+            selected_pr="$1"
+            if gh pr edit "$selected_pr" --add-label "preview: staging"; then
+              return
+            fi
+            if [ "$(label_status "$selected_pr")" != "true" ]; then
+              fail_request "Failed to add preview: staging to PR #$selected_pr."
+            fi
+          }
+
+          git checkout -B staging origin/main
+
+          while read -r selected_pr; do
+            [ -z "$selected_pr" ] || remove_preview_label "$selected_pr"
+          done < <(echo "$REMOVE_PRS" | jq -r '.[]')
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$OPERATION" = "preview" ] && [ "$PR_VALID" = "true" ] && \
+                [ "$REQUEST_SUCCEEDED" = "true" ]; then
+              add_preview_label "$PR_NUMBER"
+            fi
+          fi
+
+          if [ "$OPERATION" = "preview" ] && [ "$REQUEST_SUCCEEDED" = "true" ]; then
+            if [ "$PR_VALID" != "true" ]; then
+              remove_preview_label "$PR_NUMBER"
+              fail_request "$PR_INVALID_REASON"
+            elif ! timeout 600 gh pr checks "$PR_NUMBER" --required --watch --fail-fast --interval 10; then
+              remove_preview_label "$PR_NUMBER"
+              fail_request "Required PR checks must be green before hosted preview deployment. Reapply the preview label after checks pass."
+            fi
+          fi
+
+          if [ "$OPERATION" = "preview" ] && [ "$REQUEST_SUCCEEDED" = "true" ]; then
+            git fetch origin "pull/$PR_NUMBER/head:refs/remotes/origin/preview-pr-$PR_NUMBER"
+            FETCHED_HEAD_SHA=$(git rev-parse "refs/remotes/origin/preview-pr-$PR_NUMBER")
+            if [ "$FETCHED_HEAD_SHA" != "$PR_HEAD_SHA" ]; then
+              fail_request "Validated $PR_HEAD_SHA but fetched $FETCHED_HEAD_SHA. Refusing to preview unvalidated code."
+            elif ! git merge --no-ff --no-commit "refs/remotes/origin/preview-pr-$PR_NUMBER"; then
+              git merge --abort
+              fail_request "PR #$PR_NUMBER conflicts with main. Resolve the PR branch against main; no staging-only resolution was created."
+            fi
+          fi
+
+          if [ "$OPERATION" = "preview" ] && [ "$REQUEST_SUCCEEDED" = "true" ]; then
+            jq -n \
+              --argjson pr_number "$PR_NUMBER" \
+              --arg head_sha "$PR_HEAD_SHA" \
+              --arg base_sha "$BASE_SHA" \
+              '{pr_number: $pr_number, head_sha: $head_sha, base_sha: $base_sha}' \
+              > .staging-preview.json
+            mkdir -p apps/demo/public
+            cp .staging-preview.json apps/demo/public/preview-manifest.json
+            git add .staging-preview.json apps/demo/public/preview-manifest.json
+            git commit -m "preview: PR #$PR_NUMBER at $PR_HEAD_SHA"
+          else
+            git checkout -B staging origin/main
+          fi
+
+          DEPLOY_SHA=$(git rev-parse HEAD)
+          push_staging
+
+          echo "deploy_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+          echo "pushed=$PUSHED" >> "$GITHUB_OUTPUT"
+          echo "request_succeeded=$REQUEST_SUCCEEDED" >> "$GITHUB_OUTPUT"
+          echo "failure_reason=$FAILURE_REASON" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch trusted Pages build
+        id: dispatch
+        if: steps.request.outputs.operation != 'noop'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SHA: ${{ steps.build.outputs.deploy_sha }}
+        run: |
+          if gh workflow run pages.yml --ref main -f "staging_sha=$DEPLOY_SHA"; then
+            echo "succeeded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "succeeded=false" >> "$GITHUB_OUTPUT"
+            echo "failure_reason=Failed to dispatch the trusted Pages workflow." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Confirm Pages deployed the requested commit
+        id: pages
+        if: steps.request.outputs.operation != 'noop' && steps.dispatch.outputs.succeeded == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SHA: ${{ steps.build.outputs.deploy_sha }}
+        run: |
+          for attempt in $(seq 1 36); do
+            RUN=$(gh run list \
+              --workflow pages.yml \
+              --branch main \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json displayTitle,status,conclusion,url \
+              --jq "[.[] | select(.displayTitle == \"Deploy Pages: $DEPLOY_SHA\")][0] // {}")
+            STATUS=$(echo "$RUN" | jq -r '.status // empty')
+            CONCLUSION=$(echo "$RUN" | jq -r '.conclusion // empty')
+            URL=$(echo "$RUN" | jq -r '.url // empty')
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" != "success" ]; then
+                echo "succeeded=false" >> "$GITHUB_OUTPUT"
+                echo "failure_reason=Pages deployment failed: $URL" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "succeeded=true" >> "$GITHUB_OUTPUT"
+              echo "run_url=$URL" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "succeeded=false" >> "$GITHUB_OUTPUT"
+          echo "failure_reason=Timed out waiting for Pages to deploy staging SHA $DEPLOY_SHA." >> "$GITHUB_OUTPUT"
+
+      - name: Recover hosted site to main after Pages failure
+        id: recovery
+        if: always() && steps.request.outputs.operation != 'noop' && steps.pages.outputs.succeeded != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin main staging
+          OLD_STAGING_SHA=$(git rev-parse origin/staging)
+          git checkout -B staging origin/main
+          RESET_SHA=$(git rev-parse HEAD)
+          if [ "$OLD_STAGING_SHA" != "$RESET_SHA" ]; then
+            git push \
+              --force-with-lease="refs/heads/staging:$OLD_STAGING_SHA" \
+              origin HEAD:staging
+          fi
+
+          gh workflow run pages.yml --ref main -f "staging_sha=$RESET_SHA"
+          for attempt in $(seq 1 36); do
+            RUN=$(gh run list \
+              --workflow pages.yml \
+              --branch main \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json displayTitle,status,conclusion,url \
+              --jq "[.[] | select(.displayTitle == \"Deploy Pages: $RESET_SHA\")][0] // {}")
+            STATUS=$(echo "$RUN" | jq -r '.status // empty')
+            CONCLUSION=$(echo "$RUN" | jq -r '.conclusion // empty')
+            URL=$(echo "$RUN" | jq -r '.url // empty')
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" != "success" ]; then
+                echo "Recovery Pages deployment failed: $URL" >&2
+                exit 1
+              fi
+              echo "run_url=$URL" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out recovering the hosted site to main at $RESET_SHA." >&2
+          exit 1
+
+      - name: Comment preview result
+        if: steps.request.outputs.operation == 'preview' && steps.build.outputs.request_succeeded == 'true' && steps.pages.outputs.succeeded == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.request.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          DEPLOY_SHA: ${{ steps.build.outputs.deploy_sha }}
+          PAGES_RUN_URL: ${{ steps.pages.outputs.run_url }}
+        run: |
+          BODY=$(printf '%s\n\n%s\n\n%s\n%s\n%s' \
+            "<!-- staging-preview pr=$PR_NUMBER sha=$PR_HEAD_SHA -->" \
+            "Hosted preview deployed for PR #$PR_NUMBER." \
+            "- PR head: \`$PR_HEAD_SHA\`" \
+            "- Staging commit: \`$DEPLOY_SHA\`" \
+            "- Preview: https://danielsperoniteam.github.io/fhir-place/staging/ ([Pages run]($PAGES_RUN_URL))")
+          gh pr comment "$PR_NUMBER" --body "$BODY"
+
+      - name: Report failed request after hosted reset
+        if: always() && steps.request.outputs.operation != 'noop' && (steps.build.outputs.request_succeeded != 'true' || steps.pages.outputs.succeeded != 'true')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPERATION: ${{ steps.request.outputs.operation }}
+          PR_NUMBER: ${{ steps.request.outputs.pr_number }}
+          REQUEST_SUCCEEDED: ${{ steps.build.outputs.request_succeeded }}
+          REQUEST_FAILURE: ${{ steps.build.outputs.failure_reason }}
+          DISPATCH_FAILURE: ${{ steps.dispatch.outputs.failure_reason }}
+          PAGES_FAILURE: ${{ steps.pages.outputs.failure_reason }}
+          RECOVERY_URL: ${{ steps.recovery.outputs.run_url }}
+        run: |
+          if [ "$REQUEST_SUCCEEDED" != "true" ]; then
+            REASON="$REQUEST_FAILURE"
+          elif [ -n "$PAGES_FAILURE" ]; then
+            REASON="$PAGES_FAILURE"
+          else
+            REASON="$DISPATCH_FAILURE"
+          fi
+          if [ -n "$RECOVERY_URL" ]; then
+            RECOVERY_NOTE="Staging and the hosted site were reset to current main. Recovery run: $RECOVERY_URL"
+          else
+            RECOVERY_NOTE="The workflow attempted to reset staging and the hosted site to current main, but recovery did not complete."
+          fi
+          if [ "$OPERATION" = "preview" ] && [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            gh pr comment "$PR_NUMBER" --body "Hosted preview failed: $REASON $RECOVERY_NOTE" || true
+          fi
+          echo "$REASON" >&2
+          exit 1
+
+      - name: Reject multiple preview selections
+        if: steps.request.outputs.selection_error == 'true'
+        run: |
+          echo "More than one open PR has the preview: staging label. Staging was reset to main; remove labels until at most one remains." >&2
+          exit 1

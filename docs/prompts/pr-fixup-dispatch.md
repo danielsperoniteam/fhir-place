@@ -69,22 +69,17 @@ A PR is **fixup-eligible** when all of these hold:
 - has at least one of:
   - **Merge conflicts** — GitHub reports `mergeable: CONFLICTING`, or a local
     `git merge origin/<base_ref>` recreation exits with conflicted files
-  - **`uat: needs-changes`** label — UAT validation found a failing
-    checklist item on `/staging/` and the hourly UAT walker flagged it
   - **Red CI** — latest CI run on the head_sha has `conclusion: failure`
   - **Unresolved review threads** — GraphQL query on `pullRequest.reviewThreads`
     returns at least one node with `isResolved: false`
 
 Sort by:
 
-1. **`uat: needs-changes` trigger first** — these PRs have already
-   been validated once and a regression slipped through; fixing them
-   restores a green pipeline faster than starting fresh work
-2. **Merge conflicts second** — a PR that cannot merge to `main` or another
+1. **Merge conflicts first** — a PR that cannot merge to `main` or another
    base cannot ship even if its tests are green
-3. Priority of the linked issue (via the `Closes #N` line in the PR body):
+2. Priority of the linked issue (via the `Closes #N` line in the PR body):
    `P0` → `P1` → `P2` → `P3`
-4. `updated_at` ascending (oldest first — work the stalest)
+3. `updated_at` ascending (oldest first — work the stalest)
 
 Take the top **one**. If empty, jump to Step 5 (update tracking issue)
 and exit cleanly.
@@ -111,11 +106,10 @@ Pick the **action** based on what made the PR fixup-eligible:
 
 | Trigger | Action |
 | --- | --- |
-| `uat: needs-changes` | Find the latest `<!-- uat-validation:run … -->` comment on the PR. Extract the failing checklist items (lines starting with `[ ]` plus the one-line note below each). Dispatch the `engineer` subagent with `{pr_number, head_ref, action: "fix-uat", failing_items}`. The subagent reads the items, applies the smallest fix that addresses them, runs the contract, pushes to the existing branch. After the push, remove `uat: needs-changes` from the PR — the next stack rebuild + hourly UAT walk will re-evaluate and set `uat: complete` / `uat: needs-changes` / `uat: unable` per outcome. |
-| Merge conflicts | Dispatch `.github/workflows/pr-resolve-conflicts.yml` with `workflow_dispatch` input `pr_number=<PR>`. That workflow checks out the PR head, merges `origin/<base_ref>`, resolves hand-authored conflicts with judgment, verifies, commits, and pushes to the PR branch. If the conflict is binary, generated, semantically ambiguous, or needs a product decision, it posts `needs-human` instead of guessing. |
+| Merge conflicts | Read `docs/prompts/pr-resolve-conflicts.md` and execute it locally for this PR. Do not dispatch the disabled hosted workflow. The resolver checks out the PR head in its own worktree, merges `origin/<base_ref>`, resolves hand-authored conflicts with judgment, verifies, commits, and pushes to the PR branch. If the conflict is binary, generated, semantically ambiguous, or needs a product decision, it posts `needs-human` instead of guessing. |
 | Red CI only | Dispatch the `engineer` subagent with `{pr_number, head_ref, action: "fix-ci"}` and the latest failing-job logs URL. The subagent reads the failing test/typecheck output, applies the smallest fix, runs the contract, pushes. |
 | Unresolved threads only | Read `docs/prompts/address-comments.md` and execute its Steps 1–6 against the PR. (Don't re-fire the `/address-comments` workflow — that costs another turn and creates a dispatch loop.) |
-| Mixed triggers | Address them in this order: `uat: needs-changes` → merge conflicts → unresolved threads → red CI. The first commit may resolve later triggers — re-check before dispatching the next action. |
+| Mixed triggers | Address them in this order: merge conflicts → unresolved threads → red CI. The first commit may resolve later triggers — re-check before dispatching the next action. |
 
 In every case the engineer subagent's hard rules apply — branch
 discipline, no force-push, no deny-list paths, blast-radius caps,

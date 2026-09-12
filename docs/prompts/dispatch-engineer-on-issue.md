@@ -93,9 +93,9 @@ already verified the issue is not already claimed; proceed.
 2. **Announce:** comment on the issue:
    "Picked up by manual dispatch (triggered by @<actor>). Branch:
    `bot/issue-<N>-<slug>`, PR base: `main`. The agent will open a draft
-   PR, promote the branch into `staging` for live UAT against
-   `https://danielsperoniteam.github.io/fhir-place/staging/`, or post a
-   `status: needs-human` comment if it cannot complete the work."
+   PR with Playwright coverage for user-visible behavior, or post a
+   `status: needs-human` comment if it cannot complete the work. Hosted
+   previews are reviewer-requested and handled by separate automation."
 
    Replace `<actor>` with the `Triggered by` value from your context.
 

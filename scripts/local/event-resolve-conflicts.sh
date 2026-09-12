@@ -32,10 +32,10 @@ trap cleanup_conflict_worktrees EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+export RUN_IN_CLEAN_WORKTREE=true
 set +e
 "$(dirname "$0")/../run-prompt-locally.sh" pr-resolve-conflicts \
   --for "PR #$PR" \
-  --allow-dirty-primary \
   --max-turns 100 \
   --allowedTools "Read,Edit,Write,Bash,Grep,Glob,mcp__github__*"
 RC=$?

@@ -285,6 +285,8 @@ To retry after resolving these manually, comment `/resolve-conflicts` again.
 - All git work happens inside the `../wt-pr-<pr_number>` worktree created in
   Step 0. Do not modify the primary checkout.
 - Always remove the worktree at every exit path (success and needs-human).
+- The local runner also removes worktrees carrying its unique
+  `WORKTREE_NAMESPACE` on exit, including crashes and turn-limit failures.
 - The workflow's `concurrency` group ensures only one resolution run executes
   per PR at a time.
 - If you find a bug in this prompt or in the workflow, open a regular PR to

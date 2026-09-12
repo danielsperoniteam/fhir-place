@@ -59,6 +59,7 @@ would cause real harm if merged as-is:
   `packages/*/src/**` (the `CLAUDE.md` test-update gate)
 - Breaking API change to `packages/react-fhir/**` without a
   `.changeset/*.md` entry
+- PR targets a base other than `main`
 - Path on the agent deny-list (`.github/workflows/**`,
   `.github/actions/**`, `.env*`, `**/secrets/**`, etc.) edited
   without explicit human authorization captured in the PR
@@ -116,6 +117,8 @@ not blocking.
    Brief: code-review PR `#<N>`. Cover, with bullets:
    - **Diff scope** — files / packages touched, anything outside
      the linked issue's stated scope.
+   - **Branch contract** — the PR must target `main`. Staging is an optional
+     single-PR preview and is never a PR base or promotion source.
    - **FHIR / clinical correctness** — resource shape, profile
      conformance, terminology bindings, cardinality, choice[x]
      handling, references, modifierExtension.

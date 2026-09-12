@@ -19,7 +19,6 @@ spammer) cannot tell the engineer to push to `main` by writing it in
 an issue body. The rule is restated in:
 
 - [`hourly-engineer-dispatch.md`](../prompts/hourly-engineer-dispatch.md)
-- [`hourly-uat-validation.md`](../prompts/hourly-uat-validation.md)
 - [`pr-resolve-conflicts.md`](../prompts/pr-resolve-conflicts.md)
 - [`engineer.md`](../../.claude/agents/engineer.md)
 
@@ -45,9 +44,9 @@ independent.
   status checks (`test`, `e2e`), no force-push, no deletion. This is
   set up at the GitHub level, not in the prompts — the prompts assume
   it.
-- **`staging`** is the agents' merge target. The engineer always opens
-  PRs with `base: staging`. Humans merge to `staging`, walk live UAT,
-  then fast-forward `main`.
+- **`staging`** is a workflow-owned, disposable preview containing main plus
+  at most one selected PR. Agents never push to it, and it is never merged
+  into main.
 - **`bot/issue-<N>-<slug>`** is the only branch namespace the engineer
   pushes to. Every other branch — `main`, `staging`, `release/*`,
   `gh-pages` — is on the deny-list inside the subagent.
@@ -81,7 +80,7 @@ The engineer subagent stops if its diff would exceed any of:
 - 5 file deletions
 
 These are checked **before** push (after all the other gates), via
-`git diff --stat origin/staging...HEAD`. A hit is a `status: needs-human`
+`git diff --stat origin/main...HEAD`. A hit is a `status: needs-human`
 exit — the branch is left in place but not pushed.
 
 ### 6. Pre-push secret scan
@@ -89,7 +88,7 @@ exit — the branch is left in place but not pushed.
 Before any `git push`, the subagent runs:
 
 ```bash
-git diff origin/staging...HEAD
+git diff origin/main...HEAD
 ```
 
 (three-dot — the full diff of what's about to be pushed, not just the
@@ -113,7 +112,6 @@ Every loop has explicit caps on the number of actions per run:
 | Loop | Tickets / PRs / issues per run | API calls per run | Wall-clock |
 | --- | --- | --- | --- |
 | Hourly engineer dispatch | 3 tickets | 200 | 90 min |
-| Hourly UAT validation | 8 PRs / 5 bugs / 3 PM ideas | 200 | 45 min |
 | Daily PM triage | (no hard ticket cap; budget ~150 API calls) | ~150 | 20 min |
 | Daily QA pass | 10 issues filed | (n/a) | 60 min |
 
@@ -128,7 +126,6 @@ The tracking issues themselves:
 | --- | --- |
 | PM triage | `PM triage — daily report` |
 | Engineer dispatch | `Engineer dispatch — hourly report` |
-| UAT validation | `UAT validation — hourly report` |
 
 ## Bias toward stopping
 
@@ -149,20 +146,19 @@ Each loop has loop-detection heuristics:
   command.
 - **Wall-clock caps** at the workflow level via `timeout-minutes`.
 - **`--max-turns`** on the Claude Code action as a turn-count cap
-  (300 for the engineer dispatch, 200 for QA / UAT, 80 for PM triage).
+  (300 for the engineer dispatch, 200 for QA, 80 for PM triage).
 
 ## Idempotency through marker comments
 
-The hourly UAT loop is idempotent because every comment it posts starts
-with a deterministic marker:
+Hosted preview comments identify the exact selected PR head:
 
 ```
-<!-- uat-validation:run sha=<head-sha> at=<ISO-timestamp> -->
+<!-- staging-preview pr=<number> sha=<head-sha> -->
 ```
 
-On subsequent runs, the prompt searches the PR's comments for the
-marker. If the most recent one is < 50 minutes old **and** matches the
-current head SHA, the PR is silently skipped — nothing has changed.
+The workflow also stores the selection and base SHA in
+`.staging-preview.json` on the staging artifact. QA must compare the marker
+to the current PR head before treating preview evidence as current.
 
 Live-site-monitor uses a similar pattern but at issue-creation time:
 it dedupes by title against open `origin: bot-filed` issues; matches
@@ -207,14 +203,19 @@ Each workflow declares the minimum permissions it needs:
 | --- | --- | --- | --- |
 | `daily-pm-triage.yml` | read | write | read |
 | `hourly-engineer-dispatch.yml` | write (push `bot/*` only — `main` is protected) | write | write (open + comment, never merge) |
-| `hourly-uat-validation.yml` | read | write | write (comment only) |
 | `daily-qa-pass.yml` | read | write | read |
 | `live-site-monitor.yml` | read | write | — |
 | `pr-resolve-conflicts.yml` | write (PR head only) | read | write |
+| `preview-pr-on-staging.yml` | write (staging only) | — | write (preview comment and selection label) |
 | `pages.yml` | read | — | — |
 
-`id-token: write` is set wherever `claude-code-action@v1` is used —
-required by the action itself.
+The preview controller also has `actions: write` so it can dispatch and
+verify the trusted Pages workflow on `main`. Pages builds main and staging on
+separate runners with only `contents: read`; both checkouts disable persisted
+credentials. A third job combines the inert artifacts. The separate deploy
+job alone has `pages: write` and `id-token: write`.
+
+`id-token: write` is also set wherever `claude-code-action@v1` requires it.
 
 The `GITHUB_TOKEN` is never exchanged for a long-lived credential and
 its scope dies with the workflow run. The Anthropic key is in

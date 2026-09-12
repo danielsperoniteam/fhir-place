@@ -210,7 +210,9 @@ describe("ResourceView", () => {
   it("finds the right DOM hierarchy for label/value pairs", () => {
     wrap(<ResourceView resource={patient} structureDefinition={PatientStructureDefinition} />);
     const view = screen.getByTestId("resource-view");
-    const labels = within(view).getAllByText(/./, { selector: "dt" });
+    const labels = within(view).getAllByTestId("resource-view-label");
     expect(labels.length).toBeGreaterThan(4);
+    expect(labels.every((label) => label.classList.contains("pl-4"))).toBe(true);
+    expect(view.querySelector(":scope > header")).toHaveClass("px-4");
   });
 });

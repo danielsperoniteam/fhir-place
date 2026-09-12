@@ -46,12 +46,16 @@ describe("ResourceSearch — date search fields", () => {
     const dateInput = screen.getByLabelText("birthdate") as HTMLInputElement;
     // HTML5 date inputs register as role=textbox in jsdom; assert `type=date` explicitly.
     expect(dateInput.getAttribute("type")).toBe("date");
-    // Prefix selector with every FHIR prefix option.
+    // Prefix selector with the scalar-date comparators. `birthdate` targets a
+    // plain `date` element (and no SD resolves in this harness), so the range
+    // boundaries `sa`/`eb` are withheld — they're offered only for Period/Timing
+    // targets (#254 PR B, Codex review on #732).
     const prefix = screen.getByRole("combobox", { name: "birthdate prefix" });
     const options = within(prefix).getAllByRole("option");
     expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(
       ["", "eq", "ne", "lt", "le", "gt", "ge", "ap"],
     );
+    expect(options.map((o) => (o as HTMLOptionElement).value)).not.toContain("sa");
   });
 
   it("emits plain date when no prefix is chosen", async () => {

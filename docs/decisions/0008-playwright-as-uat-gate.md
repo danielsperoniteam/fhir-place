@@ -4,6 +4,10 @@
 
 Accepted
 
+The decision that Playwright CI plus CODEOWNER approval is the merge gate
+remains active. The retained multi-PR staging stack is superseded by
+[ADR 0009](./0009-main-first-single-pr-preview.md).
+
 ## Context
 
 In ADR 0007 we identified five SDLC failures rooted in the staging stack +

@@ -1,41 +1,92 @@
 name: Deploy demo to GitHub Pages
+run-name: "Deploy Pages: ${{ inputs.staging_sha || github.ref_name }}"
 
-# Builds main and (optionally) staging side-by-side and ships them as a single
-# Pages artifact:
-#   /              -> apps/demo from main
-#   /goals/        -> apps/goals-tasks from main
-#   /staging/      -> apps/demo from staging        (if branch exists)
-#   /staging/goals -> apps/goals-tasks from staging (if branch exists)
-#
-# Both branches are always rebuilt so the artifact is complete — pushing to
-# main would otherwise wipe /staging/.
+# Builds main and the optional staging preview on separate runners. The
+# combine job handles only inert build artifacts, so selected PR code cannot
+# modify the production build or inherit deployment credentials.
 
 on:
   push:
     branches:
       - main
-      - staging
   workflow_dispatch:
+    inputs:
+      staging_sha:
+        description: "Exact workflow-owned staging commit to include"
+        required: false
+        type: string
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-main:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Check out main
         uses: actions/checkout@v4
         with:
           ref: main
-          path: main-src
+          path: src
+          persist-credentials: false
 
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: src/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: src/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: src
+        run: pnpm install --frozen-lockfile
+
+      - name: Build react-fhir
+        working-directory: src
+        run: pnpm --filter @fhir-place/react-fhir build
+
+      - name: Build demo
+        working-directory: src
+        run: pnpm --filter @fhir-place/demo build
+        env:
+          VITE_USE_MOCK: "false"
+          VITE_BASE_PATH: "/${{ github.event.repository.name }}/"
+
+      - name: Build goals-tasks
+        working-directory: src
+        run: pnpm --filter @fhir-place/goals-tasks build
+        env:
+          VITE_USE_MOCK: "false"
+          VITE_BASE_PATH: "/${{ github.event.repository.name }}/goals/"
+
+      - name: Stage goals-tasks and fallback
+        run: |
+          mkdir -p src/apps/demo/dist/goals
+          cp -R src/apps/goals-tasks/dist/. src/apps/demo/dist/goals/
+          cp src/apps/demo/dist/index.html src/apps/demo/dist/404.html
+
+      - name: Upload main build
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-main-build
+          path: src/apps/demo/dist
+          retention-days: 1
+
+  build-staging:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      exists: ${{ steps.staging.outputs.exists }}
+    steps:
       - name: Check whether staging branch exists
         id: staging
         run: |
@@ -46,111 +97,86 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check out staging
+      - name: Check out exact staging commit
         if: steps.staging.outputs.exists == 'true'
         uses: actions/checkout@v4
         with:
-          ref: staging
-          path: staging-src
+          ref: ${{ inputs.staging_sha || 'staging' }}
+          path: src
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - if: steps.staging.outputs.exists == 'true'
+        uses: pnpm/action-setup@v4
         with:
-          package_json_file: main-src/package.json
-      - uses: actions/setup-node@v4
+          package_json_file: src/package.json
+      - if: steps.staging.outputs.exists == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: main-src/pnpm-lock.yaml
+          cache-dependency-path: src/pnpm-lock.yaml
 
-      # ---------- main ----------
-      - name: Install (main)
-        working-directory: main-src
+      - name: Install
+        if: steps.staging.outputs.exists == 'true'
+        working-directory: src
         run: pnpm install --frozen-lockfile
 
-      - name: Build react-fhir (main)
-        working-directory: main-src
+      - name: Build react-fhir
+        if: steps.staging.outputs.exists == 'true'
+        working-directory: src
         run: pnpm --filter @fhir-place/react-fhir build
 
-      - name: Build demo (main)
-        working-directory: main-src
-        run: pnpm --filter @fhir-place/demo build
-        env:
-          VITE_USE_MOCK: "false"
-          VITE_BASE_PATH: "/${{ github.event.repository.name }}/"
-
-      - name: Build goals-tasks (main)
-        working-directory: main-src
-        run: pnpm --filter @fhir-place/goals-tasks build
-        env:
-          VITE_USE_MOCK: "false"
-          VITE_BASE_PATH: "/${{ github.event.repository.name }}/goals/"
-
-      - name: Stage goals-tasks under /goals (main)
-        run: |
-          mkdir -p main-src/apps/demo/dist/goals
-          cp -R main-src/apps/goals-tasks/dist/. main-src/apps/demo/dist/goals/
-
-      - name: Per-subapp 404 fallback (main)
-        # The per-subapp 404.html is a defensive copy — GitHub Pages only
-        # serves the root /404.html, never a per-directory one. The real
-        # cross-subapp routing lives in the root 404.html written below.
-        run: cp main-src/apps/demo/dist/index.html main-src/apps/demo/dist/404.html
-
-      # ---------- staging ----------
-      - name: Install (staging)
+      - name: Build demo
         if: steps.staging.outputs.exists == 'true'
-        working-directory: staging-src
-        run: pnpm install --frozen-lockfile
-
-      - name: Build react-fhir (staging)
-        if: steps.staging.outputs.exists == 'true'
-        working-directory: staging-src
-        run: pnpm --filter @fhir-place/react-fhir build
-
-      - name: Build demo (staging)
-        if: steps.staging.outputs.exists == 'true'
-        working-directory: staging-src
+        working-directory: src
         run: pnpm --filter @fhir-place/demo build
         env:
           VITE_USE_MOCK: "false"
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/staging/"
 
-      - name: Build goals-tasks (staging)
+      - name: Build goals-tasks
         if: steps.staging.outputs.exists == 'true'
-        working-directory: staging-src
+        working-directory: src
         run: pnpm --filter @fhir-place/goals-tasks build
         env:
           VITE_USE_MOCK: "false"
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/staging/goals/"
 
-      - name: Stage goals-tasks under /goals (staging)
+      - name: Stage goals-tasks and fallback
         if: steps.staging.outputs.exists == 'true'
         run: |
-          mkdir -p staging-src/apps/demo/dist/goals
-          cp -R staging-src/apps/goals-tasks/dist/. staging-src/apps/demo/dist/goals/
+          mkdir -p src/apps/demo/dist/goals
+          cp -R src/apps/goals-tasks/dist/. src/apps/demo/dist/goals/
+          cp src/apps/demo/dist/index.html src/apps/demo/dist/404.html
 
-      - name: Per-subapp 404 fallback (staging)
+      - name: Upload staging build
         if: steps.staging.outputs.exists == 'true'
-        # Defensive copy; see comment on the main step.
-        run: cp staging-src/apps/demo/dist/index.html staging-src/apps/demo/dist/404.html
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-staging-build
+          path: src/apps/demo/dist
+          retention-days: 1
 
-      # ---------- combine ----------
-      - name: Combine builds into a single Pages artifact
-        run: |
-          mkdir -p out
-          cp -R main-src/apps/demo/dist/. out/
-          if [ -d staging-src/apps/demo/dist ]; then
-            mkdir -p out/staging
-            cp -R staging-src/apps/demo/dist/. out/staging/
-          fi
+  combine:
+    needs: [build-main, build-staging]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download main build
+        uses: actions/download-artifact@v4
+        with:
+          name: pages-main-build
+          path: out
+
+      - name: Download staging build
+        if: needs.build-staging.outputs.exists == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: pages-staging-build
+          path: out/staging
 
       - name: Write cross-subapp router as the root 404.html
-        # GitHub Pages serves /404.html (and only /404.html) for every
-        # unmatched path. With multiple sub-apps under one Pages site
-        # (/fhir-place/, /fhir-place/goals/, /fhir-place/staging/,
-        # /fhir-place/staging/goals/), we need the root 404 to detect which
-        # sub-app the URL belongs to and inline that sub-app's index.html so
-        # its SPA router takes over without losing the URL bar.
         run: |
           cat > out/404.html <<'HTML'
           <!doctype html>
@@ -174,9 +200,6 @@ jobs:
                 }
                 fetch(base + 'index.html', { cache: 'no-store' })
                   .then(function (r) {
-                    // Pages serves this same /404.html for unmatched paths,
-                    // so a 404 response body IS this router. document.write-ing
-                    // it would recurse forever — bail to the fallback instead.
                     if (!r.ok) throw new Error('sub-app index missing: ' + r.status);
                     return r.text();
                   })
@@ -186,27 +209,26 @@ jobs:
                     document.close();
                   })
                   .catch(function () {
-                    document.body.textContent = 'fhir-place — page not found.';
+                    document.body.textContent = 'fhir-place, page not found.';
                   });
               })();
             </script>
           </head>
-          <body>Loading…</body>
+          <body>Loading...</body>
           </html>
           HTML
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: out
 
   deploy:
-    needs: build
-    # The github-pages environment's deployment-branch-policies allow
-    # both `main` and `staging`. Both pushes can deploy the combined
-    # artifact (with `/` from main and `/staging/` from staging), so
-    # `/staging/` refreshes promptly on any staging-only push instead
-    # of waiting for the next main push to rebuild both slots.
+    needs: combine
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

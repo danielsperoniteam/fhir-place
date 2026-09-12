@@ -4,6 +4,10 @@
 
 Accepted
 
+The staging-stack portions are superseded by
+[ADR 0009](./0009-main-first-single-pr-preview.md). This ADR remains the
+authority for testing and hardening SDLC infrastructure.
+
 ## Context
 
 The SDLC pipeline is itself code: 22 workflows under `.github/workflows/`,
