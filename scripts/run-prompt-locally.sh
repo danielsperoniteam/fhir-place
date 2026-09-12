@@ -4,7 +4,8 @@
 # (Claude Max subscription) rather than ANTHROPIC_API_KEY.
 #
 # Usage:
-#   scripts/run-prompt-locally.sh <prompt-file> [--allowedTools T,U,V] [--max-turns N] [--extra-arg ...]
+#   scripts/run-prompt-locally.sh <prompt-file> [--allow-dirty-primary]
+#     [--allowedTools T,U,V] [--max-turns N] [--extra-arg ...]
 #
 # Required env:
 #   GITHUB_TOKEN — fine-grained PAT with the perms the prompt needs.
@@ -45,12 +46,17 @@ shift
 # Used by event-triggered drivers (issue-review, pr-review,
 # dispatch-engineer-on-issue, pr-resolve-conflicts) to scope the run.
 TARGET=""
+ALLOW_DIRTY_PRIMARY=false
 CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --for)
       TARGET="$2"
       shift 2
+      ;;
+    --allow-dirty-primary)
+      ALLOW_DIRTY_PRIMARY=true
+      shift
       ;;
     *)
       CLAUDE_ARGS+=("$1")
@@ -148,6 +154,9 @@ elif ! git diff --quiet || ! git diff --cached --quiet; then
   # clean control worktree above and never operate from this dirty tree.
   echo "dirty working tree at $REPO_ROOT — skipping"
   exit 0
+fi
+if [[ "$ALLOW_DIRTY_PRIMARY" == true ]]; then
+  echo "dirty-primary guard bypassed; prompt must use an isolated worktree"
 fi
 
 git branch --format '%(if:equals=[gone])%(upstream:track)%(then)%(refname:short)%(end)' \
